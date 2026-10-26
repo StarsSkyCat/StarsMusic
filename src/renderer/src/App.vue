@@ -33,6 +33,11 @@ import CredentialPanel from './CredentialPanel.vue';
 import ProviderAccount from './ProviderAccount.vue';
 import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
+import TrackLyrics from './TrackLyrics.vue';
+import {
+  parsePresentationSnapshot,
+  type PresentationSnapshot,
+} from '../../../packages/contracts/src/presentation';
 import { useProvider, providerNames, type Provider } from './useProvider';
 import type { DisplayTrack } from './music-ui';
 
@@ -65,8 +70,21 @@ const playback = shallowRef(
     volume: 70,
   }),
 );
-const playbackError = ref('');
 const currentTrack = computed(() => playback.value.queue[playback.value.currentIndex ?? -1]);
+const playbackError = ref('');
+const presentation = shallowRef<PresentationSnapshot>();
+let unsubscribePresentation: (() => void) | undefined;
+const currentPresentation = computed(() =>
+  presentation.value?.generation === playback.value.generation &&
+  presentation.value?.trackId === currentTrack.value?.id
+    ? presentation.value
+    : undefined,
+);
+const artwork = computed(() => currentPresentation.value?.content?.artwork);
+const artworkFailed = ref(false);
+watch(artwork, () => {
+  artworkFailed.value = false;
+});
 const statusText = computed(
   () =>
     ({
@@ -279,6 +297,15 @@ watch(filteredTracks, (next) => {
 onMounted(() => {
   void refreshInfo();
   if (window.starsMusic) {
+    const receivePresentation = (value: PresentationSnapshot): void => {
+      if (!presentation.value || value.revision >= presentation.value.revision)
+        presentation.value = parsePresentationSnapshot(value);
+    };
+    unsubscribePresentation = window.starsMusic.presentation.onChanged(receivePresentation);
+    void window.starsMusic.presentation
+      .getState()
+      .then(receivePresentation)
+      .catch(() => undefined);
     unsubscribe = window.starsMusic.playback.onStateChanged(receivePlayback);
     void control((api) => api.getState());
   }
@@ -286,6 +313,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   unsubscribe?.();
+  unsubscribePresentation?.();
   clearTimeout(toastTimer);
   window.removeEventListener('keydown', shortcuts);
 });
@@ -695,7 +723,13 @@ onUnmounted(() => {
     <footer class="player" aria-label="播放状态">
       <button class="now-playing" aria-label="展开播放页" @click="playingDialog?.showModal()">
         <span class="mini-art"
-          ><Music2 v-if="!currentTrack" :size="23" /><Disc3 v-else :size="25" /></span
+          ><img
+            v-if="artwork && !artworkFailed"
+            :src="artwork"
+            alt="当前歌曲专辑封面"
+            @error="artworkFailed = true" /><Music2 v-else-if="!currentTrack" :size="23" /><Disc3
+            v-else
+            :size="25" /></span
         ><span class="now-playing-copy"
           ><strong>{{ currentTrack?.title ?? '此刻，听点喜欢的。' }}</strong
           ><small>{{
@@ -763,11 +797,28 @@ onUnmounted(() => {
           </button>
         </div>
         <ol v-if="playback.queue.length" class="queue-list" aria-label="全部队列歌曲">
-          <li v-for="(track, index) in playback.queue" :key="track.id" :class="{ 'is-current': index === playback.currentIndex }">
+          <li
+            v-for="(track, index) in playback.queue"
+            :key="track.id"
+            :class="{ 'is-current': index === playback.currentIndex }"
+          >
             <span class="queue-number">{{ String(index + 1).padStart(2, '0') }}</span
-            ><button class="queue-song" :aria-current="index === playback.currentIndex ? 'true' : undefined" @click="control((api) => api.playTrack(track.id))">
+            ><button
+              class="queue-song"
+              :aria-current="index === playback.currentIndex ? 'true' : undefined"
+              @click="control((api) => api.playTrack(track.id))"
+            >
               <strong>{{ track.title }}</strong
-              ><small>{{ index === playback.currentIndex ? statusText : playback.currentIndex !== null && index < playback.currentIndex ? '已播放' : '待播放' }} · {{ track.artist || providerNames[track.provider ?? 'local'] }}</small></button
+              ><small
+                >{{
+                  index === playback.currentIndex
+                    ? statusText
+                    : playback.currentIndex !== null && index < playback.currentIndex
+                      ? '已播放'
+                      : '待播放'
+                }}
+                · {{ track.artist || providerNames[track.provider ?? 'local'] }}</small
+              ></button
             ><button
               class="icon-button"
               :disabled="index === playback.currentIndex"
@@ -801,22 +852,49 @@ onUnmounted(() => {
       >
         <ChevronDown :size="24" /></button
       ><span class="eyebrow">STARS AFTER HOURS</span>
-      <div class="playing-art">
-        <img src="./assets/stars-night.png" alt="StarsMusic 原创星夜山景，默认播放背景" />
+      <div class="playing-layout">
+        <div class="playing-details">
+          <div class="playing-art">
+            <img
+              v-if="artwork && !artworkFailed"
+              :src="artwork"
+              alt="当前歌曲专辑封面"
+              @error="artworkFailed = true"
+            /><img
+              v-else
+              src="./assets/stars-night.png"
+              alt="StarsMusic 原创星夜山景，默认播放背景"
+            />
+          </div>
+          <span class="playing-source">{{
+            currentTrack ? providerNames[currentTrack.provider ?? 'local'] : 'YOUR MUSIC, TOGETHER'
+          }}</span>
+          <h2 id="playing-title">
+            {{ currentTrack?.title ?? '等一首歌，也等一个好心情。' }}
+          </h2>
+          <p>
+            {{
+              currentTrack?.artist || (currentTrack ? statusText : '从本地音乐或已连接的歌单开始。')
+            }}
+          </p>
+          <p v-if="currentPresentation?.content?.album" class="playing-album">
+            {{ currentPresentation.content.album }}
+          </p>
+
+          <span v-if="currentTrack?.detail" class="quality-label">{{ currentTrack.detail }}</span>
+        </div>
+        <TrackLyrics
+          :presentation="presentation"
+          :position-seconds="playback.positionSeconds"
+          :generation="playback.generation"
+          :track-id="currentTrack?.id"
+        />
       </div>
-      <span class="playing-source">{{
-        currentTrack ? providerNames[currentTrack.provider ?? 'local'] : 'YOUR MUSIC, TOGETHER'
-      }}</span>
-      <h2 id="playing-title">
-        {{ currentTrack?.title ?? '等一首歌，也等一个好心情。' }}
-      </h2>
-      <p>
-        {{ currentTrack?.artist || (currentTrack ? statusText : '从本地音乐或已连接的歌单开始。') }}
-      </p>
-      <span v-if="currentTrack?.detail" class="quality-label">{{ currentTrack.detail }}</span
-      ><PlaybackControls :playback="playback" @control="control" />
+      <PlaybackControls :playback="playback" @control="control" />
       <p class="playing-note">
-        {{ currentTrack ? '播放状态与底栏同步 · Esc 收起' : '原创默认背景 · 歌词尚未接入' }}
+        {{
+          currentTrack ? '播放状态与底栏同步 · Esc 收起' : '原创默认背景 · 选择歌曲后获取歌词与封面'
+        }}
       </p>
     </dialog>
   </div>

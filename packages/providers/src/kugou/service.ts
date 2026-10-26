@@ -1,3 +1,6 @@
+import { getKugouLyrics, type LyricRequest } from './lyrics.ts';
+import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
+import { loadArtwork, type LoadArtwork } from '../artwork.ts';
 import QRCode from 'qrcode';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
 import { parseCredentialBundle, type KugouCredentialBundle } from '../../../contracts/src/credentials.ts';
@@ -17,7 +20,7 @@ function success(value: unknown): Record<string, unknown> {
   if (body.status !== 1 || (body.error_code !== undefined && body.error_code !== 0)) throw new DomainError('unavailable');
   return body;
 }
-interface BackendTrack { track: KugouTrack; hash: string }
+interface BackendTrack { track: KugouTrack; hash: string; cover?: string; album?: string }
 const trackPageSize = kugouTrackPageSize;
 let loggedTrackRow = false;
 function numericId(value: unknown): string {
@@ -62,7 +65,13 @@ function parseTracks(value: unknown): { items: BackendTrack[]; received: number 
         const nameSource = raw.name !== undefined ? 'name' : raw.filename !== undefined ? 'filename' : 'songname';
         debugKugou(`track row keys=${Object.keys(raw).sort().join(',')} nameSource=${nameSource} hash=${hash.slice(0, 6)} fileid=${raw.fileid === undefined ? 'none' : 'set'} duration=${durationMs}`);
       }
-      items.push({ track: { id: hash, name, artists, durationMs }, hash });
+      const album = raw.albuminfo && typeof raw.albuminfo === 'object' ? record(raw.albuminfo, 'kugou.album') : {};
+      const trans = raw.trans_param && typeof raw.trans_param === 'object' ? record(raw.trans_param, 'kugou.track.extra') : {};
+      const cover = [raw.cover, raw.img, album.img, album.cover, album.sizable_cover, trans.union_cover].find(value => typeof value === 'string' && value.length > 0);
+      items.push({ track: { id: hash, name, artists, durationMs }, hash,
+        ...(typeof cover === 'string' && cover ? { cover } : {}),
+        ...(typeof album.name === 'string' ? { album: album.name.slice(0, 500) } : {}),
+      });
     } catch { /* 跳过无法安全解析的单条记录 */ }
   }
   if (value.length > 0 && items.length === 0) throw new DomainError('invalid-response');
@@ -212,6 +221,8 @@ export function parseKugouStream(value: unknown, id: string, expected?: { name: 
 }
 
 interface ServiceOptions {
+  artwork?: LoadArtwork;
+  lyricRequest?: LyricRequest;
   transport?: () => KugouTransport;
   encodeQr?: (url: string) => Promise<string>;
   now?: () => number;
@@ -458,6 +469,37 @@ export class KugouService {
       });
     } catch (error: unknown) { if (view === this.#view) this.#operationError(lease, error); }
     return this.#state;
+  }
+  async getPresentation(id: string, generation: number): Promise<PresentationContent> {
+    const { lease, transport } = this.#connected();
+    const item = this.#knownTracks.get(kugouId(id));
+    if (generation !== this.#state.generation || !item) throw new DomainError('stale-operation');
+    const [lyrics, artwork] = await Promise.allSettled([
+      getKugouLyrics(item.track, lease.signal, this.#options.lyricRequest),
+      (async () => {
+        let cover = item.cover;
+        if (!cover) {
+          const raw = success(await transport.call('resource', { hash: item.hash }, lease.signal));
+          if (Array.isArray(raw.data)) {
+            const matching = raw.data.filter(value => { const row = record(value, 'kugou.resource'); return typeof row.hash === 'string' && row.hash.toLowerCase() === item.hash; });
+            if (matching.length === 1) {
+              const row = record(matching[0], 'kugou.resource');
+              if (typeof row.name === 'string' && !namesMatch(item.track.name, row.name, item.track.artists)) throw new DomainError('track-mismatch');
+              const trans = row.trans_param ? record(row.trans_param, 'kugou.cover') : {};
+              if (typeof trans.union_cover === 'string') cover = trans.union_cover;
+            }
+          }
+        }
+        return cover ? (this.#options.artwork ?? loadArtwork)(cover, 'kugou', lease.signal) : undefined;
+      })(),
+    ]);
+    if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
+    return parsePresentationContent({ lyrics: lyrics.status === 'fulfilled' ? lyrics.value : [],
+      ...(artwork.status === 'fulfilled' && artwork.value ? { artwork: artwork.value } : {}),
+      ...(item.album ? { album: item.album } : {}),
+      ...(lyrics.status === 'rejected' ? { lyricsError: normalizeError(lyrics.reason) } : {}),
+      ...(artwork.status === 'rejected' ? { artworkError: normalizeError(artwork.reason) } : {}),
+    });
   }
   async resolveTrack(id: string, generation: number): Promise<StreamResolution> {
     const { lease, transport } = this.#connected();

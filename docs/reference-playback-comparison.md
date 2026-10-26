@@ -29,3 +29,9 @@
 YesPlayMusic 的 [LICENSE](https://github.com/qier222/YesPlayMusic/blob/5d5fa23b7429c82a9932bbc2c9f6036403c5757b/LICENSE) 为 MIT，README 的附加说明也已查看。Mineradio 的 package.json 为 GPL-3.0-only，仓库 [LICENSE](https://github.com/XxHuberrr/Mineradio-paused/blob/d43de565acabfdc1a9c9820a27e81a98ccbebcef/LICENSE) 为 GPLv3，README 单独声明名称、Logo 与原创视觉权益。
 
 本轮没有复制这两个参考播放器的源码或素材，没有安装其旧依赖；资源端点仍按本项目既有 MIT 协议基线独立实现，见 [第三方说明](../THIRD_PARTY_NOTICES.md)。
+
+## 本轮歌词、封面和登录保存
+
+补充核对同一固定提交的 YesPlayMusic `src/api/track.js` 歌词入口与 Mineradio `kugou-api.js` 的歌词搜索/下载流程：网易云按歌曲 ID 关联详情/歌词，酷狗按 hash 查候选后通过歌词 ID/accesskey 下载。StarsMusic 据平台响应格式独立实现行级 LRC 解析、当前曲目投影和受限图片获取；没有复制这两个播放器的实现、歌词缓存、视觉或资产。协议端点字段同时核对已有 MIT API 基线的 `lyric.js`/`search_lyric.js`。
+
+参考项目的网页 Cookie/session 保存方式不能直接复用于本项目 App Token；继续使用现有系统密钥保险库，并补上退出/关闭记住期间的迟到加密写入保护。没有安全系统密钥后端时保持临时会话。实际范围见 [歌词与封面验证](validation/2026-10-26-presentation.md) 与 [凭据说明](credentials.md)。

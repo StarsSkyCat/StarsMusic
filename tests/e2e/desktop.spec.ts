@@ -47,7 +47,13 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease', 'kugou', 'credentials']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease', 'kugou', 'presentation', 'credentials']);
+      const metadata = await page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { presentation: { getState(): Promise<{ status: string; trackId: string | null }> } } }).starsMusic.presentation;
+        return { keys: Object.keys(api).sort(), state: await api.getState() };
+      });
+      expect(metadata.keys).toEqual(['getState', 'onChanged']);
+      expect(metadata.state).toMatchObject({ status: 'idle', trackId: null });
       expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '0.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
       await expect(page.getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
@@ -180,8 +186,30 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       const playing = page.getByRole('dialog', { name: 'test-audio.wav', exact: true });
       await expect(playing).toBeVisible();
       await expect(playing.getByRole('img')).toBeVisible();
+      await expect(playing.getByText('暂无可用歌词', { exact: true })).toBeVisible();
+      // 仅注入明确标识的合成 UI 投影，验证歌词/封面渲染；不模拟平台接入或音频成功。
+      const metadataState = await page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { playback: { getState(): Promise<{ generation: number; currentIndex: number; queue: { id: string }[] }> }; presentation: { getState(): Promise<{ revision: number }> } } }).starsMusic;
+        const playback = await api.playback.getState();
+        return { revision: (await api.presentation.getState()).revision + 1, generation: playback.generation, trackId: playback.queue[playback.currentIndex]!.id, status: 'ready',
+          content: { album: '合成测试专辑', artwork: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', lyrics: [{ timeMs: 0, text: '合成第一行' }, { timeMs: 1000, text: '合成第二行' }, { timeMs: 10000, text: '合成第三行' }] } };
+      });
+      await desktop.evaluate(({ BrowserWindow }, snapshot) => BrowserWindow.getAllWindows()[0]!.webContents.send('starsmusic:presentation:changed', snapshot), metadataState);
+      await expect(playing.getByText('合成测试专辑', { exact: true })).toBeVisible();
+      await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成第二行');
+      await expect(playing.getByRole('img', { name: '当前歌曲专辑封面' })).toBeVisible();
+      expect(await playing.getByRole('img', { name: '当前歌曲专辑封面' }).evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
       await playing.getByRole('button', { name: '暂停', exact: true }).click();
       await expect(playing.getByRole('button', { name: '播放', exact: true })).toBeEnabled();
+      await playing.getByRole('slider', { name: '播放进度' }).fill('0');
+      await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成第一行');
+      await playing.getByRole('slider', { name: '播放进度' }).fill('5');
+      await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成第二行');
+      await page.setViewportSize({ width: 960, height: 640 });
+      await expect(playing.getByRole('button', { name: '播放', exact: true })).toBeInViewport();
+      await expect(playing.getByRole('slider', { name: '播放进度' })).toBeInViewport();
+      await page.screenshot({ path: 'artifacts/expanded-player-minimum.png' });
+      await page.setViewportSize({ width: 1280, height: 800 });
       await page.screenshot({ path: 'artifacts/expanded-player.png' });
       await playing.press('Escape');
       await expect(playing).not.toBeVisible();

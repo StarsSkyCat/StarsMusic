@@ -23,6 +23,7 @@
 | [凭据持久化](credentials.md) | 系统密钥保险库、记住登录、恢复、锁定与临时会话回退 |
 | [凭据持久化验证](validation/2026-10-26-credentials.md) | 保险库自动化结果与本机密钥后端限制 |
 | [音乐工作区验证](validation/2026-10-26-music-workspace.md) | 页面设计、多选下一首、会话队列与桌面布局检查 |
+| [歌词与封面验证](validation/2026-10-26-presentation.md) | 当前在线曲目行级歌词、内存封面、竞态与桌面验证边界 |
 | [架构决策 ADR](adr/README.md) | 已选方向、备选方案和未验证的决策 |
 | [P0 验证记录模板](templates/p0-validation.md) | 记录真实环境、操作、证据与限制 |
 

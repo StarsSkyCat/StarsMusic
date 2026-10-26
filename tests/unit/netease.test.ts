@@ -163,3 +163,29 @@ test('网易云成功登录可导出凭据并从凭据恢复', async () => {
     } finally { restored.dispose(); }
   } finally { instance.dispose(); }
 });
+
+
+test('网易云歌词和封面仅对已登记曲目读取，公开歌单不携带封面原地址', async () => {
+  const transport = new FakeTransport();
+  const instance = new NeteaseService({ transport: () => transport, encodeQr: async () => fakePng, autoPoll: false,
+    artwork: async (url, provider) => { assert.equal(url, 'https://p1.music.126.net/synthetic.jpg'); assert.equal(provider, 'netease'); return 'data:image/jpeg;base64,/9j/AQ=='; },
+  });
+  try {
+    await connect(instance); await instance.loadPlaylists();
+    transport.handlers.set('songs', async () => ({ code: 200, songs: [{ id: 7, name: '合成曲目', ar: [{ name: '合成歌手' }], dt: 30000, al: { name: '合成专辑', picUrl: 'https://p1.music.126.net/synthetic.jpg' } }] }));
+    await instance.loadPlaylist('1', 0);
+    transport.handlers.set('lyric', async data => { assert.equal(data.id, '7'); return { code: 200, lrc: { lyric: '[00:01.00]合成网易歌词' } }; });
+    assert.equal(JSON.stringify(instance.snapshot()).includes('synthetic.jpg'), false);
+    const data = await instance.getPresentation('7', instance.snapshot().generation);
+    assert.deepEqual(data.lyrics, [{ timeMs: 1000, text: '合成网易歌词' }]);
+    assert.equal(data.album, '合成专辑'); assert.match(data.artwork!, /^data:image/);
+    transport.handlers.set('lyric', async () => { throw new DomainError('network'); });
+    const partial = await instance.getPresentation('7', instance.snapshot().generation);
+    assert.equal(partial.lyrics.length, 0); assert.equal(partial.lyricsError?.code, 'network'); assert.ok(partial.artwork);
+    await assert.rejects(instance.getPresentation('9', instance.snapshot().generation));
+    const pendingLyric = deferred<unknown>(); transport.handlers.set('lyric', async () => pendingLyric.promise);
+    const old = instance.getPresentation('7', instance.snapshot().generation);
+    instance.logout(); pendingLyric.resolve({ code: 200, lrc: { lyric: '[00:00]旧歌词' } });
+    await assert.rejects(old);
+  } finally { instance.dispose(); }
+});

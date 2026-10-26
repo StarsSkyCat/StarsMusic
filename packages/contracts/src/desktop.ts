@@ -1,3 +1,4 @@
+import type { PresentationApi } from './presentation.ts';
 import type { PlaybackApi } from './playback.ts';
 import type { CredentialsApi } from './credentials.ts';
 import type { KugouApi } from './kugou.ts';
@@ -20,6 +21,7 @@ export interface AppInfo {
 export interface DesktopApi {
   getAppInfo(): Promise<AppInfo>;
   readonly playback: PlaybackApi;
+  readonly presentation: PresentationApi;
   readonly netease: NeteaseApi;
   readonly kugou: KugouApi;
   readonly credentials: CredentialsApi;

@@ -28,3 +28,11 @@ PlaybackSnapshot 包含状态、队列 ID/标题/来源、可选歌手、平台�
 pnpm test:playback 使用真实 mpv、null 输出与现场生成 WAV；pnpm test:e2e 使用实际 Electron/mpv 和默认系统音频输出，只替代原生文件选择器交互。null 输出只在测试构造参数中显式启用，产品无相关开发开关。详细结果见 [P0 记录](validation/2026-10-26-local-playback.md)。
 
 API 行为参考 [mpv 官方手册](https://mpv.io/manual/stable/) 的 JSON IPC、input-ipc-client、loadfile、access-references 与 current-ao。
+
+## 当前歌曲歌词与封面
+
+`PresentationController` 随唯一 PlaybackSnapshot 的 generation/曲目 ID 选择当前在线歌曲，歌词与封面使用独立快照通道；音频位置更新不重复传输图片。preload 只提供 `presentation.getState()` 与 `onChanged()`，不能请求任意 ID、地址或歌词 accesskey。切歌、停止、退出时旧结果失效，歌词请求失败不影响音频播放。
+
+网易云以已登记歌曲 ID 请求行级 LRC，专辑信息来自同 ID 的歌曲详情；酷狗以已登记主 hash 查询歌词候选并核对完整曲名，以 LRC 下载，封面来自该歌单项或按原 hash 精确关联的资源详情。后台分别处理歌词和封面失败。封面只从固定平台图片域名经 HTTPS 读取，拒绝私网 DNS、重定向、凭据、SVG 与过大响应；校验格式后仅将有大小上限的 PNG/JPEG/WebP 内存数据传给页面，不保存原地址。DNS 对本机代理 Fake-IP 的处理与音频网关一致。
+
+展开播放页显示专辑名、封面与按 mpv 秒数高亮/滚动的歌词，定位后直接重算当前行，暂停不自建时钟；尊重减少动画偏好。本地内嵌封面、旁置歌词、逐字歌词、翻译合并与平台完整曲目矩阵尚未实现或验证，见 [记录](validation/2026-10-26-presentation.md)。

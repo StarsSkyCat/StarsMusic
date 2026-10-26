@@ -8,7 +8,7 @@ export const endpoints = {
   qrKey: ['/api/login/qrcode/unikey', 'eapi'], qrPoll: ['/api/login/qrcode/client/login', 'eapi'],
   account: ['/api/nuser/account/get', 'weapi'], playlists: ['/api/user/playlist', 'weapi'],
   playlist: ['/api/v6/playlist/detail', 'eapi'], songs: ['/api/v3/song/detail', 'weapi'],
-  stream: ['/api/song/enhance/player/url', 'eapi'],
+  stream: ['/api/song/enhance/player/url', 'eapi'], lyric: ['/api/song/lyric', 'weapi'],
 } as const;
 export type NeteaseEndpoint = keyof typeof endpoints;
 export interface NeteaseTransportSession {

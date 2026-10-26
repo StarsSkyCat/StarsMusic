@@ -1,3 +1,4 @@
+import { parsePresentationSnapshot, presentationChannels } from '../../packages/contracts/src/presentation';
 import { contextBridge, ipcRenderer } from 'electron';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
 import { credentialChannels, parseCredentialStatus } from '../../packages/contracts/src/credentials';
@@ -78,6 +79,15 @@ const api: DesktopApi = Object.freeze({
       const receive = (_event: unknown, value: unknown) => listener(parseKugouSnapshot(value));
       ipcRenderer.on(kugouChannels.stateChanged, receive);
       return () => { ipcRenderer.removeListener(kugouChannels.stateChanged, receive); };
+    },
+  }),
+  presentation: Object.freeze({
+    async getState() { return parsePresentationSnapshot(await ipcRenderer.invoke(presentationChannels.getState)); },
+    onChanged(listener: (state: ReturnType<typeof parsePresentationSnapshot>) => void) {
+      if (typeof listener !== 'function') throw new Error('监听器无效');
+      const receive = (_event: unknown, value: unknown) => listener(parsePresentationSnapshot(value));
+      ipcRenderer.on(presentationChannels.changed, receive);
+      return () => { ipcRenderer.removeListener(presentationChannels.changed, receive); };
     },
   }),
   credentials: Object.freeze({

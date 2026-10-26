@@ -1,3 +1,4 @@
+import { parsePresentationContent, type PresentationContent } from '../../packages/contracts/src/presentation';
 import { utilityProcess, type UtilityProcess } from 'electron';
 import { DomainError, normalizeError, parseAppError } from '../../packages/contracts/src/errors';
 import { initialNeteaseSnapshot, parseNeteaseSnapshot, type NeteaseSnapshot } from '../../packages/contracts/src/netease';
@@ -9,7 +10,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack';
+type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;
@@ -90,7 +91,7 @@ export class NeteaseClient {
       worker.postMessage({ operation, requestId, ...args });
     });
   }
-  async command(operation: Exclude<Operation, 'resolveTrack'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
+  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
       if (!this.#disposed) {
@@ -110,6 +111,14 @@ export class NeteaseClient {
     const bundle = parseCredentialBundle(value);
     if (bundle.provider !== 'netease') throw new DomainError('invalid-response');
     return bundle;
+  }
+  async getPresentation(id: string, generation: number, signal: AbortSignal): Promise<PresentationContent> {
+    signal.throwIfAborted();
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
+    const value = await this.#request('getPresentation', { id, generation: this.#workerGeneration });
+    signal.throwIfAborted();
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
+    return parsePresentationContent(value);
   }
   async resolveTrack(id: string, generation: number, signal: AbortSignal): Promise<StreamResolution> {
     signal.throwIfAborted();

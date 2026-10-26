@@ -18,7 +18,7 @@ P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，�
 
 当前渠道枚举是契约命名：netease-app、netease-web、kugou-app、kugou-web，不表示已经验证这些登录方式。酷狗两个渠道不能互换会话或缓存；当前只实现 kugou-app。
 
-登录已连接只表明身份验证通过，不包含歌曲权限承诺。曲目仍需解析实际资源；access 明确区分 full 与 preview，quality.level 可为 unknown，不能根据会员或请求音质猜测实际音质。当前这些结构不构成完整 Provider 方法接口，搜索、歌单分页、歌词等在实际接入时按使用需求补充。
+登录已连接只表明身份验证通过，不包含歌曲权限承诺。曲目仍需解析实际资源；access 明确区分 full 与 preview，quality.level 可为 unknown，不能根据会员或请求音质猜测实际音质。当前这些结构不构成完整 Provider 方法接口，搜索等在实际接入时按使用需求补充。
 
 ## 后台专用资源与错误
 
@@ -52,3 +52,7 @@ SessionGeneration 每个平台只保留一个活动 SessionLease。租约包含�
 守卫自身不维护账号/凭据或自动清理资源。网易云与酷狗服务已在 invalidate 后清理临时凭据与列表，后台状态变化通知播放器停止相应在线音频；新渠道接入时必须落实各自清理与超时规则。
 
 会话 generation 只处理账号生命周期，不能替代未来快速切歌需要的独立 playbackGeneration；同一账号内不同播放请求仍需独立隔离。跨进程接入时必须由拥有会话的后台服务进行最终检查，不把 IPC 反序列化后的租约当作同一对象。
+
+## 当前歌词与封面投影
+
+`presentation.ts` 定义独立的 `PresentationSnapshot`：revision、playback generation、队列曲目 ID、加载状态与可选内容。内容只包含已排序的行级毫秒时间戳/文本、专辑名、内存 PNG/JPEG/WebP 数据和分别归一化的错误；有行数、文本和图片大小上限，不接受远端图片 URL、SVG、accesskey 或凭据。preload 暴露无参数 getState/onChanged，不提供任意媒体读取。UI 按 revision 和当前 playback generation/ID 双重筛选；音频位置仍以唯一 PlaybackSnapshot 为准。

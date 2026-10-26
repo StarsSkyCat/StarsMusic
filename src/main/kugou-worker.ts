@@ -23,6 +23,7 @@ port.on('message', (event) => {
       else if (operation === 'loadPlaylist') result = await service.loadPlaylist(kugouId(message.id), nonNegativeInteger(message.offset, 'provider.offset'));
       else if (operation === 'restoreCredentials') result = await service.restoreCredentials(message.credentials);
       else if (operation === 'exportCredentials') result = service.exportCredentials() ?? null;
+      else if (operation === 'getPresentation') result = await service.getPresentation(kugouId(message.id), nonNegativeInteger(message.generation, 'provider.generation'));
       else if (operation === 'resolveTrack') result = await service.resolveTrack(kugouId(message.id), nonNegativeInteger(message.generation, 'provider.generation'));
       else throw new Error('unknown operation');
       port.postMessage({ kind: 'reply', requestId, ok: true, result });

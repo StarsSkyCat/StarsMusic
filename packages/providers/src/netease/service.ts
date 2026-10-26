@@ -1,3 +1,6 @@
+import { parseLrc } from '../lyrics.ts';
+import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
+import { loadArtwork, type LoadArtwork } from '../artwork.ts';
 import QRCode from 'qrcode';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
 import { parseCredentialBundle, type NeteaseCredentialBundle } from '../../../contracts/src/credentials.ts';
@@ -67,6 +70,7 @@ export function parseNeteaseStream(value: unknown, id: string, now: number): Str
 }
 
 interface ServiceOptions {
+  artwork?: LoadArtwork;
   transport?: () => NeteaseTransport;
   encodeQr?: (url: string) => Promise<string>;
   now?: () => number;
@@ -89,6 +93,7 @@ export class NeteaseService {
   #playlistOffset = 0;
   #knownPlaylists = new Set<string>();
   #knownTracks = new Map<string, NeteaseTrack>();
+  #albums = new Map<string, { name?: string; cover?: string }>();
   #listBusy = false;
   #pollingLease: SessionLease | undefined;
 
@@ -105,7 +110,7 @@ export class NeteaseService {
   #clear(): void {
     clearTimeout(this.#timer); this.#timer = undefined;
     this.#transport?.clear(); this.#transport = undefined; this.#key = '';
-    this.#knownTracks.clear(); this.#knownPlaylists.clear(); this.#playlistOffset = 0; this.#listBusy = false; this.#view++;
+    this.#knownTracks.clear(); this.#albums.clear(); this.#knownPlaylists.clear(); this.#playlistOffset = 0; this.#listBusy = false; this.#view++;
   }
   #end(status: 'signed-out' | 'cancelled' | 'expired' | 'failed', error?: NeteaseSnapshot['error']): NeteaseSnapshot {
     this.#sessions.invalidate('netease'); this.#lease = undefined; this.#clear();
@@ -280,15 +285,43 @@ export class NeteaseService {
       const ids = playlist.trackIds.slice(offset, offset + 50).map((value: unknown) => apiId(record(value, 'netease.trackId').id));
       const detail = ids.length ? success(await transport.call('songs', { c: JSON.stringify(ids.map((id) => ({ id }))) }, lease.signal)) : { songs: [] };
       const found = new Map(parseTracks(detail.songs).map((track) => [track.id, track]));
+      const originals = new Map((detail.songs as unknown[]).map(value => {
+        const row = record(value, 'netease.song');
+        return [apiId(row.id), row] as const;
+      }));
       const tracks = ids.flatMap((id) => found.has(id) ? [found.get(id)!] : []);
       if (view !== this.#view) return this.#state;
       this.#sessions.commit(lease, () => {
-        for (const track of tracks) this.#knownTracks.set(track.id, track);
+        for (const track of tracks) {
+          this.#knownTracks.set(track.id, track);
+          const original = originals.get(track.id);
+          const album = original?.al && typeof original.al === 'object' ? record(original.al, 'netease.album') : {};
+          this.#albums.set(track.id, { ...(typeof album.name === 'string' ? { name: album.name.slice(0, 500) } : {}), ...(typeof album.picUrl === 'string' ? { cover: album.picUrl } : {}) });
+        }
         this.#update({ tracks: offset === 0 ? tracks : [...this.#state.tracks, ...tracks], nextTrackOffset: offset + ids.length,
           tracksMore: offset + ids.length < (playlist.trackIds as unknown[]).length, busy: false });
       });
     } catch (error: unknown) { if (view === this.#view) this.#operationError(lease, error); }
     return this.#state;
+  }
+  async getPresentation(id: string, generation: number): Promise<PresentationContent> {
+    const { lease, transport } = this.#connected();
+    if (generation !== this.#state.generation || !this.#knownTracks.has(neteaseId(id))) throw new DomainError('stale-operation');
+    const album = this.#albums.get(id);
+    const [lyrics, artwork] = await Promise.allSettled([
+      transport.call('lyric', { id, lv: -1, kv: -1, tv: -1, rv: -1 }, lease.signal).then(value => {
+        const body = success(value); const lrc = body.lrc ? record(body.lrc, 'netease.lyric') : {};
+        return typeof lrc.lyric === 'string' ? parseLrc(lrc.lyric) : [];
+      }),
+      album?.cover ? (this.#options.artwork ?? loadArtwork)(album.cover, 'netease', lease.signal) : Promise.resolve(undefined),
+    ]);
+    if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
+    return parsePresentationContent({ lyrics: lyrics.status === 'fulfilled' ? lyrics.value : [],
+      ...(artwork.status === 'fulfilled' && artwork.value ? { artwork: artwork.value } : {}),
+      ...(album?.name ? { album: album.name } : {}),
+      ...(lyrics.status === 'rejected' ? { lyricsError: normalizeError(lyrics.reason) } : {}),
+      ...(artwork.status === 'rejected' ? { artworkError: normalizeError(artwork.reason) } : {}),
+    });
   }
   async resolveTrack(id: string, generation: number): Promise<StreamResolution> {
     const { lease, transport } = this.#connected();

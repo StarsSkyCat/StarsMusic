@@ -452,3 +452,25 @@ test('酷狗展示去除末尾音频扩展名，保留曲名中间的点号并�
     assert.equal((await service.resolveTrack(hash, service.snapshot().generation)).access.kind, 'full');
   } finally { service.dispose(); }
 });
+
+
+test('酷狗歌词封面独立失败且不泄露原图地址，不影响播放状态', async () => {
+  const transport = new FakeTransport(); let failArtwork = false;
+  const instance = new KugouService({ transport: () => transport, encodeQr: async () => png, autoPoll: false,
+    artwork: async (url, provider) => { assert.equal(provider, 'kugou'); assert.equal(url, 'https://imge.kugou.com/synthetic.jpg'); if (failArtwork) throw new DomainError('network'); return 'data:image/jpeg;base64,/9j/AQ=='; },
+    lyricRequest: async endpoint => endpoint === 'search' ? { candidates: [{ id: '1', accesskey: 'synthetic-key', song: '合成曲目' }] } : { content: Buffer.from('[00:00]合成酷狗歌词').toString('base64') },
+  });
+  try {
+    await connect(instance); await instance.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 1, info: [{ hash, name: '合成曲目.mp3', cover: 'https://imge.kugou.com/synthetic.jpg', albuminfo: { name: '合成专辑' } }] }));
+    await instance.loadPlaylist('1', 0);
+    assert.equal(JSON.stringify(instance.snapshot()).includes('synthetic.jpg'), false);
+    const ready = await instance.getPresentation(hash, instance.snapshot().generation);
+    assert.equal(ready.album, '合成专辑'); assert.equal(ready.lyrics.length, 1); assert.match(ready.artwork!, /^data:image/);
+    failArtwork = true;
+    const partial = await instance.getPresentation(hash, instance.snapshot().generation);
+    assert.equal(partial.lyrics.length, 1); assert.equal(partial.artwork, undefined); assert.equal(partial.artworkError?.code, 'network');
+    assert.equal(instance.snapshot().error, undefined);
+    await assert.rejects(instance.getPresentation('b'.repeat(32), instance.snapshot().generation));
+  } finally { instance.dispose(); }
+});

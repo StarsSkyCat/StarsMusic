@@ -1,3 +1,5 @@
+import { presentationChannels } from '../../packages/contracts/src/presentation';
+import { PresentationController } from '../../packages/playback/src/presentation';
 import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,6 +26,11 @@ let mainWindow: BrowserWindow | null = null;
 const player = new MusicPlayer();
 const netease = new NeteaseClient(fileURLToPath(new URL('./netease-worker.js', import.meta.url)));
 const kugou = new KugouClient(fileURLToPath(new URL('./kugou-worker.js', import.meta.url)));
+const presentation = new PresentationController(async (track, signal) => {
+  if (!track.sourceId || !track.provider || track.provider === 'local') return { lyrics: [] };
+  const client = track.provider === 'netease' ? netease : kugou;
+  return client.getPresentation(track.sourceId, client.snapshot().generation, signal);
+});
 let vault: CredentialVault;
 let selectionGeneration = 0;
 let quitting = false;
@@ -139,7 +146,17 @@ void app.whenReady().then(() => {
       chromium: process.versions.chrome, node: process.versions.node,
     };
   });
+  ipcMain.handle(presentationChannels.getState, (event, ...args: unknown[]) => {
+    const contents = mainWindow?.webContents;
+    assertTrustedInvoke(event, contents, contents?.mainFrame, documentUrl, args);
+    return presentation.snapshot();
+  });
+  presentation.subscribe((snapshot) => {
+    const contents = mainWindow?.webContents;
+    if (contents && !contents.isDestroyed()) contents.send(presentationChannels.changed, snapshot);
+  });
   player.subscribe((snapshot) => {
+    presentation.select(snapshot);
     const contents = mainWindow?.webContents;
     if (contents && !contents.isDestroyed()) contents.send(playbackChannels.stateChanged, snapshot);
   });
@@ -297,11 +314,13 @@ app.on('before-quit', (event) => {
   if (quitting) return;
   event.preventDefault();
   quitting = true;
+  presentation.dispose();
   selectionGeneration++;
   void Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose()]).then(() => app.quit());
 });
 app.on('will-quit', () => {
   ipcMain.removeHandler(desktopChannels.getAppInfo);
+  ipcMain.removeHandler(presentationChannels.getState);
   for (const channel of Object.values(credentialChannels)) {
     if (channel !== credentialChannels.changed) ipcMain.removeHandler(channel);
   }
