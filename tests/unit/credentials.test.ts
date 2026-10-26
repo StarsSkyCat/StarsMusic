@@ -110,3 +110,41 @@ test('密文损坏或解密失败进入锁定状态，清除后恢复可用', as
     assert.equal((await reopened.status()).available, true);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+
+test('退出、清除或关闭后重新开启记住登录，都不会被迟到加密写回旧账号', async () => {
+  for (const mode of ['logout', 'clear', 'toggle'] as const) {
+    let release!: () => void;
+    const barrier = new Promise<void>(done => { release = done; });
+    const cipher = new FakeCipher();
+    const encrypt = cipher.encrypt.bind(cipher);
+    cipher.encrypt = async value => { await barrier; return encrypt(value); };
+    const { directory, vault } = await temporaryVault(cipher);
+    try {
+      await vault.setRemember(true);
+      const pending = vault.save(kugouBundle);
+      await new Promise<void>(done => setImmediate(done));
+      if (mode === 'logout') await vault.remove('kugou');
+      else if (mode === 'clear') await vault.clear();
+      else { await vault.setRemember(false); await vault.setRemember(true); }
+      release();
+      assert.equal(await pending, false);
+      assert.deepEqual((await vault.status()).savedProviders, []);
+      assert.equal(await vault.load('kugou'), undefined);
+    } finally { release(); await rm(directory, { recursive: true, force: true }); }
+  }
+});
+
+test('重建保险库仍能恢复双平台密文保存项，各平台独立删除', async () => {
+  const { directory, file, vault } = await temporaryVault();
+  try {
+    await vault.setRemember(true); await vault.save(neteaseBundle); await vault.save(kugouBundle);
+    const restarted = new CredentialVault(file, new FakeCipher());
+    assert.equal((await restarted.status()).remembered, true);
+    assert.deepEqual(await restarted.load('netease'), neteaseBundle);
+    assert.deepEqual(await restarted.load('kugou'), kugouBundle);
+    await restarted.remove('kugou');
+    assert.deepEqual(await restarted.load('netease'), neteaseBundle);
+    assert.equal(await restarted.load('kugou'), undefined);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

@@ -43,7 +43,7 @@ onUnmounted(() => { unsubscribe?.(); status.value = undefined; });
         <input type="checkbox" :checked="status.remembered" :disabled="!status.available || status.locked" @change="changeRemember" />
         <span>记住登录（应用重启后自动验证）</span>
       </label>
-      <p v-if="!status.available" class="provider-note">系统密钥服务不可用（{{ status.backend }}）。当前仅使用临时会话，凭据不会写入磁盘。</p>
+      <p v-if="!status.available" class="provider-note">系统密钥服务不可用（{{ status.backend }}）。当前仅使用临时会话，凭据不会写入磁盘。Linux 请先启用并解锁 GNOME Keyring 或 KWallet，然后重启应用。</p>
       <p v-else-if="status.locked" class="playback-error" role="alert">已保存的登录无法解密，请重新登录或清除保存。</p>
       <p v-else-if="status.remembered" class="provider-note">已启用。凭据由系统密钥加密保存在本机；退出应用后仍保留，退出对应平台或清除保存会删除。</p>
       <p v-else class="provider-note">未启用。开启后，成功登录的凭据会由系统密钥加密保存；未开启时应用关闭即丢弃。</p>

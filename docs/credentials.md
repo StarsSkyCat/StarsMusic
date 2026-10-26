@@ -45,3 +45,9 @@
 - `pnpm check`、typecheck、build、test:playback 独立于系统密钥服务。
 
 当前开发机 `safeStorage.getSelectedStorageBackend()` 为 `basic_text`，因此真实系统密钥持久化和跨重启恢复**未在本机验证**；自动化用注入的 FakeCipher 验证保险库逻辑。真实 GNOME Keyring/KWallet、锁定与重启恢复需在具备安全密钥后端的 Linux 桌面补测。Windows/macOS 后端也未验证。
+
+## 保存竞态与环境提示
+
+退出单个平台、关闭记住登录或清除保存会使旧加密操作失效，即使旧操作较晚完成也不重新写回凭据；随后重新启用记住也不恢复已撤销项。主进程在异步导出后再次核对账号与 generation。自动化验证双平台保险库重建恢复及迟到写入丢弃。
+
+Linux 若显示 basic_text/unavailable，请先通过系统设置启用并解锁 GNOME Keyring 或 KWallet，再重启应用；应用不会自动安装系统软件或改用明文。真实系统密钥后端下的跨重启验证仍需在相应桌面环境进行。

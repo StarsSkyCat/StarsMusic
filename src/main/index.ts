@@ -77,11 +77,17 @@ async function saveCurrentCredentials(): Promise<void> {
   if (!vault) return;
   const status = await vault.status();
   if (!status.remembered || !status.available) return;
-  if (netease.snapshot().status === 'connected') {
-    try { const bundle = await netease.exportCredentials(); if (bundle) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
+  const neteaseState = netease.snapshot();
+  if (neteaseState.status === 'connected') {
+    try { const bundle = await netease.exportCredentials();
+      const current = netease.snapshot();
+      if (bundle && current.status === 'connected' && current.generation === neteaseState.generation && current.account?.id === bundle.accountId) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
   }
-  if (kugou.snapshot().status === 'connected') {
-    try { const bundle = await kugou.exportCredentials(); if (bundle) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
+  const kugouState = kugou.snapshot();
+  if (kugouState.status === 'connected') {
+    try { const bundle = await kugou.exportCredentials();
+      const current = kugou.snapshot();
+      if (bundle && current.status === 'connected' && current.generation === kugouState.generation && current.account?.id === bundle.accountId) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
   }
 }
 
@@ -114,9 +120,13 @@ void app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   vault = new CredentialVault(path.join(app.getPath('userData'), 'credentials.json'), new SafeStorageCipher());
   netease.subscribeCredentials((bundle) => {
+    const current = netease.snapshot();
+    if (quitting || current.status !== 'connected' || current.account?.id !== bundle.accountId) return;
     void vault.save(bundle).then((saved) => { if (saved) broadcastCredentials(); }).catch(() => broadcastCredentials());
   });
   kugou.subscribeCredentials((bundle) => {
+    const current = kugou.snapshot();
+    if (quitting || current.status !== 'connected' || current.account?.id !== bundle.accountId) return;
     void vault.save(bundle).then((saved) => { if (saved) broadcastCredentials(); }).catch(() => broadcastCredentials());
   });
 

@@ -50,6 +50,8 @@ export class CredentialVault {
   #locked = false;
   #error: AppError | undefined;
   #queue: Promise<void> = Promise.resolve();
+  #epoch = 0;
+  #providerEpoch: Record<CredentialProvider, number> = { netease: 0, kugou: 0 };
 
   constructor(file: string, cipher: VaultCipher, now: () => number = Date.now) {
     this.#file = file; this.#cipher = cipher; this.#now = now;
@@ -123,6 +125,7 @@ export class CredentialVault {
   }
 
   async setRemember(value: boolean): Promise<CredentialStatus> {
+    if (!value) this.#epoch++;
     await this.#ready();
     if (value) {
       if (!await this.#available()) {
@@ -137,6 +140,7 @@ export class CredentialVault {
   }
 
   async save(bundle: CredentialBundle): Promise<boolean> {
+    const epoch = this.#epoch; const providerEpoch = this.#providerEpoch[bundle.provider];
     const state = await this.#ready();
     if (!state.remember) return false;
     if (!await this.#available()) {
@@ -150,7 +154,7 @@ export class CredentialVault {
       throw new DomainError('credential-save-failed');
     }
     if (!ciphertext || ciphertext.length > 500_000) throw new DomainError('credential-save-failed');
-    return this.#mutate((current) => current.remember ? {
+    return this.#mutate((current) => current.remember && epoch === this.#epoch && providerEpoch === this.#providerEpoch[bundle.provider] ? {
       ...current, entries: { ...current.entries, [bundle.provider]: { ciphertext, updatedAt: this.#now() } },
     } : undefined);
   }
@@ -181,6 +185,7 @@ export class CredentialVault {
   }
 
   async remove(provider: CredentialProvider): Promise<void> {
+    this.#providerEpoch[provider]++;
     await this.#ready();
     await this.#mutate((state) => {
       if (!state.entries[provider]) return undefined;
@@ -191,6 +196,7 @@ export class CredentialVault {
   }
 
   async clear(): Promise<CredentialStatus> {
+    this.#epoch++;
     const operation = this.#queue.then(async () => {
       await this.#writeNow(emptyFile());
       this.#state = emptyFile(); this.#locked = false; this.#error = undefined;
