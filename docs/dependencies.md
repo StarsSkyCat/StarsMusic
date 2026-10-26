@@ -4,6 +4,7 @@
 
 | 依赖 | 版本 | 用途 | 许可 |
 | --- | --- | --- | --- |
+| @lucide/vue | 1.61.0 | 实际界面使用的统一线性图标 | ISC；源于 Feather 的图标含 MIT，见 [完整声明](licenses/lucide.txt) |
 | vue | 3.5.44 | 实际桌面页面与响应式状态 | MIT |
 | electron | 45.0.0 | 桌面运行时、窗口、沙箱与 IPC | MIT |
 | electron-vite | 6.0.0 | main / preload / renderer 开发与构建 | MIT |
@@ -16,7 +17,7 @@
 | qrcode | 1.5.4 | 后台把官方登录挑战 URL 转为内存 PNG | MIT |
 | @types/qrcode | 1.5.6 | 二维码生成器类型检查 | MIT |
 
-Vue 和 qrcode 为应用依赖，其余为开发依赖。SQLite、Pinia、Router 和打包器未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Electron 内置 `safeStorage` 与 Node 文件 API，没有新增密钥管理依赖。
+Vue、@lucide/vue 和 qrcode 为应用依赖，其余为开发依赖。SQLite、Pinia、Router 和打包器未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Electron 内置 `safeStorage` 与 Node 文件 API，没有新增密钥管理依赖。
 
 ## 系统音频依赖
 

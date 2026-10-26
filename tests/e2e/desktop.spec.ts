@@ -8,7 +8,9 @@ import { writeSilentWav } from '../helpers/audio';
 test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出', async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-e2e-'));
   const audioFile = path.join(profile, 'test-audio.wav');
-  await writeSilentWav(audioFile);
+  const secondFile = path.join(profile, 'test-second.wav');
+  const thirdFile = path.join(profile, 'test-third.wav');
+  await Promise.all([writeSilentWav(audioFile), writeSilentWav(secondFile), writeSilentWav(thirdFile)]);
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
@@ -28,7 +30,9 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await test.step('页面与真实 IPC', async () => {
-      await expect(page.getByRole('heading', { name: '音乐库还是空的' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /让喜欢的音乐/ })).toBeVisible();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
       await expect(page.getByRole('status')).toContainText('桌面桥接已连接');
       await page.getByRole('button', { name: '重新检查' }).click();
       await expect(page.getByRole('status')).toContainText('StarsMusic 0.0.0');
@@ -80,6 +84,9 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
         expect(credentials.enabled.error?.code).toBe('credential-unavailable');
       }
       expect(credentials.cleared.remembered).toBe(false); expect(credentials.cleared.savedProviders).toEqual([]);
+      await page.getByRole('button', { name: '音乐库', exact: true }).click();
+      await page.screenshot({ path: 'artifacts/music-library.png' });
+      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
 
     });
 
@@ -121,11 +128,12 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
 
     await test.step('选择本地文件、实际音频解码、暂停、定位、恢复与退出', async () => {
       // 只替代原生选择器交互，仍使用实际 mpv 与系统音频输出，无播放成功 Mock。
-      await desktop.evaluate(({ dialog }, filename) => {
-        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
-      }, audioFile);
+      await desktop.evaluate(({ dialog }, filenames) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: filenames });
+      }, [audioFile, secondFile, thirdFile]);
+      await page.getByRole('button', { name: '音乐库', exact: true }).click();
       await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
-      await expect(page.getByRole('heading', { name: '当前播放队列' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '本次导入' })).toBeVisible();
       await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
       const desktopPid = desktop.process().pid!;
       const children = (await readFile(`/proc/${desktopPid}/task/${desktopPid}/children`, 'utf8')).trim().split(/\s+/);
@@ -150,12 +158,54 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.screenshot({ path: 'artifacts/local-playback.png' });
     });
 
+    await test.step('筛选、多选插队、展开播放页和队列管理共用后台状态', async () => {
+      const state = () => page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { playback: { getState(): Promise<{ generation: number; currentIndex: number | null; queue: { title: string }[] }> } } }).starsMusic.playback;
+        return api.getState();
+      });
+      const before = await state();
+      await page.getByRole('textbox', { name: '筛选歌曲、歌手或歌单' }).fill('third');
+      await expect(page.getByRole('button', { name: '播放 test-third.wav', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: '播放 test-second.wav', exact: true })).toHaveCount(0);
+      await page.getByRole('textbox', { name: '筛选歌曲、歌手或歌单' }).fill('');
+      await page.getByRole('checkbox', { name: '选择 test-second.wav', exact: true }).check();
+      await page.getByRole('checkbox', { name: '选择 test-third.wav', exact: true }).check();
+      await page.getByRole('button', { name: '下一首播放', exact: true }).click();
+      expect((await state()).generation).toBe(before.generation);
+      expect((await state()).queue.map(t => t.title)).toEqual(['test-audio.wav', 'test-second.wav', 'test-third.wav']);
+      await page.getByRole('button', { name: '下一首播放 test-third.wav', exact: true }).click();
+      expect((await state()).queue.map(t => t.title)).toEqual(['test-audio.wav', 'test-third.wav', 'test-second.wav']);
+      expect((await state()).generation).toBe(before.generation);
+      await page.getByRole('button', { name: '展开播放页', exact: true }).click();
+      const playing = page.getByRole('dialog', { name: 'test-audio.wav', exact: true });
+      await expect(playing).toBeVisible();
+      await expect(playing.getByRole('img')).toBeVisible();
+      await playing.getByRole('button', { name: '暂停', exact: true }).click();
+      await expect(playing.getByRole('button', { name: '播放', exact: true })).toBeEnabled();
+      await page.screenshot({ path: 'artifacts/expanded-player.png' });
+      await playing.press('Escape');
+      await expect(playing).not.toBeVisible();
+      await page.getByRole('button', { name: '打开播放队列', exact: true }).click();
+      const queue = page.getByRole('dialog', { name: /播放队列/ });
+      await expect(queue).toBeVisible();
+      await page.screenshot({ path: 'artifacts/play-next-queue.png' });
+      await queue.getByRole('button', { name: '移除 test-second.wav', exact: true }).click();
+      expect((await state()).queue.map(t => t.title)).toEqual(['test-audio.wav', 'test-third.wav']);
+      await queue.getByRole('button', { name: '清空后续', exact: true }).click();
+      expect((await state()).queue.map(t => t.title)).toEqual(['test-audio.wav']);
+      await queue.getByRole('button', { name: '关闭播放队列', exact: true }).click();
+      await page.setViewportSize({ width: 960, height: 640 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: 'artifacts/local-playback-minimum.png' });
+      expect(errors).toEqual([]);
+    });
+
     await test.step('拒绝主文档导航', async () => {
       const originalUrl = page.url();
       await page.evaluate(() => { window.location.href = 'https://example.invalid/'; });
       expect(await page.evaluate(() => window.location.href)).toBe(originalUrl);
       // Chromium 已取消导航；直接检查原文档，避免 Playwright 等待一个已被取消的导航。
-      expect(await page.evaluate(() => document.querySelector('h1')?.textContent)).toContain('开启音乐之旅');
+      expect(await page.evaluate(() => document.querySelector('h1')?.textContent)).toContain('本地音乐');
     });
 
     await test.step('关闭窗口退出', async () => {

@@ -21,6 +21,7 @@ export interface QueueTrack {
   readonly title: string;
   readonly provider?: 'local' | 'netease' | 'kugou';
   readonly artist?: string;
+  readonly sourceId?: string;
   readonly detail?: string;
 }
 
@@ -67,6 +68,7 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
     const item = record(value, 'playback.queue.item');
     return Object.freeze({ id: text(item.id, 'playback.queue.id'), title: text(item.title, 'playback.queue.title'),
       ...(item.provider === undefined ? {} : { provider: choice(item.provider, ['local', 'netease', 'kugou'], 'playback.queue.provider') }),
+      ...(item.sourceId === undefined ? {} : { sourceId: text(item.sourceId, 'playback.queue.sourceId') }),
       ...(item.artist === undefined ? {} : { artist: text(item.artist, 'playback.queue.artist') }),
       ...(item.detail === undefined ? {} : { detail: text(item.detail, 'playback.queue.detail') }),
     });

@@ -152,9 +152,9 @@ void app.whenReady().then(() => {
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
         const resolve = (signal: AbortSignal) => netease.resolveTrack(track.id, state.generation, signal);
         if (channel === neteaseChannels.enqueueNext) {
-          player.enqueueRemoteNext('netease', track.name, resolve, track.artists.join('、'));
+          player.enqueueRemoteNext('netease', track.name, resolve, track.artists.join('、'), track.id);
         } else {
-          await player.openRemote('netease', track.name, resolve, track.artists.join('、'));
+          await player.openRemote('netease', track.name, resolve, track.artists.join('、'), track.id);
         }
         return;
       }
@@ -192,9 +192,9 @@ void app.whenReady().then(() => {
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
         const resolve = (signal: AbortSignal) => kugou.resolveTrack(track.id, state.generation, signal);
         if (channel === kugouChannels.enqueueNext) {
-          player.enqueueRemoteNext('kugou', track.name, resolve, track.artists.join('、'));
+          player.enqueueRemoteNext('kugou', track.name, resolve, track.artists.join('、'), track.id);
         } else {
-          await player.openRemote('kugou', track.name, resolve, track.artists.join('、'));
+          await player.openRemote('kugou', track.name, resolve, track.artists.join('、'), track.id);
         }
         return;
       }

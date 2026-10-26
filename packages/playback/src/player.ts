@@ -9,7 +9,7 @@ import { MediaGateway } from './media-gateway.ts';
 
 export const audioExtensions = ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'aif', 'aiff'];
 interface PlayerTrack {
-  id: string; title: string; artist?: string; detail?: string; path?: string; provider?: OnlineProviderId;
+  id: string; title: string; artist?: string; sourceId?: string; detail?: string; path?: string; provider?: OnlineProviderId;
   resolve?: (signal: AbortSignal) => Promise<StreamResolution>;
 }
 interface PlayerOptions extends Pick<MpvOptions, 'executable' | 'audioOutput'> {
@@ -72,8 +72,8 @@ export class MusicPlayer {
   }
 
   #queue(): PlaybackSnapshot['queue'] {
-    return this.#tracks.map(({ id, title, provider, artist, detail }) => ({ id, title, provider: provider ?? 'local',
-      ...(artist ? { artist } : {}), ...(detail ? { detail } : {}),
+    return this.#tracks.map(({ id, title, provider, artist, sourceId, detail }) => ({ id, title, provider: provider ?? 'local',
+      ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}), ...(detail ? { detail } : {}),
     }));
   }
 
@@ -104,19 +104,19 @@ export class MusicPlayer {
     return this.#state;
   }
 
-  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string): Promise<PlaybackSnapshot> {
+  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
     if (this.#tracks.length >= 200) return Promise.resolve(this.reportError(appError('invalid-input')));
-    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}) };
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
     this.#tracks.push(track);
     this.#update({ queue: this.#queue() });
     return this.#switch(this.#tracks.length - 1);
   }
 
-  enqueueRemoteNext(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string): PlaybackSnapshot {
+  enqueueRemoteNext(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string): PlaybackSnapshot {
     if (this.#disposed) return this.#state;
     if (this.#tracks.length >= 200) throw new DomainError('invalid-input');
-    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}) };
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
     this.#tracks.splice((this.#state.currentIndex ?? -1) + 1, 0, track);
     this.#update({ queue: this.#queue() });
     return this.#state;

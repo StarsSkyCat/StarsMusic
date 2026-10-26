@@ -25,6 +25,7 @@
     "probe:kugou": "node scripts/probe-kugou.ts"
   },
   "dependencies": {
+    "@lucide/vue": "1.61.0",
     "qrcode": "1.5.4",
     "vue": "3.5.44"
   },
