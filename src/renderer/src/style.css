@@ -1595,3 +1595,6 @@ dialog::backdrop {
     margin-top: 14px;
   }
 }
+
+.queue-list > li.is-current { background: #30263d; border-radius: 9px; padding-inline: 8px; }
+.queue-list > li.is-current .queue-song strong { color: #d5b9ff; }

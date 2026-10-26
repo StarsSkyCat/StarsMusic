@@ -188,6 +188,11 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.getByRole('button', { name: '打开播放队列', exact: true }).click();
       const queue = page.getByRole('dialog', { name: /播放队列/ });
       await expect(queue).toBeVisible();
+      await expect(queue.getByRole('list', { name: '全部队列歌曲' }).getByRole('listitem')).toHaveCount(3);
+      await queue.getByRole('button', { name: /test-second.wav.*待播放/ }).click();
+      await expect(queue.getByRole('list', { name: '全部队列歌曲' }).getByRole('listitem')).toHaveCount(3);
+      await expect(queue.getByRole('button', { name: /test-audio.wav.*已播放/ })).toBeVisible();
+      await queue.getByRole('button', { name: /test-audio.wav.*已播放/ }).click();
       await page.screenshot({ path: 'artifacts/play-next-queue.png' });
       await queue.getByRole('button', { name: '移除 test-second.wav', exact: true }).click();
       expect((await state()).queue.map(t => t.title)).toEqual(['test-audio.wav', 'test-third.wav']);

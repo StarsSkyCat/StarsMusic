@@ -750,21 +750,9 @@ onUnmounted(() => {
         </button>
       </div>
       <div class="drawer-scroll">
-        <template v-if="currentTrack"
-          ><p class="drawer-label">{{ statusText }}</p>
-          <div class="queue-current">
-            <span class="source-icon"><AudioLines :size="23" /></span>
-            <div>
-              <strong>{{ currentTrack.title }}</strong
-              ><small>{{
-                currentTrack.artist || providerNames[currentTrack.provider ?? 'local']
-              }}</small>
-            </div>
-          </div></template
-        >
         <div class="section-heading">
           <h3>
-            接下来播放 <span class="muted">{{ upcoming.length }}</span>
+            全部歌曲 <span class="muted">{{ playback.queue.length }}</span>
           </h3>
           <button
             class="text-button"
@@ -774,20 +762,22 @@ onUnmounted(() => {
             清空后续
           </button>
         </div>
-        <ol v-if="upcoming.length" class="queue-list">
-          <li v-for="(track, index) in upcoming" :key="track.id">
+        <ol v-if="playback.queue.length" class="queue-list" aria-label="全部队列歌曲">
+          <li v-for="(track, index) in playback.queue" :key="track.id" :class="{ 'is-current': index === playback.currentIndex }">
             <span class="queue-number">{{ String(index + 1).padStart(2, '0') }}</span
-            ><button class="queue-song" @click="control((api) => api.playTrack(track.id))">
+            ><button class="queue-song" :aria-current="index === playback.currentIndex ? 'true' : undefined" @click="control((api) => api.playTrack(track.id))">
               <strong>{{ track.title }}</strong
-              ><small>{{ track.artist || providerNames[track.provider ?? 'local'] }}</small></button
+              ><small>{{ index === playback.currentIndex ? statusText : playback.currentIndex !== null && index < playback.currentIndex ? '已播放' : '待播放' }} · {{ track.artist || providerNames[track.provider ?? 'local'] }}</small></button
             ><button
               class="icon-button"
+              :disabled="index === playback.currentIndex"
               :aria-label="`下一首播放 ${track.title}`"
               @click="control((api) => api.moveNext(track.id))"
             >
               <ListPlus :size="17" /></button
             ><button
               class="icon-button"
+              :disabled="index === playback.currentIndex"
               :aria-label="`移除 ${track.title}`"
               @click="control((api) => api.removeTrack(track.id))"
             >

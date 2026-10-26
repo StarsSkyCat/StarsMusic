@@ -436,3 +436,19 @@ test('编码关系查询晚到时仍丢弃旧曲目，不覆盖新的播放结�
     assert.equal(service.snapshot().error, undefined);
   } finally { service.dispose(); }
 });
+
+
+test('酷狗展示去除末尾音频扩展名，保留曲名中间的点号并正常进行身份校验', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  try {
+    await connect(service); await service.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 2, info: [
+      { hash, name: '合成歌手 - 合成曲目.MP3', duration: 30 },
+      { hash: 'b'.repeat(32), name: '合成.mp3 混音.flac', duration: 30 },
+    ] }));
+    await service.loadPlaylist('1', 0);
+    assert.deepEqual(service.snapshot().tracks.map(t => t.name), ['合成歌手 - 合成曲目', '合成.mp3 混音']);
+    transport.handlers.set('stream', async () => ({ ...stream, fileName: '合成歌手 - 合成曲目.mp3' }));
+    assert.equal((await service.resolveTrack(hash, service.snapshot().generation)).access.kind, 'full');
+  } finally { service.dispose(); }
+});

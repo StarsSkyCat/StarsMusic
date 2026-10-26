@@ -52,7 +52,8 @@ function parseTracks(value: unknown): { items: BackendTrack[]; received: number 
           return [text(singer.name ?? singer.author_name, 'kugou.singer.name')];
         } catch { return []; }
       });
-      const name = text(raw.name ?? raw.filename ?? raw.songname, 'kugou.song.name');
+      const name = text(raw.name ?? raw.filename ?? raw.songname, 'kugou.song.name').replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape|opus|aiff?)$/i, '').trim();
+      if (!name) continue;
       const timelen = optionalInteger(raw.timelen, 'kugou.timelen');
       const seconds = optionalInteger(raw.duration, 'kugou.duration');
       const durationMs = timelen ?? (seconds === undefined ? 0 : seconds * 1000);
