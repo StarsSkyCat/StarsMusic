@@ -3,7 +3,7 @@
 ## 项目与当前阶段
 
 - Linux 优先的跨平台音乐播放器，网易云、酷狗分别接入，Windows/macOS 后续实现。
-- 技术方向：Electron、Vue 3、TypeScript、mpv、SQLite。已有桌面基础、本地播放、网易云临时扫码/歌单/播放闭环，以及酷狗 App 扫码/歌单/曲目/部分播放（受限）；酷狗完整权限矩阵、密钥持久化和发行验证尚未完成，进度以验证记录为准。
+- 技术方向：Electron、Vue 3、TypeScript、mpv、SQLite。已有桌面基础、本地播放、网易云临时扫码/歌单/播放闭环，以及酷狗 App 扫码/歌单/曲目/部分播放（受限；已改为 hash-only 取链修复错配）；酷狗完整权限矩阵、密钥持久化和发行验证尚未完成，进度以验证记录为准。
 - 先读 README.md、docs/development.md 和 docs/roadmap.md；架构背景见 docs/design-and-architecture.md。
 - 使用标准文件名 AGENTS.md。不要创建 AGENDS.md 等重复规则文件。子目录规则只补充所在范围，避免复制根规则。
 

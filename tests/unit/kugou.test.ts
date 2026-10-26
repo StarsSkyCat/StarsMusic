@@ -51,12 +51,31 @@ test('标准版扫码需账号验证一致后连接，歌单/曲目登记及退�
     await service.loadPlaylists(); await service.loadPlaylist('1', 0);
     assert.equal(service.snapshot().tracks[0]?.id, hash);
     assert.ok(!JSON.stringify(service.snapshot()).includes('synthetic-private-marker'));
-    transport.handlers.set('stream', async (data) => { assert.equal(data.audioId, '2'); return stream; });
+    transport.handlers.set('stream', async (data) => { assert.equal(data.hash, hash); return stream; });
     assert.equal((await service.resolveTrack(hash, service.snapshot().generation)).track.provider, 'kugou');
     await assert.rejects(service.resolveTrack('b'.repeat(32), service.snapshot().generation));
     await assert.rejects(service.resolveTrack(hash, service.snapshot().generation - 1));
     service.logout(); assert.equal(transport.cleared, true); assert.deepEqual(service.snapshot().tracks, []);
     await assert.rejects(service.resolveTrack(hash, 0));
+  } finally { service.dispose(); }
+});
+
+test('完整资源无权限时回退到试听，文件名不匹配则拒绝', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  try {
+    await connect(service); await service.loadPlaylists(); await service.loadPlaylist('1', 0);
+    let calls = 0;
+    transport.handlers.set('stream', async (data) => {
+      calls += 1;
+      if (data.freePart !== true) throw new DomainError('permission-denied');
+      return { ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '合成歌手 - 合成曲目.mp3' };
+    });
+    const preview = await service.resolveTrack(hash, service.snapshot().generation);
+    assert.deepEqual(preview.access, { kind: 'preview', startMs: 0, durationMs: 254000 });
+    assert.equal(calls, 2); assert.equal(service.snapshot().error, undefined);
+    transport.handlers.set('stream', async () => ({ ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '另一首歌.mp3' }));
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+    assert.equal(service.snapshot().error?.code, 'track-mismatch');
   } finally { service.dispose(); }
 });
 
@@ -148,9 +167,13 @@ test('流只接受明确权限、HTTPS 官方媒体主机，响应缺少试听�
   assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: 'c'.repeat(32) }, hash), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: hash }, hash).track.id, hash);
-  assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 30 }, hash, { durationMs: 30000 }).track.id, hash);
-  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 60 }, hash, { durationMs: 30000 }), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+  assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 30 }, hash, { name: '合成曲目', durationMs: 30000 }).track.id, hash);
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 60 }, hash, { name: '合成曲目', durationMs: 30000 }), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.equal(parseKugouStream({ ...stream, hash: hash.toUpperCase() }, hash).track.id, hash);
+  const preview = parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '合成歌手 - 合成曲目.mp3' }, hash, { name: '合成曲目', durationMs: 207000 }, 'preview');
+  assert.deepEqual(preview.access, { kind: 'preview', startMs: 0, durationMs: 254000 });
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), fileName: '另一首歌.mp3' }, hash, { name: '合成曲目', durationMs: 207000 }, 'preview'), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash, { name: '合成曲目', durationMs: 207000 }, 'preview'), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.throws(() => parseKugouStream({ ...stream, priv_status: 1 }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://www.kugou.com/private'] }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://fsandroid.kugou.com.evil.invalid/audio'] }, hash));
@@ -178,5 +201,25 @@ test('真实 transport 固定 App 1005 渠道、拒绝重定向与安全验证�
       return new Response(JSON.stringify(ok({ status: 1 })));
     };
     await transport.call('qrPoll', { key: 'synthetic' }, new AbortController().signal);
+    transport.acceptIdentity('42', 'synthetic-private-marker');
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      assert.equal(url.hostname, 'gateway.kugou.com');
+      assert.equal(url.searchParams.get('hash'), 'a'.repeat(32));
+      assert.equal(url.searchParams.get('album_id'), '0');
+      assert.equal(url.searchParams.get('album_audio_id'), '0');
+      assert.equal(url.searchParams.get('quality'), '128');
+      assert.equal(url.searchParams.get('clientver'), '11430');
+      assert.equal(url.searchParams.get('IsFreePart'), '0');
+      assert.match(url.searchParams.get('key') ?? '', /^[a-f0-9]{32}$/);
+      return new Response(JSON.stringify(ok({})));
+    };
+    await transport.call('stream', { hash: 'a'.repeat(32) }, new AbortController().signal);
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      assert.equal(url.searchParams.get('IsFreePart'), '1');
+      return new Response(JSON.stringify(ok({})));
+    };
+    await transport.call('stream', { hash: 'a'.repeat(32), freePart: true }, new AbortController().signal);
   } finally { transport.clear(); globalThis.fetch = original; }
 });

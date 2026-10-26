@@ -50,7 +50,9 @@ export class DirectKugouTransport implements KugouTransport {
     } else if (endpoint === 'playlist') {
       body = JSON.stringify({ listid: data.id, userid: this.#userid, type: data.type, page: data.page, pagesize: 50, area_code: 1, allplatform: 1, show_cover: 1, token: this.#token });
     } else if (endpoint === 'stream') {
-      Object.assign(params, { album_id: data.albumId ?? '0', area_code: '1', hash: data.hash, ssa_flag: 'is_fromtrack', version: '11430', page_id: '151369488', quality: '128', album_audio_id: data.audioId ?? '0', behavior: 'play', pid: '2', cmd: '26', pidversion: '3001', IsFreePart: '1', ppage_id: '463467626,350369493,788954147', cdnBackup: '1', module: '', clientver: '11430' });
+      // 歌单/搜索数据里的 album_id/album_audio_id 可能与主 hash 错配，带上会被平台带到其他文件。
+      // 固定 0，让平台只按 hash 解析；IsFreePart 默认 0，避免返回另一条试听音频。
+      Object.assign(params, { album_id: 0, area_code: '1', hash: data.hash, ssa_flag: 'is_fromtrack', version: '11430', page_id: '151369488', quality: '128', album_audio_id: 0, behavior: 'play', pid: '2', cmd: '26', pidversion: '3001', IsFreePart: data.freePart === true ? '1' : '0', ppage_id: '463467626,350369493,788954147', cdnBackup: '1', module: '', clientver: '11430' });
       params.key = md5(`${params.hash}57ae12eb6890223e355ccfcb74edf70d1005${this.#mid}${this.#userid || '0'}`);
     } else if (endpoint === 'register') {
       aesKey = randomBytes(3).toString('hex'); const digest = md5(aesKey);
