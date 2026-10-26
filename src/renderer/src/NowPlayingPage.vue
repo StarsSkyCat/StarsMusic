@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ArrowLeft, ArrowRight, AudioLines, Disc3, ListMusic, Music2 } from '@lucide/vue';
+import { ArrowLeft, ArrowRight, AudioLines, ListMusic, Music2 } from '@lucide/vue';
 import type { PlaybackSnapshot, QueueTrack } from '../../../packages/contracts/src/playback';
 import type { PresentationSnapshot } from '../../../packages/contracts/src/presentation';
 import { providerNames } from './useProvider';
 import TrackLyrics from './TrackLyrics.vue';
+import GlassScene from './GlassScene.vue';
 import defaultArtwork from './assets/stars-night.png';
 const props = defineProps<{
   playback: PlaybackSnapshot;
@@ -75,7 +76,7 @@ const next = computed(() => props.playback.queue[(props.playback.currentIndex ??
       </div>
     </div>
     <div v-else class="np-empty">
-      <span class="np-empty-disc"><Disc3 :size="64" :stroke-width="1" /></span>
+      <div class="np-empty-disc"><GlassScene /></div>
       <h1 tabindex="-1">还没有正在播放的音乐</h1>
       <p>从本地音乐或你的歌单中，选一首喜欢的。</p>
       <button class="primary-button" @click="$emit('back')"><Music2 :size="17" />去选首歌</button>

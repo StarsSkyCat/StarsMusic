@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AudioLines, ListPlus, Play, X } from '@lucide/vue';
+import { AudioLines, ListPlus, Music2, Play, X } from '@lucide/vue';
 import { formatTime, type DisplayTrack } from './music-ui';
 import { providerNames } from './useProvider';
 
@@ -59,10 +59,11 @@ defineEmits<{
           :aria-current="track.id === currentId ? 'true' : undefined"
           @click="$emit('play', track.id)"
         >
-          <strong>{{ track.title }}</strong
+          <span class="song-tile" aria-hidden="true"><AudioLines v-if="track.id === currentId" :size="19" /><Music2 v-else :size="19" /></span>
+          <span class="song-copy"><strong>{{ track.title }}</strong
           ><small>{{
             track.artist || (track.provider === 'local' ? '本地音频' : '未知歌手')
-          }}</small>
+          }}</small></span>
         </button>
         <span class="source-column"
           ><span class="source-badge" :class="track.provider">{{

@@ -25,6 +25,7 @@
 | [SQLite 登录保存验证](validation/2026-10-26-sqlite-credentials.md) | 无系统密钥服务下的加密存储、事务、迁移与实际应用重启 |
 | [扫码保存交互验证](validation/2026-10-27-login-flow.md) | 二维码区域记住登录、平台选择隔离、退出删除和取消竞态 |
 | [独立播放页与导航验证](validation/2026-10-27-listening-pages.md) | 音乐库、歌单详情、独立歌词页、浏览上下文与小窗口布局 |
+| [液态玻璃界面验证](validation/2026-10-27-liquid-glass.md) | 全页面重设计、悬浮布局、折射唱片、按钮状态与桌面回归 |
 | [音乐工作区验证](validation/2026-10-26-music-workspace.md) | 页面设计、多选下一首、会话队列与桌面布局检查 |
 | [歌词与封面验证](validation/2026-10-26-presentation.md) | 当前在线曲目行级歌词、内存封面、竞态与桌面验证边界 |
 | [架构决策 ADR](adr/README.md) | 已选方向、备选方案和未验证的决策 |

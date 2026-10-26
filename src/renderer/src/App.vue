@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 import {
-  ArrowDownLeft,
   ArrowRight,
   AudioLines,
   Check,
@@ -35,6 +34,7 @@ import ProviderAccount from './ProviderAccount.vue';
 import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
+import GlassScene from './GlassScene.vue';
 import {
   parsePresentationSnapshot,
   type PresentationSnapshot,
@@ -372,16 +372,21 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
+    <div class="ambient-field" aria-hidden="true">
+      <i></i><i></i><i></i>
+    </div>
+    <a class="skip-link" href="#main" @click.prevent="mainPane?.focus()">跳到主内容</a>
     <aside class="sidebar" aria-label="主导航">
       <a class="brand" href="#main" @click.prevent="navigate('library')"
         ><span class="brand-mark"><Sparkles :size="23" /></span>StarsMusic<span class="brand-dot"
           >.</span
         ></a
       >
-      <p class="sidebar-label">音乐，随心而至</p>
+      <p class="sidebar-label">听见你的宇宙 <span>01 / EXPLORE</span></p>
       <nav class="main-navigation" aria-label="音乐库">
         <button
           :class="{ active: view === 'library' && !nowPlayingOpen }"
+          :aria-current="view === 'library' && !nowPlayingOpen ? 'page' : undefined"
           @click="navigate('library')"
         >
           <Library :size="19" />音乐库<ChevronRight
@@ -390,7 +395,11 @@ onUnmounted(() => {
             :size="14"
           />
         </button>
-        <button :class="{ active: view === 'local' && !nowPlayingOpen }" @click="navigate('local')">
+        <button
+          :class="{ active: view === 'local' && !nowPlayingOpen }"
+          :aria-current="view === 'local' && !nowPlayingOpen ? 'page' : undefined"
+          @click="navigate('local')"
+        >
           <FolderOpen :size="19" />本地音乐<span v-if="localTracks.length" class="nav-count">{{
             localTracks.length
           }}</span>
@@ -406,12 +415,13 @@ onUnmounted(() => {
           ></span>
         </button>
       </nav>
-      <p class="sidebar-label source-label">音乐来源</p>
+      <p class="sidebar-label source-label">音乐来源 <span>02 / CONNECT</span></p>
       <nav class="main-navigation" aria-label="音乐来源">
         <button
           v-for="id in providerIds"
           :key="id"
           :class="{ active: view === id && !nowPlayingOpen }"
+          :aria-current="view === id && !nowPlayingOpen ? 'page' : undefined"
           @click="navigate(id)"
         >
           <Cloud :size="19" :class="`provider-${id}`" />{{ providerNames[id]
@@ -425,7 +435,8 @@ onUnmounted(() => {
         </button>
       </nav>
       <div class="sidebar-note">
-        <p>本次播放队列</p>
+        <span class="session-symbol"><AudioLines :size="22" /></span>
+        <p>让音乐接着发生</p>
         <button class="sidebar-queue" @click="showQueue">
           <ListMusic :size="18" /><strong>{{ playback.queue.length }} 首音乐</strong
           ><ChevronRight :size="15" /></button
@@ -434,14 +445,15 @@ onUnmounted(() => {
       <button
         class="settings-nav"
         :class="{ active: view === 'settings' && !nowPlayingOpen }"
+        :aria-current="view === 'settings' && !nowPlayingOpen ? 'page' : undefined"
         @click="navigate('settings')"
       >
         <Settings2 :size="18" />账号与设置
       </button>
-      <span class="sidebar-footer">DESIGNED FOR LISTENING</span>
+      <span class="sidebar-footer"><i></i>STARS MUSIC / LINUX</span>
     </aside>
 
-    <main id="main" ref="mainPane" :class="{ 'is-playing-view': nowPlayingOpen }">
+    <main id="main" ref="mainPane" tabindex="-1" :class="{ 'is-playing-view': nowPlayingOpen }">
       <header class="topbar">
         <div class="breadcrumb">
           <span>{{ nowPlayingOpen ? '聆听空间' : '我的音乐' }}</span
@@ -480,11 +492,16 @@ onUnmounted(() => {
           @queue="showQueue"
         />
         <template v-else-if="view !== 'settings'">
-          <section v-if="view === 'library' && !query" class="library-overview">
+          <section
+            v-if="view === 'library' && !query"
+            class="library-overview"
+            aria-labelledby="library-title"
+          >
             <div class="library-intro">
-              <span class="eyebrow">YOUR MUSIC, TOGETHER</span>
-              <h1>音乐库</h1>
-              <p>你的歌单、设备里的音乐，都在这里。</p>
+              <span class="eyebrow"><span></span>YOUR PERSONAL SOUNDSPACE</span>
+              <h1 id="library-title">音乐库</h1>
+              <h2 class="hero-headline">让声音，<br /><em>自由流动。</em></h2>
+              <p>穿过日常的喧嚣，抵达你的音乐宇宙。</p>
               <div class="library-actions">
                 <button class="primary-button" @click="openFiles">
                   <FolderOpen :size="16" />选择本地音频</button
@@ -492,6 +509,10 @@ onUnmounted(() => {
                   {{ connectedCount ? '管理音乐账号' : '连接音乐账号' }}<ArrowRight :size="16" />
                 </button>
               </div>
+            </div>
+            <div class="hero-art">
+              <GlassScene />
+              <span class="hero-art-label">A LITTLE SPACE. ALL YOUR MUSIC.</span>
             </div>
             <button v-if="currentTrack" class="library-current" @click="continueListening">
               <span class="library-current-art"
@@ -508,9 +529,11 @@ onUnmounted(() => {
               ><Play :size="18" fill="currentColor" />
             </button>
             <div v-else class="library-start-note">
-              <span class="library-start-icon"><Headphones :size="30" :stroke-width="1.5" /></span
-              ><strong>从喜欢的声音开始</strong>
-              <p>导入本地歌曲，或打开你的平台歌单。</p>
+              <span class="library-start-icon"><Headphones :size="19" /></span>
+              <div>
+                <strong>好音乐，从你的收藏开始</strong>
+                <p>本地音乐与平台歌单，在这里相遇。</p>
+              </div>
             </div>
           </section>
           <section
@@ -519,20 +542,26 @@ onUnmounted(() => {
             aria-labelledby="sources-title"
           >
             <div class="section-heading">
-              <h2 id="sources-title">你的音乐空间</h2>
-              <span class="muted small">不同来源，同一种热爱</span>
+              <div class="heading-with-count">
+                <span class="section-index">01</span>
+                <h2 id="sources-title">你的音乐空间</h2>
+              </div>
+              <span class="muted small">{{ connectedCount }} / 2 个平台已连接</span>
             </div>
             <div class="source-grid">
               <button class="source-card local" @click="navigate('local')">
+                <span class="source-card-top">
+                  <span>ON YOUR DEVICE</span><ArrowRight :size="17" />
+                </span>
                 <span class="source-icon"><FolderOpen :size="23" /></span
-                ><span
+                ><span class="source-card-copy"
                   ><strong>本地音乐</strong
                   ><small>{{
                     localTracks.length
                       ? `${localTracks.length} 首 · 本次会话`
                       : '从你的设备，发现好音乐'
                   }}</small></span
-                ><ArrowRight :size="17" />
+                ><span class="source-card-state"><i></i>随时出发</span>
               </button>
               <button
                 v-for="id in providerIds"
@@ -541,16 +570,23 @@ onUnmounted(() => {
                 :class="id"
                 @click="navigate(id)"
               >
+                <span class="source-card-top">
+                  <span>{{ id === 'netease' ? 'NETEASE CLOUD' : 'KUGOU MUSIC' }}</span>
+                  <ArrowRight :size="17" />
+                </span>
                 <span class="source-icon"><Cloud :size="23" /></span
-                ><span
+                ><span class="source-card-copy"
                   ><strong>{{ providerNames[id] }}</strong
                   ><small>{{
                     providers[id].state.value.account?.nickname ?? '连接账号，同步你的歌单'
                   }}</small></span
-                ><Check
-                  v-if="providers[id].state.value.status === 'connected'"
-                  :size="17"
-                /><ArrowRight v-else :size="17" />
+                ><span
+                  class="source-card-state"
+                  :class="{ connected: providers[id].state.value.status === 'connected' }"
+                  ><i></i>{{
+                    providers[id].state.value.status === 'connected' ? '已连接' : '等待连接'
+                  }}</span
+                >
               </button>
             </div>
           </section>
@@ -591,18 +627,33 @@ onUnmounted(() => {
               </div>
             </div>
           </section>
-          <ProviderAccount
+          <div
             v-if="activeProvider && providerState && providerState.status !== 'connected'"
-            :provider="activeProvider"
-            :state="providerState"
-            :credentials="credentials.status.value"
-            :saving="credentials.busy[activeProvider]"
-            @remember="(value) => credentials.setRemember(activeProvider!, value)"
-            :error="providers[activeProvider].error.value"
-            @login="providers[activeProvider].run((api) => api.startLogin())"
-            @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
-            @logout="providers[activeProvider].run((api) => api.logout())"
-          />
+            class="provider-onboarding"
+          >
+            <ProviderAccount
+              :provider="activeProvider"
+              :state="providerState"
+              :credentials="credentials.status.value"
+              :saving="credentials.busy[activeProvider]"
+              @remember="(value) => credentials.setRemember(activeProvider!, value)"
+              :error="providers[activeProvider].error.value"
+              @login="providers[activeProvider].run((api) => api.startLogin())"
+              @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
+              @logout="providers[activeProvider].run((api) => api.logout())"
+            />
+            <aside class="provider-guide" aria-label="扫码连接步骤">
+              <Headphones :size="30" :stroke-width="1.4" aria-hidden="true" />
+              <span class="eyebrow">BRING YOUR FAVORITES</span>
+              <h2>熟悉的收藏，<br />新的声场。</h2>
+              <ol>
+                <li><span>01</span>打开{{ activeProvider === 'kugou' ? '标准版酷狗音乐' : '网易云音乐' }} App</li>
+                <li><span>02</span>扫描登录区域的二维码</li>
+                <li><span>03</span>在官方 App 中确认授权</li>
+              </ol>
+              <p>无需输入密码。两个平台的账号分别连接。</p>
+            </aside>
+          </div>
           <section
             v-if="view !== 'local' && !selectedPlaylistId"
             class="playlist-section"
@@ -610,6 +661,7 @@ onUnmounted(() => {
           >
             <div class="section-heading">
               <div class="heading-with-count">
+                <span class="section-index">{{ view === 'library' ? '02' : '01' }}</span>
                 <h2 id="playlists-title">我的歌单</h2>
                 <span class="count-pill">{{ filteredPlaylists.length }}</span>
               </div>
@@ -782,20 +834,16 @@ onUnmounted(() => {
           >
             {{ providers[activeProvider].error.value || providerState.error?.message }}
           </p>
-          <div v-if="view === 'library' && !tracks.length && !query" class="welcome-note">
-            <AudioLines :size="19" /><span
-              >还没有正在播放的音乐。选一首喜欢的，让声音填满此刻。</span
-            ><ArrowDownLeft :size="18" />
-          </div>
         </template>
 
         <template v-else>
-          <div class="page-heading">
+          <div class="page-heading settings-heading">
             <div>
               <span class="eyebrow">MAKE YOURSELF AT HOME</span>
               <h1>账号与设置</h1>
               <p>连接音乐来源，让每一份收藏都触手可及。</p>
             </div>
+            <span class="page-heading-symbol" aria-hidden="true"><Settings2 :size="42" :stroke-width="1.2" /></span>
           </div>
           <div class="accounts-grid">
             <ProviderAccount

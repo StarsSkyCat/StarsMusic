@@ -31,6 +31,11 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
     page.on('pageerror', (error) => errors.push(error.message));
     await test.step('页面与真实 IPC', async () => {
       await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('link', { name: '跳到主内容', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('main')).toBeFocused();
+      await expect(page.getByRole('navigation', { name: '音乐库', exact: true }).getByRole('button', { name: '音乐库', exact: true })).toHaveAttribute('aria-current', 'page');
       await page.getByRole('button', { name: '正在播放', exact: true }).click();
       await expect(page.getByRole('heading', { name: '还没有正在播放的音乐', exact: true })).toBeVisible();
       await page.getByRole('button', { name: '返回音乐库', exact: true }).click();
@@ -124,9 +129,17 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
     await test.step('最小窗口布局', async () => {
       // Wayland 合成器可忽略原生 setSize，显式设置视口以验证准确的布局尺寸。
       await page.setViewportSize({ width: 1280, height: 800 });
+      const defaultSidebar = await page.locator('.sidebar').boundingBox();
+      const defaultSettings = await page.getByRole('button', { name: '账号与设置', exact: true }).boundingBox();
+      expect(defaultSidebar).not.toBeNull(); expect(defaultSettings).not.toBeNull();
+      expect(defaultSettings!.y + defaultSettings!.height).toBeLessThanOrEqual(defaultSidebar!.y + defaultSidebar!.height);
       await page.screenshot({ path: 'artifacts/desktop-default.png' });
       await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(960, 640));
       await page.setViewportSize({ width: 960, height: 640 });
+      const sidebarBounds = await page.locator('.sidebar').boundingBox();
+      const settingsBounds = await page.getByRole('button', { name: '账号与设置', exact: true }).boundingBox();
+      expect(sidebarBounds).not.toBeNull(); expect(settingsBounds).not.toBeNull();
+      expect(settingsBounds!.y + settingsBounds!.height).toBeLessThanOrEqual(sidebarBounds!.y + sidebarBounds!.height);
       await page.getByText('应用信息与诊断', { exact: true }).click();
       await page.getByRole('button', { name: '重新检查' }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('button', { name: '重新检查' })).toBeInViewport();
@@ -220,6 +233,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await expect(playing.locator('.np-next')).toBeInViewport();
       await page.screenshot({ path: 'artifacts/now-playing-page-minimum.png' });
       await page.setViewportSize({ width: 1280, height: 800 });
+      await expect(playing.locator('.np-next')).toBeInViewport();
       await page.screenshot({ path: 'artifacts/now-playing-page.png' });
       await controls.getByRole('slider', { name: '播放进度' }).fill('25');
       await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成后续第16行');
@@ -300,6 +314,8 @@ test('扫码保存选择按平台隔离，未成功登录的选择不跨应用�
     await expect(remember).toBeChecked();
     await remember.uncheck(); await expect(remember).not.toBeChecked();
     await remember.check(); await expect(remember).toBeChecked();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: 'artifacts/liquid-glass-synthetic-login.png', animations: 'disabled' });
     const loggedOut = await page.evaluate(async () => {
       const api = (window as unknown as { starsMusic: { kugou: { logout(): Promise<unknown> }; credentials: { getStatus(): Promise<{ rememberedProviders: string[]; savedProviders: string[] }>; setRemember(provider: 'netease', value: boolean): Promise<unknown> } } }).starsMusic;
       await api.credentials.setRemember('netease', true);
@@ -328,6 +344,7 @@ test('歌单详情直接展示曲目，往返播放页保留筛选且不显示�
   const desktop = await _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true, timeout: 10_000 });
   try {
     const page = await desktop.firstWindow();
+    await page.setViewportSize({ width: 1280, height: 800 });
     // 明确标识的合成只读 UI 投影；不认证、不播放、不模拟平台请求成功。
     const snapshot = await page.evaluate(async () => {
       const api = (window as unknown as { starsMusic: { kugou: { getState(): Promise<Record<string, unknown>> } } }).starsMusic.kugou;
@@ -338,6 +355,7 @@ test('歌单详情直接展示曲目，往返播放页保留筛选且不显示�
     await expect(page.getByRole('heading', { level: 1, name: '合成歌单一', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '播放 合成展示曲目', exact: true })).toBeVisible();
     await expect(page.locator('.playlist-grid')).toHaveCount(0);
+    await page.screenshot({ path: 'artifacts/liquid-glass-synthetic-playlist-detail.png', animations: 'disabled' });
     const search = page.getByRole('textbox', { name: '筛选歌曲、歌手或歌单', exact: true });
     await search.fill('合成展示');
     await page.getByRole('button', { name: '正在播放', exact: true }).click();
@@ -347,6 +365,7 @@ test('歌单详情直接展示曲目，往返播放页保留筛选且不显示�
     await expect(page.getByRole('heading', { level: 1, name: '合成歌单一', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '返回全部歌单', exact: true }).click();
     await expect(search).toHaveValue('');
+    await page.screenshot({ path: 'artifacts/liquid-glass-synthetic-playlists.png', animations: 'disabled' });
     await page.getByRole('button', { name: /合成歌单二/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: '合成歌单二', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '播放 合成展示曲目', exact: true })).toHaveCount(0);

@@ -17,7 +17,8 @@ const diagnostics = {
 </script>
 
 <template>
-  <section class="account-card" :class="provider" :aria-label="providerNames[provider]">
+  <section class="account-card" :class="provider" :aria-label="providerNames[provider]" :aria-busy="state.busy">
+    <div class="account-overline"><span>{{ provider === 'netease' ? 'NETEASE CLOUD MUSIC' : 'KUGOU MUSIC' }}</span><span>{{ provider === 'netease' ? '01' : '02' }}</span></div>
     <div class="section-heading">
       <div class="account-heading">
         <span class="source-icon"><Cloud :size="23" /></span>
@@ -82,8 +83,8 @@ const diagnostics = {
     >
       <X :size="15" />取消授权
     </button>
-    <button v-else class="subtle-button" @click="$emit('login')">
-      <Link2 :size="15" />{{ provider === 'netease' ? '连接网易云' : '连接酷狗' }}
+    <button v-else class="primary-button account-connect" @click="$emit('login')">
+      <Link2 :size="16" />{{ provider === 'netease' ? '连接网易云' : '连接酷狗' }}
     </button>
   </section>
 </template>
