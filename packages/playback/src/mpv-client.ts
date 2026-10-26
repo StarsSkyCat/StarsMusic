@@ -14,6 +14,8 @@ export interface MpvOptions {
   executable?: string;
   // 仅测试调用者显式使用；产品启动不读取环境变量开启静音后端。
   audioOutput?: 'null';
+  network?: 'loopback';
+  playbackLength?: number;
 }
 
 export class MpvClient {
@@ -34,14 +36,19 @@ export class MpvClient {
   async start(): Promise<string> {
     if (process.platform !== 'linux') throw new DomainError('unsupported');
     if (this.#child || this.#closing) throw new DomainError('unsupported');
+    const protocols = this.#options.network === 'loopback' ? 'file,http,tcp' : 'file';
     const args = [
       '--no-config', '--load-scripts=no', '--idle=yes', '--terminal=no', '--video=no',
       '--audio-display=no', '--audio-fallback-to-null=no', '--osc=no', '--input-default-bindings=no', '--input-terminal=no',
       '--input-media-keys=no', '--ytdl=no', '--audio-file-auto=no', '--sub-auto=no',
-      '--access-references=no', '--autoload-files=no', '--demuxer-lavf-o=protocol_whitelist=file',
+      '--access-references=no', '--autoload-files=no', `--demuxer-lavf-o=protocol_whitelist=%${protocols.length}%${protocols}`,
       '--input-ipc-client=fd://3',
     ];
     if (this.#options.audioOutput === 'null') args.push('--ao=null');
+    if (this.#options.playbackLength !== undefined) {
+      if (!Number.isFinite(this.#options.playbackLength) || this.#options.playbackLength <= 0) throw new DomainError('invalid-input');
+      args.push(`--length=${this.#options.playbackLength}`);
+    }
     const child = spawn(this.#options.executable ?? 'mpv', args, {
       shell: false, stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
     });

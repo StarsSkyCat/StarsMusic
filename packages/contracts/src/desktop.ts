@@ -1,4 +1,5 @@
 import type { PlaybackApi } from './playback.ts';
+import type { NeteaseApi } from './netease.ts';
 
 export const desktopChannels = {
   getAppInfo: 'starsmusic:app:get-info',
@@ -17,6 +18,7 @@ export interface AppInfo {
 export interface DesktopApi {
   getAppInfo(): Promise<AppInfo>;
   readonly playback: PlaybackApi;
+  readonly netease: NeteaseApi;
 }
 
 export function parseAppInfo(value: unknown): AppInfo {

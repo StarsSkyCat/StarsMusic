@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { LocalPlayer } from '../../packages/playback/src/local-player.ts';
+import { MusicPlayer } from '../../packages/playback/src/player.ts';
 import { MpvClient } from '../../packages/playback/src/mpv-client.ts';
 import { writeSilentWav } from '../helpers/audio.ts';
+import { MediaGateway, type FetchMedia } from '../../packages/playback/src/media-gateway.ts';
+import type { StreamResolution } from '../../packages/contracts/src/music.ts';
 
 async function until(check: () => boolean | Promise<boolean>): Promise<void> {
   const deadline = Date.now() + 6000;
@@ -49,7 +52,7 @@ test('真实解码、暂停、定位、音量、快速切歌、停止与崩溃�
   const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-mpv-'));
   const first = path.join(directory, '音频 with spaces.wav');
   const second = path.join(directory, 'second.wav');
-  const player = new LocalPlayer({ audioOutput: 'null' });
+  const player = new MusicPlayer({ audioOutput: 'null' });
   try {
     await Promise.all([writeSilentWav(first), writeSilentWav(second)]);
     await player.openFiles([first, second]);
@@ -88,8 +91,8 @@ test('EOF、损坏/缺失文件、快速停止和缺失 mpv 不冒充播放成�
   const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-mpv-errors-'));
   const short = path.join(directory, 'short.wav');
   const broken = path.join(directory, 'broken.wav');
-  const player = new LocalPlayer({ audioOutput: 'null' });
-  const missingEngine = new LocalPlayer({ executable: path.join(directory, 'missing-mpv') });
+  const player = new MusicPlayer({ audioOutput: 'null' });
+  const missingEngine = new MusicPlayer({ executable: path.join(directory, 'missing-mpv') });
   try {
     await writeSilentWav(short, 0.3); await writeFile(broken, 'not an audio file');
     await player.openFiles([short]); await until(() => player.snapshot().status === 'ended');
@@ -110,5 +113,43 @@ test('EOF、损坏/缺失文件、快速停止和缺失 mpv 不冒充播放成�
     await Promise.all([player.dispose(), missingEngine.dispose()]);
     await rm(directory, { recursive: true, force: true });
   }
+  assert.deepEqual(await children(), []);
+});
+
+test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听并清理旧解析/网关', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-remote-mpv-'));
+  const file = path.join(directory, 'synthetic.wav');
+  await writeSilentWav(file, 10);
+  const audio = await readFile(file);
+  const fetcher: FetchMedia = async (_url, headers) => {
+    const start = Number(/^bytes=(\d+)-/.exec(headers.Range ?? '')?.[1] ?? 0);
+    const body = audio.subarray(start);
+    return { status: start > 0 ? 206 : 200, headers: {
+      'content-type': 'audio/wav', 'content-length': String(body.length), 'accept-ranges': 'bytes',
+      ...(start > 0 ? { 'content-range': `bytes ${start}-${audio.length - 1}/${audio.length}` } : {}),
+    }, stream: Readable.from([body]) };
+  };
+  const player = new MusicPlayer({ audioOutput: 'null', openGateway: (url, signal) => MediaGateway.open(url, signal, fetcher) });
+  const resource: StreamResolution = {
+    track: { provider: 'netease', id: '7' }, source: { kind: 'remote', url: 'https://m1.music.126.net/synthetic', headers: {} },
+    access: { kind: 'preview', startMs: 0, durationMs: 1000 }, quality: { level: 'unknown' },
+  };
+  try {
+    await player.openRemote('合成在线曲目', async () => resource);
+    await until(() => player.snapshot().status === 'playing');
+    assert.ok(player.snapshot().queue[0]?.title.includes('试听'));
+    assert.ok(!JSON.stringify(player.snapshot()).includes('music.126.net'));
+    await until(() => player.snapshot().durationSeconds > 0);
+    assert.ok(player.snapshot().durationSeconds <= 1);
+    await player.clearRemote(); assert.deepEqual(player.snapshot().queue, []);
+    assert.deepEqual(await children(), []);
+    let resolve!: (value: StreamResolution) => void;
+    const delayed = new Promise<StreamResolution>((done) => { resolve = done; });
+    const old = player.openRemote('旧解析', async () => delayed);
+    const current = player.openFiles([file]); resolve(resource);
+    await Promise.all([old, current]); await until(() => player.snapshot().status === 'playing');
+    assert.equal(player.snapshot().queue[0]?.title, 'synthetic.wav');
+    assert.equal((await children()).length, 1);
+  } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
   assert.deepEqual(await children(), []);
 });

@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { parseAppInfo, type AppInfo } from '../../../packages/contracts/src/desktop';
 import { parsePlaybackSnapshot, type PlaybackApi, type PlaybackSnapshot } from '../../../packages/contracts/src/playback';
+import NeteasePanel from './NeteasePanel.vue';
 
 const info = ref<AppInfo>();
 const loading = ref(false);
@@ -86,10 +87,10 @@ onUnmounted(() => unsubscribe?.());
         <section v-if="playback.queue.length === 0" class="empty-library" aria-labelledby="library-title">
           <div class="record" aria-hidden="true"><div>✦</div></div>
           <h2 id="library-title">音乐库还是空的</h2>
-          <p>选择本地音频开始播放，支持一次选择多首。在线平台登录仍待接入。</p>
+          <p>选择本地音频开始播放，或连接网易云读取歌单。</p>
           <button class="open-files" @click="control((api) => api.openFiles())">选择本地音频</button>
           <div class="sources" aria-label="计划接入的音乐来源">
-            <span>网易云音乐 <small>待接入</small></span>
+            <span>网易云音乐 <small>扫码连接</small></span>
             <span>酷狗音乐 <small>待接入</small></span>
             <span>本地音乐 <small>已接入 mpv</small></span>
           </div>
@@ -97,7 +98,7 @@ onUnmounted(() => unsubscribe?.());
 
         <section v-else class="local-library" aria-labelledby="queue-title">
           <div class="runtime-heading">
-            <div><h2 id="queue-title">本地播放队列</h2><p>{{ playback.queue.length }} 首 · 仅保留本次会话</p></div>
+            <div><h2 id="queue-title">当前播放队列</h2><p>{{ playback.queue.length }} 首 · 仅保留本次会话</p></div>
             <button @click="control((api) => api.openFiles())">重新选择音频</button>
           </div>
           <ol class="track-list">
@@ -111,6 +112,7 @@ onUnmounted(() => unsubscribe?.());
           </ol>
         </section>
         <p v-if="playbackError || playback.error" class="playback-error" role="alert">{{ playbackError || playback.error?.message }}</p>
+        <NeteasePanel />
 
         <section class="runtime" aria-labelledby="runtime-title">
           <div class="runtime-heading">

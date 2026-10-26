@@ -1,10 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
+import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
 
 const invokePlayback = async (channel: string, ...args: unknown[]) => {
   const value: unknown = await ipcRenderer.invoke(channel, ...args);
   return parsePlaybackSnapshot(value);
+};
+const invokeNetease = async (channel: string, ...args: unknown[]) => {
+  const value: unknown = await ipcRenderer.invoke(channel, ...args);
+  return parseNeteaseSnapshot(value);
 };
 
 const api: DesktopApi = Object.freeze({
@@ -26,6 +31,21 @@ const api: DesktopApi = Object.freeze({
       const receive = (_event: unknown, value: unknown) => listener(parsePlaybackSnapshot(value));
       ipcRenderer.on(playbackChannels.stateChanged, receive);
       return () => { ipcRenderer.removeListener(playbackChannels.stateChanged, receive); };
+    },
+  }),
+  netease: Object.freeze({
+    getState: () => invokeNetease(neteaseChannels.getState),
+    startLogin: () => invokeNetease(neteaseChannels.startLogin),
+    cancelLogin: () => invokeNetease(neteaseChannels.cancelLogin),
+    logout: () => invokeNetease(neteaseChannels.logout),
+    loadPlaylists: () => invokeNetease(neteaseChannels.loadPlaylists),
+    loadPlaylist: (id: string, offset: number) => invokeNetease(neteaseChannels.loadPlaylist, id, offset),
+    async playTrack(id: string): Promise<void> { await ipcRenderer.invoke(neteaseChannels.playTrack, id); },
+    onStateChanged(listener: (state: ReturnType<typeof parseNeteaseSnapshot>) => void) {
+      if (typeof listener !== 'function') throw new Error('监听器无效');
+      const receive = (_event: unknown, value: unknown) => listener(parseNeteaseSnapshot(value));
+      ipcRenderer.on(neteaseChannels.stateChanged, receive);
+      return () => { ipcRenderer.removeListener(neteaseChannels.stateChanged, receive); };
     },
   }),
 });

@@ -37,6 +37,15 @@ h2 { font-size: 16px; font-weight: 550; margin: 0; }
 .empty-library p { color: var(--muted); font-size: 13px; line-height: 1.8; margin: 10px 0 22px; }
 .sources { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .open-files { margin-bottom: 22px; }
+.netease-panel { margin-top: 24px; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.netease-panel p { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.qr-login { display: flex; align-items: center; gap: 24px; margin-top: 24px; }
+.qr-login img { border: 8px solid white; border-radius: 8px; flex-shrink: 0; }
+.load-playlists { margin-top: 20px; }
+.playlist-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+.playlist-buttons button { max-width: 100%; text-align: left; overflow-wrap: anywhere; }
+.playlist-buttons small, .track-title small { color: var(--muted); margin-left: 10px; }
+.playlist-buttons [aria-pressed="true"] { border-color: var(--accent); }
 .local-library { margin-top: 28px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .local-library p { color: var(--muted); margin-bottom: 0; font-size: 12px; }
 .track-list { list-style: none; padding: 0; margin: 20px 0 0; }

@@ -1,7 +1,7 @@
 # 平台适配
 
-后续分别实现网易云、酷狗与本地音乐 Provider，统一契约并保留平台/账号/客户端渠道边界。接口候选和真实登录尚未验证。
+src/netease 已实现固定协议、App 扫码、账号验证、私人歌单/曲目分页及流解析，用户已确认实际出声。酷狗仍待后续步骤。接口与限制见 [网易云说明](../../docs/netease.md)。
 
-src/session-generation.ts 已实现后台 SessionGeneration 守卫。每个平台只保留一个活动租约；登录开始、账号验证完成、切账号/渠道或重登时通过 activate 生成新租约，退出/取消时通过 invalidate 取消并丢弃旧结果。只有 run/commit 能在检查当前租约后同步写回；具体约定见 [公共契约说明](../../docs/contracts.md)。本模块尚无平台网络请求、凭据服务或登录成功实现。
+src/session-generation.ts 每个平台只保留一个活动租约；登录开始、账号验证完成或重登时 activate，退出/取消时 invalidate，旧成功与失败都丢弃。网易云服务运行于专用 utilityProcess，凭据只存内存，页面不接触私有接口或流地址；本轮没有密钥后端或持久缓存。
 
 按 [P0 计划](../../docs/roadmap.md) 推进；实际测试使用 [验证模板](../../docs/templates/p0-validation.md)，不提交凭据和个人响应。

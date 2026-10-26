@@ -1,12 +1,12 @@
 # 本地播放基础
 
-P0 第三步在 Linux 实现系统 mpv 本地音频闭环，未新增 npm 依赖。界面点“选择本地音频”，可一次选择最多 200 首音频，替换本次会话的临时队列并播放第一首。上一首、下一首、点击队列项目均显式切歌；末尾停在 ended，不自动续播。目录扫描、标签读取、循环/随机、持久队列和在线流仍待实现。
+Linux 已实现本地播放和网易云单曲播放；第三步本地验证为基础，第四步扩展为通用 MusicPlayer。界面可一次选择最多 200 首本地音频，替换临时队列并播放第一首；网易云选择一首也会替换当前队列。上一首/下一首均显式切歌；不自动续播。目录扫描、标签、循环/随机与持久队列仍待实现。
 
 文件类型过滤包含 MP3、FLAC、WAV、M4A、AAC、Ogg、Opus、AIFF；实际解码以当前 mpv 构建为准。本轮实际音频样本为生成的 PCM WAV，不能据此宣称其他格式与发行版均已验证。缺失 mpv、文件不可访问、解码或音频输出失败显示明确错误；不自动切换到其他播放内核或静音输出。
 
 ## 模块与通信
 
-- packages/playback/src/local-player.ts 拥有临时队列、路径映射、独立 generation、revision 和唯一 PlaybackSnapshot。UI 只投影后台状态，进度、暂停、结束均由实际 mpv 事件更新。
+- packages/playback/src/player.ts 拥有临时队列、路径/解析函数映射、独立 generation、revision 和唯一 PlaybackSnapshot。UI 只投影实际 mpv 状态。
 - packages/playback/src/mpv-client.ts 使用 spawn 参数数组、shell=false 与继承 FD 3（input-ipc-client）通信。没有监听 socket/端口，没有临时 socket 文件；每个请求使用 request_id 与三秒超时，未知错误不透传原始 mpv 文本。
 - src/main 只协调原生选择器、来源/参数校验、状态发布与退出。仅后端接触真实路径；文件异步 realpath/stat，确认是普通文件后传给 mpv。
 - preload 暴露具体 playback 方法，不能指定 IPC 通道、文件路径、URL 或 mpv 命令。队列 ID 每次选择重新生成；UI 不能借 ID 请求未登记的文件。
@@ -17,7 +17,9 @@ PlaybackSnapshot 包含状态、队列 ID/标题、当前索引、秒数位置/�
 
 每次切歌立即推进 playback generation；所有异步文件检查、进程事件和错误都检查所属 generation。串行切换先关闭旧进程并等待退出，再创建新进程，避免重复声音；过时的排队切换不启动新进程。为了让无 ID 的 mpv 属性事件也有明确归属，本阶段每首重建 mpv，代价是切歌存在初始化延迟，暂不支持无缝播放。
 
-启动时禁用用户配置、脚本、视频窗口、外部字幕/音轨旁加载和间接文件引用，lavf 协议只允许 file。新进程 loadfile 前清空 http-header-fields；实际有凭据的在线请求头与重定向隔离仍需未来独立验证。
+启动时禁用用户配置、脚本、视频窗口、外部字幕/音轨旁加载和间接文件引用，本地模式 lavf 只允许 file。新进程 loadfile 前清空 http-header-fields；目前网易云只接受无需账号请求头的 CDN 资源，其他需要凭据的媒体渠道仍需独立验证。
+
+网易云模式只对随机令牌保护的本机网关额外开放 HTTP/TCP；真实 CDN 地址和跳转由网关校验，mpv 不直接接收 Cookie 或签名源地址。退出网易云只停止在线资源，不停止本地音频。试听长度与 seek 上限均由后台约束。域名、Fake-IP 与 TLS 规则见 [网易云说明](netease.md)。
 
 停止和退出都会先使旧 generation 失效，再关闭 IPC。mpv 在继承客户端 FD 关闭后退出；超过 500ms 依次发送 TERM，再过 500ms 发送 KILL，并等待进程关闭。Electron before-quit 等待服务清理后再退出。进程异常终止显示错误，用户可以点击播放显式重建，不自动无限重启。应用音量设置在切歌时保留，不被新实例的默认音量覆盖。
 

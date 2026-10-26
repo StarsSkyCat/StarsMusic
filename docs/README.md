@@ -13,6 +13,8 @@
 | [公共契约验证](validation/2026-10-26-contracts-session.md) | P0 第二步的契约边界与异步竞态验证 |
 | [本地播放](playback.md) | 私有 FD、状态源、切歌与应用退出规则 |
 | [本地播放验证](validation/2026-10-26-local-playback.md) | P0 第三步的实际 mpv 与 PipeWire 桌面验证 |
+| [网易云接入](netease.md) | 固定协议、临时扫码、歌单和 CDN 网关边界 |
+| [网易云验证](validation/2026-10-26-netease.md) | 用户真实闭环结果、Fake-IP 修复及剩余矩阵 |
 | [架构决策 ADR](adr/README.md) | 已选方向、备选方案和未验证的决策 |
 | [P0 验证记录模板](templates/p0-validation.md) | 记录真实环境、操作、证据与限制 |
 

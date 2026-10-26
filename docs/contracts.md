@@ -1,6 +1,6 @@
 # 公共契约与会话 generation
 
-本轮完成 P0 第二步的纯 TypeScript 基础，无新增依赖，不提供模拟登录或模拟播放。类型由 packages/contracts/src 定义，后台 generation 守卫由 packages/providers/src/session-generation.ts 实现；均进入根 typecheck，守卫通过 Node 单元测试验证，尚未接入真实平台。
+P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，后台守卫由 packages/providers/src/session-generation.ts 实现。第四步的网易云服务已实际使用这些基础；其白名单 DTO 与命令见 netease.ts，具体范围见 [网易云说明](netease.md)。不提供模拟成功的产品入口。
 
 ## 模型与校验
 
@@ -24,7 +24,7 @@
 
 StreamResolution.source.remote 包含临时 URL、请求头和可选过期时间，仅在可信后台短时使用，不进入 renderer、日志、数据库或页面存储。远端 URL 必须为不含内嵌身份、片段和空白/控制字符的 HTTPS；请求头名称合法、值无非法控制字符，拒绝大小写重复头和 Host/Connection 等传输控制头。
 
-这些检查只验证结构，不授权任意 HTTPS 目标。实际 Provider 必须核实 CDN 主机与重定向允许范围；实际播放服务必须保证凭据逐曲隔离。当前没有媒体网络请求、域名白名单或 mpv 集成，不能用通过契约校验代替这些验证。
+通用检查只验证结构，不授权任意 HTTPS 目标。网易云已增加严格 CDN/跳转传输策略、loopback 网关与无凭据转发；其他平台仍须独立核实。不能用通用契约校验代替实际平台验证。
 
 适配器核实实际响应后才能抛出 DomainError 分类。normalizeError 不猜测未知上游对象中的 code 或 message；未知错误统一为 internal，契约校验失败为 invalid-response，AbortError/TimeoutError 映射取消/超时。权限拒绝、过期、网络、限流等分类有固定文案；retryable 仅为提示，不代表已实现自动重试。
 
@@ -40,6 +40,6 @@ SessionGeneration 每个平台只保留一个活动 SessionLease。租约包含�
 - 网络请求内只取数据，缓存/状态写入必须放在 apply。上游不响应 AbortSignal 时仍通过最终租约检查阻止旧结果覆盖。
 - 缓存键捕获自租约上下文，不在请求结束后读取可能已经切换的当前账号。缓存数据本身的账号清理、容量与持久化尚未实现。
 
-守卫不是完整登录状态机，不维护真实账号或凭据，不自动执行登出清理、超时或限流。未来退出服务需先 invalidate，再清理凭据、账号缓存、授权窗口并停止相关在线音频。取消/登录轮询与官方授权流程在后续接入时实现。
+守卫自身不维护账号/凭据或自动清理资源。网易云服务已在 invalidate 后清理临时凭据与列表，后台状态变化通知播放器停止相关在线音频；其他平台接入时必须落实各自清理与超时规则。
 
 会话 generation 只处理账号生命周期，不能替代未来快速切歌需要的独立 playbackGeneration；同一账号内不同播放请求仍需独立隔离。跨进程接入时必须由拥有会话的后台服务进行最终检查，不把 IPC 反序列化后的租约当作同一对象。

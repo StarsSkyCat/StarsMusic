@@ -43,9 +43,19 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo', 'playback']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease']);
       expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '0.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
+      await expect(page.getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
+      // 仅验证真实 utilityProcess 启动与临时退出，不自动生成/截图真实登录二维码。
+      const provider = await page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { netease: { getState(): Promise<{ status: string }>; logout(): Promise<{ status: string }> } } }).starsMusic.netease;
+        const state = await api.getState();
+        const loggedOut = await api.logout();
+        return { keys: Object.keys(api).sort(), status: state.status, loggedOut: loggedOut.status };
+      });
+      expect(provider.status).toBe('signed-out'); expect(provider.loggedOut).toBe('signed-out');
+      expect(provider.keys).not.toContain('resolveTrack'); expect(provider.keys).not.toContain('request');
     });
 
     await test.step('内存会话与 renderer 沙箱', async () => {
@@ -90,7 +100,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
       }, audioFile);
       await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
-      await expect(page.getByRole('heading', { name: '本地播放队列' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '当前播放队列' })).toBeVisible();
       await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
       const desktopPid = desktop.process().pid!;
       const children = (await readFile(`/proc/${desktopPid}/task/${desktopPid}/children`, 'utf8')).trim().split(/\s+/);

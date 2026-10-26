@@ -5,3 +5,5 @@
 index.ts 已实现安全 BrowserWindow、内存 session、权限/下载/导航/弹窗拒绝、应用信息 IPC 与关闭退出。ipc-policy.ts 校验调用窗口、主帧、精确文档与空参数。后续服务按 [P0 路线图](../../docs/roadmap.md) 接入。
 
 本地播放 IPC 每条命令单独校验参数；文件路径只取自原生选择器，过期选择结果被丢弃，页面仅获队列 ID 和标题。播放状态来自 packages/playback，主进程负责发布快照及 before-quit 等待清理，不执行同步扫描、解码或数据库工作。
+
+netease-client.ts 只协调受限 utilityProcess 消息与公开投影；netease-worker.ts 承载实际平台请求与临时凭据。主进程验证网易云白名单参数、进程和会话 generation，实际资源仅交给播放器，不转发给页面；退出等候后台与 mpv 清理。

@@ -1,6 +1,6 @@
 # 当前依赖记录
 
-P0 桌面基础直接依赖如下，版本固定于 package.json，完整依赖树及校验值由 pnpm-lock.yaml 记录。来源为 npm 官方注册表与对应官方项目，未复制参考播放器代码或视觉资产。
+当前直接依赖如下，版本固定于 package.json，完整树及校验值由 pnpm-lock.yaml 记录。来源为 npm 官方注册表与对应项目；未复制参考播放器代码或视觉资产，协议格式改编来源另列 [第三方声明](../THIRD_PARTY_NOTICES.md)。
 
 | 依赖 | 版本 | 用途 | 许可 |
 | --- | --- | --- | --- |
@@ -13,8 +13,10 @@ P0 桌面基础直接依赖如下，版本固定于 package.json，完整依赖�
 | vue-tsc | 3.3.13 | Vue 模板与 TypeScript 检查 | MIT |
 | @types/node | 24.19.2 | 与 Node 24 开发基线一致的类型 | MIT |
 | @playwright/test | 1.64.1 | 实际 Electron 启动、桥接与生命周期冒烟 | Apache-2.0 |
+| qrcode | 1.5.4 | 后台把官方登录挑战 URL 转为内存 PNG | MIT |
+| @types/qrcode | 1.5.6 | 二维码生成器类型检查 | MIT |
 
-只将 Vue 列为应用依赖，其余为开发依赖。SQLite、平台 API、Pinia、Router 和打包器未使用，因此未安装。本地播放使用系统 mpv 子进程，不新增 npm 依赖。
+Vue 和 qrcode 为应用依赖，其余为开发依赖。SQLite、Pinia、Router 和打包器未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。
 
 ## 系统音频依赖
 

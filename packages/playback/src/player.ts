@@ -4,27 +4,38 @@ import path from 'node:path';
 import { appError, DomainError, normalizeError, type AppError } from '../../contracts/src/errors.ts';
 import { parsePlaybackSnapshot, playbackNumber, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import { MpvClient, type MpvOptions } from './mpv-client.ts';
+import { parseStreamResolution, type StreamResolution } from '../../contracts/src/music.ts';
+import { MediaGateway } from './media-gateway.ts';
 
 export const audioExtensions = ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'aif', 'aiff'];
-interface LocalTrack { id: string; title: string; path: string }
+interface PlayerTrack {
+  id: string; title: string; path?: string;
+  resolve?: (signal: AbortSignal) => Promise<StreamResolution>;
+}
+interface PlayerOptions extends Pick<MpvOptions, 'executable' | 'audioOutput'> {
+  openGateway?: (url: string, signal: AbortSignal) => Promise<MediaGateway>;
+}
 
-export class LocalPlayer {
+export class MusicPlayer {
   #state = parsePlaybackSnapshot({
     revision: 0, generation: 0, status: 'idle', queue: [], currentIndex: null,
     positionSeconds: 0, durationSeconds: 0, volume: 70,
   });
-  #tracks: LocalTrack[] = [];
+  #tracks: PlayerTrack[] = [];
+  #abort = new AbortController();
+  #gateway: MediaGateway | undefined;
   #engine: MpvClient | undefined;
   #engineGeneration = -1;
   #loaded = false;
   #paused = false;
   #desiredVolume = 70;
+  #previewSeconds: number | undefined;
   #disposed = false;
   #tail: Promise<void> = Promise.resolve();
   #listeners = new Set<(state: PlaybackSnapshot) => void>();
-  #options: Pick<MpvOptions, 'executable' | 'audioOutput'>;
+  #options: PlayerOptions;
 
-  constructor(options: Pick<MpvOptions, 'executable' | 'audioOutput'> = {}) { this.#options = options; }
+  constructor(options: PlayerOptions = {}) { this.#options = options; }
 
   snapshot(): PlaybackSnapshot { return this.#state; }
 
@@ -60,6 +71,21 @@ export class LocalPlayer {
     return this.#switch(index);
   }
 
+  openRemote(title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>): Promise<PlaybackSnapshot> {
+    if (this.#disposed) return Promise.resolve(this.#state);
+    const track: PlayerTrack = { id: randomUUID(), title, resolve };
+    this.#tracks = [track];
+    this.#update({ queue: [{ id: track.id, title }], currentIndex: null, status: 'idle' });
+    return this.#switch(0);
+  }
+  async clearRemote(): Promise<void> {
+    if (!this.#tracks.some((track) => track.resolve)) return;
+    this.#tracks = [];
+    await this.stop();
+    // 清理过程中可能已经选择本地文件，不覆盖更新的队列。
+    if (this.#tracks.length === 0) this.#update({ queue: [], currentIndex: null });
+  }
+
   #enqueue(task: () => Promise<void>): Promise<PlaybackSnapshot> {
     this.#tail = this.#tail.then(task).catch((error: unknown) => {
       if (!this.#disposed) this.reportError(normalizeError(error));
@@ -72,24 +98,44 @@ export class LocalPlayer {
     const track = this.#tracks[index];
     if (!track) return Promise.resolve(this.#state);
     const generation = this.#state.generation + 1;
+    this.#abort.abort(); this.#abort = new AbortController();
+    const signal = this.#abort.signal;
     this.#loaded = false;
     this.#paused = false;
+    this.#previewSeconds = undefined;
     this.#update({ generation, currentIndex: index, status: 'loading', positionSeconds: 0, durationSeconds: 0, error: undefined, audioOutput: undefined });
     return this.#enqueue(async () => {
       const old = this.#engine;
       this.#engine = undefined;
       await old?.close();
+      await this.#gateway?.close(); this.#gateway = undefined;
       if (this.#disposed || this.#state.generation !== generation) return;
       let engine: MpvClient | undefined;
       try {
-        let filename: string;
-        try {
-          filename = await realpath(track.path);
-          if (!(await stat(filename)).isFile()) throw new Error('not a file');
-        } catch { throw new DomainError('file-unavailable'); }
+        let filename: string; let previewSeconds: number | undefined;
+        if (track.resolve) {
+          const stream = parseStreamResolution(await track.resolve(signal));
+          signal.throwIfAborted();
+          if (stream.source.kind !== 'remote' || Object.keys(stream.source.headers).length !== 0) throw new DomainError('invalid-response');
+          if (stream.source.expiresAt !== undefined && stream.source.expiresAt <= Date.now()) throw new DomainError('unavailable');
+          this.#gateway = await (this.#options.openGateway?.(stream.source.url, signal) ?? MediaGateway.open(stream.source.url, signal));
+          filename = this.#gateway.address;
+          if (stream.access.kind === 'preview') previewSeconds = stream.access.durationMs / 1000;
+          this.#previewSeconds = previewSeconds;
+          const quality = { unknown: '音质未知', standard: '标准', high: '高音质', lossless: '无损', 'hi-res': 'Hi-Res' }[stream.quality.level];
+          this.#update({ queue: [{ id: track.id, title: `${track.title} · 网易云 · ${stream.access.kind === 'preview' ? '试听 · ' : ''}${quality}` }] });
+        } else {
+          try {
+            if (!track.path) throw new Error('no file');
+            filename = await realpath(track.path);
+            if (!(await stat(filename)).isFile()) throw new Error('not a file');
+          } catch { throw new DomainError('file-unavailable'); }
+        }
         if (this.#disposed || this.#state.generation !== generation) return;
         engine = new MpvClient({
           ...this.#options,
+          ...(track.resolve ? { network: 'loopback' as const } : {}),
+          ...(previewSeconds === undefined ? {} : { playbackLength: previewSeconds }),
           onEvent: (event) => { if (this.#state.generation === generation) this.#event(event); },
           onFailure: () => {
             if (!this.#disposed && this.#state.generation === generation) {
@@ -108,6 +154,7 @@ export class LocalPlayer {
         await engine.command(['loadfile', filename, 'replace']);
       } catch (error: unknown) {
         await engine?.close();
+        await this.#gateway?.close(); this.#gateway = undefined;
         if (this.#engine === engine) this.#engine = undefined;
         if (!this.#disposed && this.#state.generation === generation) {
           this.#loaded = false;
@@ -137,8 +184,8 @@ export class LocalPlayer {
         this.#paused = value;
         if (this.#loaded) this.#update({ status: value ? 'paused' : 'playing' });
       } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-        if (event.name === 'time-pos' && this.#loaded) this.#update({ positionSeconds: value });
-        else if (event.name === 'duration') this.#update({ durationSeconds: value });
+        if (event.name === 'time-pos' && this.#loaded) this.#update({ positionSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
+        else if (event.name === 'duration') this.#update({ durationSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
         else if (event.name === 'volume' && this.#loaded) this.#update({ volume: Math.min(value, 100) });
       }
     }
@@ -174,12 +221,14 @@ export class LocalPlayer {
   }
 
   stop(): Promise<PlaybackSnapshot> {
+    this.#abort.abort();
     this.#loaded = false;
     this.#update({ generation: this.#state.generation + 1, status: 'idle', positionSeconds: 0, durationSeconds: 0, error: undefined });
     return this.#enqueue(async () => {
       const engine = this.#engine;
       this.#engine = undefined;
       await engine?.close();
+      await this.#gateway?.close(); this.#gateway = undefined;
     });
   }
 

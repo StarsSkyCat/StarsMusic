@@ -2,7 +2,7 @@
 
 Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、酷狗音乐与本地音乐。
 
-当前处于 P0 基础阶段：已有安全桌面窗口、公共契约和会话 generation 守卫，支持选择本地音频、临时队列、mpv 播放/暂停/定位/音量与切歌。在线登录、目录扫描、持久音乐库和安装包尚未实现。
+当前处于 P0 接入阶段：支持本地音频和网易云临时扫码登录、歌单分页与单曲播放；网易云真实闭环已由用户确认出声。酷狗、系统密钥持久化、目录扫描、持久音乐库和安装包尚未实现。具体范围见 [网易云说明](docs/netease.md) 与 [验证记录](docs/validation/2026-10-26-netease.md)。
 
 - [产品设计与技术选型](docs/design-and-architecture.md)
 - [开发文档索引](docs/README.md)
@@ -47,5 +47,6 @@ setup:electron 首次下载固定版本的 Electron 运行时，需要网络；d
 - docs/：设计、开发、验证与决策记录。
 
 项目许可证尚未确定，发布前补充 LICENSE 与完整的第三方许可清单；当前直接依赖见 [依赖记录](docs/dependencies.md)。
+网易云协议基线的来源与许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 本地播放的边界与实际验证范围见 [播放说明](docs/playback.md) 和 [P0 记录](docs/validation/2026-10-26-local-playback.md)。

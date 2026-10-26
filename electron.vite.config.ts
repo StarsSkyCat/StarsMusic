@@ -1,8 +1,11 @@
 import { defineConfig } from 'electron-vite';
+import { resolve } from 'node:path';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
-  main: {},
+  main: { build: { rolldownOptions: { input: {
+    index: resolve('src/main/index.ts'), 'netease-worker': resolve('src/main/netease-worker.ts'),
+  } } } },
   preload: {
     build: {
       // 沙箱 preload 不支持 ESM；所有本地导入打进单个 CJS 文件。
