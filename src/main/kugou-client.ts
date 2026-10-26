@@ -41,7 +41,9 @@ export class KugouClient {
     const worker = utilityProcess.fork(this.#path, [], { stdio: 'pipe', serviceName: 'StarsMusic Kugou Provider' });
     this.#worker = worker; this.#workerRevision = -1; this.#workerGeneration = -1;
     // 防止依赖或运行时意外输出包含登录响应的内容，也避免未读取管道阻塞。
-    worker.stdout?.resume(); worker.stderr?.resume();
+    worker.stdout?.resume();
+    if (process.env.STARSMUSIC_DEBUG === '1') worker.stderr?.on('data', (chunk: Buffer | string) => console.error(`[kugou-worker] ${String(chunk).trim()}`));
+    else worker.stderr?.resume();
     worker.on('message', (value: unknown) => {
       if (this.#worker !== worker || typeof value !== 'object' || value === null) return;
       const message = value as Record<string, unknown>;

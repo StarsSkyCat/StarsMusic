@@ -20,7 +20,7 @@
 | `gateway.kugou.com/v4/get_list_all_file_v3` | 歌单曲目分页 |
 | `gateway.kugou.com/v5/url` | 按已登记曲目解析播放资源 |
 
-实际媒体主机只允许 `fsandroid.kugou.com`、`fsandroid.tx.kugou.com`、`fsmobile.kugou.com`、`fsmobile.tx.kugou.com`；不是放行整个 `kugou.com`。新增渠道或 CDN 必须补充实测证据。
+实际媒体主机只允许 `fs-open.kugou.com`、`fsandroid.kugou.com`、`fsandroid.tx.kugou.com`、`fsmobile.kugou.com`、`fsmobile.tx.kugou.com`；不是放行整个 `kugou.com`。`fs-open` 来自公开客户端实测记录，仍需本次真实取链确认；新增渠道或 CDN 必须补充实测证据。
 
 ## 登录与会话
 
@@ -53,7 +53,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 
 ## 媒体网关
 
-签名资源地址只在后台流转，mpv 读取带随机令牌的 loopback 网关，不在命令行或页面出现。网关按平台隔离：酷狗只允许上述四个媒体主机，网易云只允许 `.music.126.net`；跨平台重定向会被拒绝。每次跳转重新校验，最多三次，保留 TLS 证书验证；DNS 拒绝环回、普通私网和链路本地目标，兼容 Fake-IP 代理映射。
+签名资源地址只在后台流转，mpv 读取带随机令牌的 loopback 网关，不在命令行或页面出现。网关按平台隔离：酷狗只允许上述五个媒体主机，网易云只允许 `.music.126.net`；跨平台重定向会被拒绝。每次跳转重新校验，最多三次，保留 TLS 证书验证；DNS 拒绝环回、普通私网和链路本地目标，兼容 Fake-IP 代理映射。
 
 只转发音频 Accept 与经校验的单 Range，不向 CDN 转发 Cookie、Authorization 或本机身份头，也不把上游 Set-Cookie 返回给 mpv。网关随切歌、停止、退出和登录失效关闭。
 

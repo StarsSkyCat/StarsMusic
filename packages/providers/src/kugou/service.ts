@@ -70,7 +70,12 @@ export function parseKugouStream(value: unknown, id: string): StreamResolution {
   if (!Array.isArray(raw.url) || typeof raw.url[0] !== 'string' || !raw.url[0]) throw new DomainError('permission-denied');
   if (/[\u0000-\u0020\u007f]/.test(raw.url[0])) throw new DomainError('invalid-response');
   const url = new URL(raw.url[0]); if (url.protocol === 'http:') url.protocol = 'https:';
-  if (!allowedKugouMediaHost(url.hostname) || url.protocol !== 'https:' || url.port || url.username || url.password || url.hash) throw new DomainError('invalid-response');
+  if (!allowedKugouMediaHost(url.hostname) || url.protocol !== 'https:' || url.port || url.username || url.password || url.hash) {
+    if (process.env.STARSMUSIC_DEBUG === '1') {
+      console.error(`[kugou-debug] media-url rejected host=${url.hostname} protocol=${url.protocol} port=${url.port ? 'set' : 'none'} auth=${url.username || url.password ? 'set' : 'none'} fragment=${url.hash ? 'set' : 'none'}`);
+    }
+    throw new DomainError('invalid-response');
+  }
   let access: StreamResolution['access'] = { kind: 'full' };
   // 付费片段必须由平台明确给出边界；不能从“已登录”或 URL 非空推断完整权限。
   if (raw.priv_status !== 0) {

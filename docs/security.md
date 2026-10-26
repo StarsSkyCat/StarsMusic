@@ -26,7 +26,7 @@ mpv 使用私有 IPC、明确的进程所有权与参数数组；请求头不能
 
 页面只发送本地登记 ID 或当前账号已读取的网易云/酷狗曲目 ID，不能传任意路径、URL、API 参数或 mpv 命令。平台歌单 ID、酷狗 hash/album 参数只在后台登记映射中使用。mpv 用 shell=false 和继承 FD 3 启动，命令 IPC 不开放监听端口；关闭 FD 后必要时 TERM/KILL。禁用配置、脚本、视频、旁加载与间接文件引用，每首先退出旧实例再清空头、加载新资源；不支持无缝切换。
 
-在线媒体经随机令牌保护的 loopback HTTP 网关读取，逐跳校验且最多三次跳转。网易云只允许 HTTPS `.music.126.net`，酷狗只允许已核实的四个 `fsandroid`/`fsmobile` 媒体主机；网关按平台隔离，拒绝跨平台跳转。DNS 拒绝环回/普通私网/链路本地，兼容 198.18.0.0/15 Fake-IP 代理；TLS 按原始官方 CDN 名称验证且从未关闭证书校验。只转发音频 Accept/单 Range，不转发 Cookie、Authorization，也不回传上游 Set-Cookie。页面不接触媒体 URL。产品无静音降级开关，null 输出仅由测试显式构造。
+在线媒体经随机令牌保护的 loopback HTTP 网关读取，逐跳校验且最多三次跳转。网易云只允许 HTTPS `.music.126.net`，酷狗只允许已核实/公开实测的 `fs-open`、`fsandroid`、`fsmobile` 媒体主机；网关按平台隔离，拒绝跨平台跳转。DNS 拒绝环回/普通私网/链路本地，兼容 198.18.0.0/15 Fake-IP 代理；TLS 按原始官方 CDN 名称验证且从未关闭证书校验。只转发音频 Accept/单 Range，不转发 Cookie、Authorization，也不回传上游 Set-Cookie。页面不接触媒体 URL。产品无静音降级开关，null 输出仅由测试显式构造。
 
 StreamResolution 仍为后台专用，包含敏感临时地址，不能加入页面 IPC；通用结构校验不替代每个平台的传输策略。网易云与酷狗仅接受无 Cookie 头的资源，并在开始播放时检查声明的有效期；酷狗非完整权限必须由平台给出试听边界。实际链接过期恢复仍需独立验证。错误只返回本地固定分类、文案和重试标记，不透传平台返回、异常 message、stack 或 cause。
 

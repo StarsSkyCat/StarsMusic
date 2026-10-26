@@ -58,6 +58,7 @@ test('每次重定向重新校验目标，过界跳转不请求，取消立即�
 test('酷狗 CDN 按平台隔离，连同跨平台重定向一起拒绝', async () => {
   const url = 'https://fsandroid.kugou.com/synthetic';
   assert.equal(allowedMediaUrl(url, 'kugou').hostname, 'fsandroid.kugou.com');
+  assert.equal(allowedMediaUrl('https://fs-open.kugou.com/synthetic', 'kugou').hostname, 'fs-open.kugou.com');
   assert.throws(() => allowedMediaUrl(url, 'netease'));
   assert.throws(() => allowedMediaUrl('https://m1.music.126.net/synthetic', 'kugou'));
   for (const host of ['www.kugou.com', 'login-user.kugou.com', 'fsandroid.kugou.com.evil.invalid']) {
