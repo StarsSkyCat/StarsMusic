@@ -171,7 +171,7 @@ export class MusicPlayer {
           if (this.#disposed || this.#state.generation !== generation) return;
           this.#previewSeconds = previewSeconds;
           const quality = { unknown: '音质未知', standard: '标准', high: '高音质', lossless: '无损', 'hi-res': 'Hi-Res' }[stream.quality.level];
-          track.detail = `${stream.access.kind === 'preview' ? '试听 · ' : ''}${quality}`;
+          track.detail = `${stream.access.kind === 'preview' ? '试听 · ' : '完整播放 · '}${quality}`;
           this.#update({ queue: this.#queue() });
         } else {
           try {

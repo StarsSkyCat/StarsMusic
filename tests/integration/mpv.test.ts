@@ -9,6 +9,7 @@ import { MusicPlayer } from '../../packages/playback/src/player.ts';
 import { MpvClient } from '../../packages/playback/src/mpv-client.ts';
 import { writeSilentWav } from '../helpers/audio.ts';
 import { MediaGateway, type FetchMedia } from '../../packages/playback/src/media-gateway.ts';
+import { parseKugouStream } from '../../packages/providers/src/kugou/service.ts';
 import type { StreamResolution } from '../../packages/contracts/src/music.ts';
 
 async function until(check: () => boolean | Promise<boolean>): Promise<void> {
@@ -144,10 +145,15 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
     const generation = player.snapshot().generation;
     await player.clearRemote('kugou'); assert.equal(player.snapshot().generation, generation);
     await player.clearRemote('netease'); assert.deepEqual(player.snapshot().queue, []);
-    const kugou: StreamResolution = { ...resource, track: { provider: 'kugou', id: 'synthetic' }, source: { kind: 'remote', url: 'https://fsandroid.kugou.com/synthetic', headers: {} } };
+    const kugou = parseKugouStream({ status: 1, hash: 'a'.repeat(32), url: ['https://fsandroid.kugou.com/synthetic'],
+      priv_status: 1, is_full_audio: 0, fileName: '合成酷狗曲目', timeLength: 10, free_part_start: 9000, free_part_end: 10000,
+    }, 'a'.repeat(32), { name: '合成酷狗曲目', durationMs: 10000 });
     await player.openRemote('kugou', '合成酷狗曲目', async () => kugou);
     await until(() => player.snapshot().status === 'playing');
     assert.ok(player.snapshot().queue[0]?.provider === 'kugou');
+    await until(() => player.snapshot().status === 'ended');
+    assert.ok(player.snapshot().durationSeconds <= 1);
+    assert.ok(player.snapshot().positionSeconds <= 1);
     const kugouGeneration = player.snapshot().generation;
     await player.clearRemote('netease'); assert.equal(player.snapshot().generation, kugouGeneration);
     await player.clearRemote('kugou');

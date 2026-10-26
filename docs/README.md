@@ -17,6 +17,7 @@
 | [网易云验证](validation/2026-10-26-netease.md) | 用户真实闭环结果、Fake-IP 修复及剩余矩阵 |
 | [酷狗接入](kugou.md) | App 扫码、设备注册、歌单、流解析和渠道隔离 |
 | [酷狗验证](validation/2026-10-26-kugou.md) | 匿名/合成检查结果与待完成的真实账号闭环 |
+| [酷狗资源与权限排查](validation/2026-10-26-kugou-resource-access.md) | 分页漏歌、曲目身份、试听范围与 A/B 匿名核对的限制 |
 | [凭据持久化](credentials.md) | 系统密钥保险库、记住登录、恢复、锁定与临时会话回退 |
 | [凭据持久化验证](validation/2026-10-26-credentials.md) | 保险库自动化结果与本机密钥后端限制 |
 | [音乐工作区验证](validation/2026-10-26-music-workspace.md) | 页面设计、多选下一首、会话队列与桌面布局检查 |

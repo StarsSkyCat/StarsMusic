@@ -13,6 +13,7 @@ const definitions = {
   'cancelled': ['操作已取消', false],
   'stale-operation': ['操作已过期', false],
   'verification-required': ['平台要求安全验证，请先在官方 App 中处理后重试', false],
+  'playback-access-unknown': ['平台未确认完整播放权限或有效试听范围，已停止播放', false],
   'track-mismatch': ['平台返回的音频与所选曲目不一致，已拒绝播放', false],
   'credential-unavailable': ['系统密钥服务不可用，本次登录不会保存', false],
   'credential-locked': ['已保存的登录无法解密，请重新登录或清除保存', false],

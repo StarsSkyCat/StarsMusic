@@ -75,10 +75,10 @@ test('完整资源无权限时回退到试听，文件名不匹配则拒绝', as
     transport.handlers.set('stream', async (data) => {
       calls += 1;
       if (data.freePart !== true) throw new DomainError('permission-denied');
-      return { ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '合成歌手 - 合成曲目.mp3' };
+      return { ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '合成歌手 - 合成曲目.mp3', free_part_start: 60000, free_part_end: 90000 };
     });
     const preview = await service.resolveTrack(hash, service.snapshot().generation);
-    assert.deepEqual(preview.access, { kind: 'preview', startMs: 0, durationMs: 254000 });
+    assert.deepEqual(preview.access, { kind: 'preview', startMs: 0, durationMs: 30000 });
     assert.equal(calls, 2); assert.equal(service.snapshot().error, undefined);
     transport.handlers.set('stream', async () => ({ ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '另一首歌.mp3' }));
     await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
@@ -195,13 +195,13 @@ test('流只接受明确权限、HTTPS 官方媒体主机，响应缺少试听�
   assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: 'c'.repeat(32) }, hash), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: hash }, hash).track.id, hash);
-  assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 30 }, hash, { name: '合成曲目', durationMs: 30000 }).track.id, hash);
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 30 }, hash, { name: '合成曲目', durationMs: 30000 }), (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch');
   assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 60 }, hash, { name: '合成曲目', durationMs: 30000 }), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.equal(parseKugouStream({ ...stream, hash: hash.toUpperCase() }, hash).track.id, hash);
-  const preview = parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '合成歌手 - 合成曲目.mp3' }, hash, { name: '合成曲目', durationMs: 207000 }, 'preview');
-  assert.deepEqual(preview.access, { kind: 'preview', startMs: 0, durationMs: 254000 });
-  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), fileName: '另一首歌.mp3' }, hash, { name: '合成曲目', durationMs: 207000 }, 'preview'), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
-  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash, { name: '合成曲目', durationMs: 207000 }, 'preview'), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+  const preview = parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 254, fileName: '合成歌手 - 合成曲目.mp3', free_part_start: 60000, free_part_end: 90000 }, hash, { name: '合成曲目', durationMs: 207000, artists: ['合成歌手'] }, 'preview');
+  assert.deepEqual(preview.access, { kind: 'preview', startMs: 0, durationMs: 30000 });
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), fileName: '另一首歌.mp3' }, hash, { name: '合成曲目', durationMs: 207000, artists: ['合成歌手'] }, 'preview'), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash, { name: '合成曲目', durationMs: 207000, artists: ['合成歌手'] }, 'preview'), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.throws(() => parseKugouStream({ ...stream, priv_status: 1 }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://www.kugou.com/private'] }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://fsandroid.kugou.com.evil.invalid/audio'] }, hash));
@@ -285,5 +285,72 @@ test('酷狗曲目按 300 条实际分页，第二页曲目的展示 ID 与取�
       return { ...stream, hash: hashOf(300) };
     });
     assert.equal((await service.resolveTrack(hashOf(300), service.snapshot().generation)).track.id, hashOf(300));
+  } finally { service.dispose(); }
+});
+
+
+test('酷狗会员/免费/试听权限以响应确认为准，不用资源时长制造无限试听', () => {
+  const expected = { name: '合成曲目', durationMs: 254000 };
+  const resource = { ...stream, timeLength: 254, fileName: '合成曲目' };
+  const accessUnknown = (e: unknown) => e instanceof DomainError && e.code === 'playback-access-unknown';
+  // 资源长 254 秒不意味着获得 254 秒试听权限。
+  assert.throws(() => parseKugouStream(resource, hash, expected, 'preview'), accessUnknown);
+  assert.throws(() => parseKugouStream({ ...resource, priv_status: 1 }, hash, expected), accessUnknown);
+  assert.throws(() => parseKugouStream({ ...resource, priv_status: undefined }, hash, expected), accessUnknown);
+  assert.throws(() => parseKugouStream({ ...resource, priv_status: 0, is_full_audio: false }, hash, expected), accessUnknown);
+  assert.throws(() => parseKugouStream({ ...resource, is_full_audio: false }, hash, expected, 'preview'), accessUnknown);
+  // 明确完整授权才可完整播放；从试听端点返回也如实投影，不冒充会员状态。
+  assert.equal(parseKugouStream({ ...resource, priv_status: 1, is_full_audio: true }, hash, expected).access.kind, 'full');
+  assert.equal(parseKugouStream({ ...resource, is_full_audio: '1' }, hash, expected, 'preview').access.kind, 'full');
+  assert.equal(parseKugouStream(resource, hash, expected).access.kind, 'full');
+  assert.equal(parseKugouStream({ ...resource, fileName: '合成歌手-合成曲目.mp3' }, hash, { ...expected, artists: ['合成歌手'] }).access.kind, 'full');
+  assert.equal(parseKugouStream({ ...resource, timeLength: 200 }, hash, expected).access.kind, 'full'); // 不用云歌单旧时长否定明确匹配的 hash。
+  assert.equal(parseKugouStream({ ...resource, free_part_start: 0, free_part_end: 30000 }, hash, expected).access.kind, 'preview');
+  const partial = { ...resource, priv_status: 0, is_full_audio: '0', free_part_start: '60000', free_part_end: '90000' };
+  assert.deepEqual(parseKugouStream(partial, hash, expected).access, { kind: 'preview', startMs: 0, durationMs: 30000 });
+  assert.throws(() => parseKugouStream({ ...partial, free_part_end: 60000 }, hash, expected), accessUnknown);
+});
+
+test('相邻 A/B、同歌手不同曲、相同时长和缺失 hash 不会互相冒充', async () => {
+  const expected = { name: '合成歌手 - 合成歌曲甲.mp3', durationMs: 30000 };
+  const wrong = { ...stream, timeLength: 30, fileName: '合成歌手 - 合成歌曲乙.mp3' };
+  const mismatch = (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch';
+  assert.throws(() => parseKugouStream(wrong, hash, expected), mismatch);
+  assert.throws(() => parseKugouStream({ ...wrong, hash: 'b'.repeat(32) }, hash, expected, 'preview'), mismatch);
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), fileName: '另一位歌手 - 合成曲目.mp3', free_part_start: 0, free_part_end: 30000 }, hash, { name: '合成曲目', durationMs: 30000, artists: ['合成歌手'] }, 'preview'), mismatch);
+  assert.throws(() => parseKugouStream({ ...stream, hash: undefined }, hash, expected), mismatch);
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), fileName: expected.name, timeLength: 30 }, hash, expected), mismatch);
+  assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: hash, fileName: expected.name, timeLength: 30 }, hash, expected).track.id, hash);
+  const transport = new FakeTransport(); const service = create(() => transport);
+  try {
+    await connect(service); await service.loadPlaylists(); await service.loadPlaylist('1', 0);
+    let calls = 0;
+    transport.handlers.set('stream', async () => { calls++; return { ...stream, fileName: '另一首曲目', timeLength: 30 }; });
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), mismatch);
+    assert.equal(calls, 1); // 身份冲突后不再借试听响应放宽校验。
+  } finally { service.dispose(); }
+});
+
+
+test('酷狗切歌清除上一首资源错误，旧取链晚到不能覆盖新曲目状态', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  const second = 'b'.repeat(32);
+  try {
+    await connect(service); await service.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 2, info: [{ hash, name: '合成 A' }, { hash: second, name: '合成 B' }] }));
+    await service.loadPlaylist('1', 0);
+    transport.handlers.set('stream', async () => ({ status: 3 }));
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation));
+    assert.equal(service.snapshot().error?.code, 'unavailable');
+    transport.handlers.set('stream', async data => ({ ...stream, hash: data.hash }));
+    await service.resolveTrack(second, service.snapshot().generation);
+    assert.equal(service.snapshot().error, undefined);
+    const old = deferred<unknown>();
+    transport.handlers.set('stream', async data => data.hash === hash ? old.promise : { ...stream, hash: data.hash });
+    const pending = service.resolveTrack(hash, service.snapshot().generation);
+    await service.resolveTrack(second, service.snapshot().generation);
+    old.resolve({ status: 3 });
+    await assert.rejects(pending);
+    assert.equal(service.snapshot().error, undefined);
   } finally { service.dispose(); }
 });
