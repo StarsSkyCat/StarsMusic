@@ -145,11 +145,11 @@ test('流只接受明确权限、HTTPS 官方媒体主机，响应缺少试听�
   assert.equal(parseKugouStream({ ...stream, priv_status: 1, is_full_audio: 1 }, hash).access.kind, 'full');
   assert.equal(parseKugouStream({ ...stream, priv_status: '1', is_full_audio: '1' }, hash).access.kind, 'full');
   assert.throws(() => parseKugouStream({ ...stream, priv_status: 1, is_full_audio: 0 }, hash));
-  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash));
-  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: 'c'.repeat(32) }, hash));
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: 'c'.repeat(32) }, hash), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: hash }, hash).track.id, hash);
   assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 30 }, hash, { durationMs: 30000 }).track.id, hash);
-  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 60 }, hash, { durationMs: 30000 }));
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 60 }, hash, { durationMs: 30000 }), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
   assert.equal(parseKugouStream({ ...stream, hash: hash.toUpperCase() }, hash).track.id, hash);
   assert.throws(() => parseKugouStream({ ...stream, priv_status: 1 }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://www.kugou.com/private'] }, hash));

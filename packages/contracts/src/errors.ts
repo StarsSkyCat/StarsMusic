@@ -13,6 +13,7 @@ const definitions = {
   'cancelled': ['操作已取消', false],
   'stale-operation': ['操作已过期', false],
   'verification-required': ['平台要求安全验证，请先在官方 App 中处理后重试', false],
+  'track-mismatch': ['平台返回的音频与所选曲目不一致，已拒绝播放', false],
   'unsupported': ['暂不支持此操作', false],
   'internal': ['操作失败，请稍后重试', false],
   'engine-unavailable': ['无法启动 mpv，请确认已安装并可运行', false],

@@ -12,7 +12,7 @@ P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，�
 | LoginState / parseLoginState | 未登录、等待扫码/网页授权、待确认、验证中、已连接、过期、取消、失败；等待态必须有 challengeId |
 | SessionStatus / parseSessionStatus | generation 为非负安全整数；仅 connected 携带 accountId，且必须 identityVerified=true、lastVerifiedAt 有效 |
 | StreamResolution / parseStreamResolution | 后台资源解析；本地 fileId 必须匹配本地曲目 ID；在线资源与在线曲目匹配，不返回任意本地路径 |
-| AppError / parseAppError | code 为白名单；message 与 retryable 由本地常量决定，不显示上游任意文本 |
+| AppError / parseAppError | code 为白名单；message 与 retryable 由本地常量决定，不显示上游任意文本；酷狗取链身份不一致使用 track-mismatch |
 
 解析入口接受 unknown，输出仅含明确字段并冻结对象；不原样转发未知字段。时间戳为 Unix 毫秒，试听 startMs/durationMs 为毫秒；码率为 kbps，采样率为 Hz。时间戳只作结构/范围校验，消费资源时仍必须检查是否已经过期。
 

@@ -112,7 +112,7 @@ export function parseKugouStream(value: unknown, id: string, expected?: { durati
   // 取链可能返回同曲目的另一编码/音质 hash；登记时长与返回时长一致时仍视为同一曲目。
   // 不用其他字段推断曲目身份；hash 与时长都无法对应时拒绝，避免播放错误音频。
   const identityConfirmed = hashMatches || !hasResponseHash || (durationMatches && expectedSeconds !== undefined && responseSeconds !== undefined);
-  if (!identityConfirmed) throw new DomainError('invalid-response');
+  if (!identityConfirmed) throw new DomainError('track-mismatch');
   let access: StreamResolution['access'] = { kind: 'full' };
   // 付费片段必须由平台明确给出边界；不能从“已登录”或 URL 非空推断完整权限。
   // 云歌单/取链接口可能把 priv_status、试听边界和码率作为十进制字符串返回。
