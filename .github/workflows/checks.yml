@@ -38,5 +38,9 @@ jobs:
         run: pnpm typecheck
       - name: Test IPC boundaries
         run: pnpm test
+      - name: Install system mpv for decoding checks
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mpv
+      - name: Test actual mpv with null audio output
+        run: pnpm test:playback
       - name: Build desktop application code
         run: pnpm build

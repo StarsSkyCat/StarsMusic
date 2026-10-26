@@ -6,6 +6,7 @@
 pnpm check
 pnpm typecheck
 pnpm test
+pnpm test:playback
 pnpm test:e2e
 ```
 
@@ -13,11 +14,13 @@ check 检查脚本语法、仓库必需文件、JSON 配置、Markdown 内联相
 
 typecheck 使用 tsc 与 vue-tsc 检查全部应用及测试源码。test 使用 Node 内置测试器，覆盖其他窗口/子帧/变更文档/额外参数被拒绝、开发地址限制和后台响应校验。
 
-领域契约测试覆盖字符串 ID、平台渠道错配、账号缓存键、登录状态一致性、流资源/试听/音质字段、危险 URL/请求头与安全错误归一化。会话测试使用手动控制完成顺序的 Promise，覆盖忽略取消的旧成功/失败、退出重登、渠道切换、平台隔离和同步 abort 重入；不依赖定时等待或真实网络。当前共 14 项单元测试，见 [公共契约验证记录](validation/2026-10-26-contracts-session.md)。
+领域契约测试覆盖字符串 ID、平台渠道错配、账号缓存键、登录状态一致性、流资源/试听/音质字段、危险 URL/请求头与安全错误归一化。会话测试覆盖忽略取消的旧成功/失败、退出重登、渠道切换、平台隔离和同步 abort 重入。当前共 16 项单元测试，新增播放 IPC 参数和快照路径过滤检查。
 
-test:e2e 先构建，再启动实际 Electron，检查白名单桥接、页面无 Node/IPC 权限、内存 session、弹窗与导航被阻断、960×640 最小窗口和 Linux 关闭退出。Playwright 显式启用 chromiumSandbox；Linux 通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs 标志。E2E 使用临时应用数据目录并在结束时清理，截图留在被 Git 忽略的 artifacts/。不需要另行下载 Playwright 浏览器，需要先执行 pnpm setup:electron 和可用的桌面会话。
+test:playback 有 3 项实际 mpv 集成场景，使用 null 音频输出与静音 WAV，检查私有 FD、关联请求、重复启动拒绝、头重置、解码、暂停、定位、音量保留、快速切歌、崩溃恢复、EOF、缺失/损坏文件、间接播放列表阻断、停止与退出清理。这证明控制和解码链路，不等同于扬声器出声或发行包兼容性。
 
-CI 执行文档检查、冻结锁文件安装、类型检查、单元测试和应用构建；暂不在 CI 宣称图形、安装包或真实桌面兼容性验证。当前尚无安装包构建、平台接口和音频测试。
+test:e2e 先构建，再启动实际 Electron，检查桥接/沙箱、弹窗与导航、960×640 布局以及本地选择/播放/暂停/定位。只替代原生选择器交互，使用实际 mpv 和默认系统音频输出，拒绝 null 输出；关闭应用后验证 mpv PID 已退出。需要 Linux、mpv、可用的图形和音频会话。Playwright 显式启用 chromiumSandbox；通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs。临时配置和合成文件会清理，截图留在 Git 忽略的 artifacts/；不需要下载 Playwright 浏览器。
+
+CI 执行文档检查、冻结锁文件安装、类型检查、单元测试、mpv null 输出集成测试和应用构建；暂不在 CI 宣称图形、安装包或系统音频兼容性验证。当前尚无安装包构建和平台接口测试。
 
 ## 实现后的测试分层
 

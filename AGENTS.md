@@ -3,7 +3,7 @@
 ## 项目与当前阶段
 
 - Linux 优先的跨平台音乐播放器，网易云、酷狗分别接入，Windows/macOS 后续实现。
-- 技术方向：Electron、Vue 3、TypeScript、mpv、SQLite。当前已有最小桌面基础、公共契约和会话 generation 守卫，真实登录和播放尚未实现或验证。
+- 技术方向：Electron、Vue 3、TypeScript、mpv、SQLite。当前已有桌面基础、公共契约、会话 generation 守卫与 mpv 本地播放，真实平台登录和在线播放尚未实现或验证。
 - 先读 README.md、docs/development.md 和 docs/roadmap.md；架构背景见 docs/design-and-architecture.md。
 - 使用标准文件名 AGENTS.md。不要创建 AGENDS.md 等重复规则文件。子目录规则只补充所在范围，避免复制根规则。
 
@@ -41,7 +41,7 @@
 
 ## 验证与交付
 
-- 当前可用命令：pnpm check、typecheck、test、build、dev、start、test:e2e；桌面启动前运行 pnpm setup:electron。无 pnpm 时仍可运行 node scripts/check.mjs 检查文档。
+- 当前可用命令：pnpm check、typecheck、test、test:playback、build、dev、start、test:e2e；桌面启动前运行 pnpm setup:electron，音频测试需 Linux 系统 mpv。无 pnpm 时仍可运行 node scripts/check.mjs 检查文档。
 - 新增脚本或命令时先使其可运行，再写入文档；不创建输出“成功”但不做验证的 test/build 脚本。
 - 文档修改运行文档检查；逻辑变更增加或运行能验证行为的检查，避免只重复实现的测试。
 - 登录真实测试由用户在官方授权流程中完成；不要求在聊天或配置文件中粘贴真实凭据。

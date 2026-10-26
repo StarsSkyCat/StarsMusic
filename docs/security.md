@@ -2,7 +2,7 @@
 
 本文约束当前桌面基础与后续实现；当前尚无账号、凭据存储或平台在线请求代码。
 
-当前业务窗口启用 sandbox、contextIsolation，关闭 Node 与 webview，使用内存 session，拒绝权限、下载、页面导航和新窗口。CSP 限制页面资源和连接来源；开发期仅额外允许本机 Vite WebSocket。preload 只暴露 getAppInfo，主进程验证指定窗口、主帧、精确文档 URL 与空参数，响应经过白名单字段校验。尚未接入官方授权窗口。
+当前业务窗口启用 sandbox、contextIsolation，关闭 Node 与 webview，使用内存 session，拒绝权限、下载、页面导航和新窗口。CSP 限制页面资源和连接来源；开发期仅额外允许本机 Vite WebSocket。preload 只暴露 getAppInfo 和具体 playback 方法，主进程验证指定窗口、主帧、精确文档 URL 与每条命令的参数，响应和事件经过运行时校验。尚未接入官方授权窗口。
 
 ## 凭据与账号
 
@@ -21,6 +21,8 @@ renderer 不能直接获得 Node、任意 IPC、文件系统、子进程或凭�
 授权窗口独立 session，无 Node 集成和业务 preload；跳转域名限制在经验证的授权链。URL、请求头和外部响应视为不可信输入，保留 TLS 校验。
 
 mpv 使用私有 IPC、明确的进程所有权与参数数组；请求头不能写入命令行，跨平台切换时清理，重定向不得泄露平台凭据。完整签名媒体 URL 不写入持久日志。
+
+当前只播放原生选择器登记的本地文件；renderer 只发送队列 ID，不能传入任意路径或 URL。mpv 用 shell=false 与继承 FD 3 启动，不开放 socket/端口；关闭 FD 使子进程退出，超时后发送 TERM/KILL。禁用配置、脚本、视频、旁加载和文件内间接引用，lavf 只允许 file 协议；损坏/伪装播放列表有实际测试。每次切歌先退出旧进程再启动新进程，清空头后 loadfile；该策略不支持无缝切换。未建立在线播放凭据与重定向安全闭环。
 
 StreamResolution 为后台专用契约，不能加入现有桌面信息 IPC。当前校验 HTTPS 结构、URL 内嵌身份、控制字符、冲突/注入请求头、资源类型和数值范围；不代表已校验实际 CDN 信任链。域名白名单、重定向、资源有效期与逐曲请求头清理，必须在后续真实 Provider/mpv 接入时验证。错误只返回本地固定分类、文案和重试标记，不透传平台返回、异常 message、stack 或 cause。
 

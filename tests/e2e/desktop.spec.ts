@@ -1,11 +1,14 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { writeSilentWav } from '../helpers/audio';
 
 test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出', async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-e2e-'));
+  const audioFile = path.join(profile, 'test-audio.wav');
+  await writeSilentWav(audioFile);
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
@@ -20,6 +23,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       throw error;
     });
   try {
+    let mpvPid: number | undefined;
     const page = await desktop.firstWindow();
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -39,7 +43,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'playback']);
       expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '0.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
     });
@@ -80,6 +84,37 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       expect(errors).toEqual([]);
     });
 
+    await test.step('选择本地文件、实际音频解码、暂停、定位、恢复与退出', async () => {
+      // 只替代原生选择器交互，仍使用实际 mpv 与系统音频输出，无播放成功 Mock。
+      await desktop.evaluate(({ dialog }, filename) => {
+        dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
+      }, audioFile);
+      await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
+      await expect(page.getByRole('heading', { name: '本地播放队列' })).toBeVisible();
+      await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
+      const desktopPid = desktop.process().pid!;
+      const children = (await readFile(`/proc/${desktopPid}/task/${desktopPid}/children`, 'utf8')).trim().split(/\s+/);
+      for (const pid of children) {
+        try { if ((await readlink(`/proc/${pid}/exe`)).endsWith('/mpv')) mpvPid = Number(pid); } catch { /* 已退出 */ }
+      }
+      expect(mpvPid).toBeDefined();
+      const output = await page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { playback: { getState(): Promise<{ audioOutput?: string }> } } }).starsMusic;
+        return (await api.playback.getState()).audioOutput;
+      });
+      expect(output).toBeTruthy();
+      expect(output).not.toBe('null');
+      console.log(`实际系统音频输出：${output}`);
+      await page.getByRole('button', { name: '暂停', exact: true }).click();
+      await expect(page.getByRole('button', { name: '播放', exact: true })).toBeEnabled();
+      await page.getByRole('slider', { name: '播放进度' }).fill('5');
+      await expect.poll(async () => Number(await page.getByRole('slider', { name: '播放进度' }).inputValue())).toBeGreaterThanOrEqual(4.9);
+      await page.getByRole('button', { name: '播放', exact: true }).click();
+      await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.screenshot({ path: 'artifacts/local-playback.png' });
+    });
+
     await test.step('拒绝主文档导航', async () => {
       const originalUrl = page.url();
       await page.evaluate(() => { window.location.href = 'https://example.invalid/'; });
@@ -93,6 +128,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
         const closed = desktop.waitForEvent('close');
         await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
         await closed;
+        expect(() => process.kill(mpvPid!, 0)).toThrow();
       }
     });
   } finally {

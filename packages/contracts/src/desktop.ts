@@ -1,3 +1,5 @@
+import type { PlaybackApi } from './playback.ts';
+
 export const desktopChannels = {
   getAppInfo: 'starsmusic:app:get-info',
 } as const;
@@ -14,6 +16,7 @@ export interface AppInfo {
 
 export interface DesktopApi {
   getAppInfo(): Promise<AppInfo>;
+  readonly playback: PlaybackApi;
 }
 
 export function parseAppInfo(value: unknown): AppInfo {

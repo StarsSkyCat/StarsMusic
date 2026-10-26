@@ -14,7 +14,11 @@ P0 桌面基础直接依赖如下，版本固定于 package.json，完整依赖�
 | @types/node | 24.19.2 | 与 Node 24 开发基线一致的类型 | MIT |
 | @playwright/test | 1.64.1 | 实际 Electron 启动、桥接与生命周期冒烟 | Apache-2.0 |
 
-只将 Vue 列为应用依赖，其余为开发依赖。mpv、SQLite、平台 API、Pinia、Router 和打包器未使用，因此未安装。
+只将 Vue 列为应用依赖，其余为开发依赖。SQLite、平台 API、Pinia、Router 和打包器未使用，因此未安装。本地播放使用系统 mpv 子进程，不新增 npm 依赖。
+
+## 系统音频依赖
+
+当前验证 /usr/bin/mpv 0.41.0，Arch 包版本 1:0.41.0-6，包元数据许可为 GPL-2.0-or-later AND LGPL-2.1-or-later；其 FFmpeg 运行时为 n9.0.2。开发阶段使用用户系统已安装的 mpv，不复制二进制到仓库、不自动安装系统包。正式分发时仍需追溯实际 mpv/FFmpeg 构建配置、组件许可和源码获取方式；系统包的许可元数据不替代发行审计。
 
 ## 安装行为
 

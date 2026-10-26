@@ -1,7 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { desktopChannels, type AppInfo } from '../../packages/contracts/src/desktop';
-import { assertTrustedInvoke, getDevelopmentUrl } from './ipc-policy';
+import { assertTrustedInvoke, assertTrustedSource, getDevelopmentUrl } from './ipc-policy';
+import { parsePlaybackArgument, playbackChannels } from '../../packages/contracts/src/playback';
+import { appError } from '../../packages/contracts/src/errors';
+import { audioExtensions, LocalPlayer } from '../../packages/playback/src/local-player';
 
 app.setName('StarsMusic');
 app.enableSandbox();
@@ -10,6 +13,9 @@ const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta
 const developmentUrl = app.isPackaged ? undefined : getDevelopmentUrl(process.env.ELECTRON_RENDERER_URL);
 const documentUrl = developmentUrl ?? pathToFileURL(rendererFile).href;
 let mainWindow: BrowserWindow | null = null;
+const player = new LocalPlayer();
+let selectionGeneration = 0;
+let quitting = false;
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -64,6 +70,41 @@ void app.whenReady().then(() => {
       chromium: process.versions.chrome, node: process.versions.node,
     };
   });
+  player.subscribe((snapshot) => {
+    const contents = mainWindow?.webContents;
+    if (contents && !contents.isDestroyed()) contents.send(playbackChannels.stateChanged, snapshot);
+  });
+  for (const channel of Object.values(playbackChannels)) {
+    if (channel === playbackChannels.stateChanged) continue;
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      const window = mainWindow;
+      const contents = window?.webContents;
+      assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
+      const argument = parsePlaybackArgument(channel, args);
+      if (quitting) return player.snapshot();
+      if (channel === playbackChannels.openFiles) {
+        const generation = ++selectionGeneration;
+        try {
+          const result = await dialog.showOpenDialog(window!, {
+            title: '选择本地音频', properties: ['openFile', 'multiSelections'],
+            filters: [{ name: '音频文件', extensions: audioExtensions }],
+          });
+          if (quitting || generation !== selectionGeneration || mainWindow !== window || result.canceled) return player.snapshot();
+          return player.openFiles(result.filePaths);
+        } catch {
+          if (quitting || generation !== selectionGeneration || mainWindow !== window) return player.snapshot();
+          return player.reportError(appError('file-unavailable'));
+        }
+      }
+      if (channel === playbackChannels.playTrack) { selectionGeneration++; return player.playTrack(argument as string); }
+      if (channel === playbackChannels.pause) return player.pause();
+      if (channel === playbackChannels.resume) return player.resume();
+      if (channel === playbackChannels.stop) { selectionGeneration++; return player.stop(); }
+      if (channel === playbackChannels.seek) return player.seek(argument as number);
+      if (channel === playbackChannels.setVolume) return player.setVolume(argument as number);
+      return player.snapshot();
+    });
+  }
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }).catch(() => {
@@ -73,4 +114,14 @@ void app.whenReady().then(() => {
 
 // 当前没有托盘与后台播放，关闭窗口直接退出，避免留下不可恢复的后台进程。
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('will-quit', () => ipcMain.removeHandler(desktopChannels.getAppInfo));
+app.on('before-quit', (event) => {
+  if (quitting) return;
+  event.preventDefault();
+  quitting = true;
+  selectionGeneration++;
+  void player.dispose().finally(() => app.quit());
+});
+app.on('will-quit', () => {
+  ipcMain.removeHandler(desktopChannels.getAppInfo);
+  for (const channel of Object.values(playbackChannels)) ipcMain.removeHandler(channel);
+});

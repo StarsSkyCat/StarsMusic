@@ -2,9 +2,9 @@
 
 ## 当前能运行什么
 
-已实现 Electron + Vue 3 + TypeScript 最小窗口：空音乐库、功能待接入提示、实际桌面信息读取与重试。preload 仅暴露 getAppInfo；登录、音乐导入、mpv、SQLite 和系统集成尚未实现。
+已实现 Electron + Vue 3 + TypeScript 窗口、运行信息读取、选择本地音频、临时队列与 mpv 播放控制。preload 暴露 getAppInfo 和具体 playback 白名单方法；在线登录、目录扫描、SQLite、MPRIS 和安装包尚未实现。
 
-P0 第二步已实现领域契约、运行时校验、错误分类和后台会话 generation 守卫，具体使用与限制见 [公共契约](contracts.md)。这些基础代码尚未连接真实 Provider，页面与 IPC 白名单保持现状。
+P0 第二步的领域契约和会话 generation 守卫见 [公共契约](contracts.md)，第三步本地播放见 [播放说明](playback.md)。尚未连接真实在线 Provider。
 
 架构背景见 [设计方案](design-and-architecture.md)，任务顺序见 [路线图](roadmap.md)。
 
@@ -13,7 +13,7 @@ P0 第二步已实现领域契约、运行时校验、错误分类和后台会�
 - Linux x86_64 / glibc 为首要开发目标，其他平台后续验证。
 - Node.js 24.x；.node-version 记录初始化时实际使用的 24.22.1。
 - pnpm 10.34.9，以根 package.json 的 packageManager 为准。
-- Git。mpv 留待音频 P0 使用，当前文档检查不依赖它。
+- Git；音频播放需要 Linux 和系统 mpv，本机实际验证 0.41.0。开发时使用系统包管理器提供的版本，不通过应用自动安装系统软件。文档、类型检查、单元测试及构建不依赖 mpv。
 
 已安装 pnpm 时，在仓库根目录执行：
 
@@ -29,6 +29,7 @@ pnpm dev
 pnpm check
 pnpm typecheck
 pnpm test
+pnpm test:playback
 pnpm build
 pnpm start
 pnpm test:e2e
@@ -38,8 +39,9 @@ pnpm test:e2e
 - dev 启动 Vite 与桌面窗口；开发服务只绑定 127.0.0.1:5173，端口占用时失败，不自动换端口。退出用窗口关闭或终端 Ctrl+C。
 - typecheck 分别检查主进程/preload/测试与 Vue 页面，均为严格模式。
 - test 使用 Node 内置测试器验证 IPC、领域契约和会话竞态；不依赖图形会话。
+- test:playback 使用实际 mpv 与现场生成的静音 WAV，显式指定 null 音频输出，验证解码/控制、切歌、错误与进程清理；需要 Linux 与 mpv，缺失时失败，不跳过伪装通过。
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。
-- start 运行上次构建产物；test:e2e 先构建，再用 Playwright 启动 Electron，检查实际 IPC、安全边界和退出，需图形会话。
+- start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、本地选择、默认系统音频输出和退出，需 Linux、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。
 
 当前 Linux 关闭窗口即退出；尚未实现托盘和后台播放。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前深色页面是 P0 验证界面，系统主题跟随留待后续实现。
 
@@ -88,7 +90,7 @@ corepack pnpm dev
 | scripts | 可直接执行的仓库工具 |
 | docs | 设计、开发、决策及验证记录 |
 
-main、preload、renderer、packages/contracts/src 和 packages/providers/src/session-generation.ts 已有实现，由根包统一检查；构建只打包应用入口实际引用的代码。公共模型与会话守卫通过单元测试验证，具体平台适配、播放、存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
+main、preload、renderer、公共契约、会话守卫和 packages/playback/src 本地播放器已有实现，由根包统一检查；构建只打包应用入口实际引用的代码。在线平台适配、存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
 
 公共 contracts 不导入 Electron/Vue/Provider SDK；renderer 只能使用 preload API。平台请求在 Provider 后台处理。重型扫描和数据库工作与窗口主进程分离。
 

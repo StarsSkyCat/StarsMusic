@@ -2,7 +2,7 @@
 
 Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、酷狗音乐与本地音乐。
 
-当前处于 P0 基础阶段：已有 Electron + Vue 3 + TypeScript 最小桌面窗口、安全 preload、应用信息 IPC，以及公共契约和会话 generation 守卫。登录、音乐导入、播放和安装包尚未实现。
+当前处于 P0 基础阶段：已有安全桌面窗口、公共契约和会话 generation 守卫，支持选择本地音频、临时队列、mpv 播放/暂停/定位/音量与切歌。在线登录、目录扫描、持久音乐库和安装包尚未实现。
 
 - [产品设计与技术选型](docs/design-and-architecture.md)
 - [开发文档索引](docs/README.md)
@@ -16,7 +16,7 @@ Windows、macOS 保留架构接口，安排在 Linux 版本稳定后实现。
 
 ## 启动与检查
 
-需要 Node.js 24.x、pnpm 10.34.9：
+需要 Node.js 24.x、pnpm 10.34.9；本地播放需要 Linux 与 PATH 中可运行的系统 mpv（本机验证 0.41.0）：
 
 ```bash
 pnpm install --frozen-lockfile
@@ -30,6 +30,7 @@ pnpm dev
 pnpm check
 pnpm typecheck
 pnpm test
+pnpm test:playback
 pnpm build
 pnpm start
 pnpm test:e2e
@@ -46,3 +47,5 @@ setup:electron 首次下载固定版本的 Electron 运行时，需要网络；d
 - docs/：设计、开发、验证与决策记录。
 
 项目许可证尚未确定，发布前补充 LICENSE 与完整的第三方许可清单；当前直接依赖见 [依赖记录](docs/dependencies.md)。
+
+本地播放的边界与实际验证范围见 [播放说明](docs/playback.md) 和 [P0 记录](docs/validation/2026-10-26-local-playback.md)。

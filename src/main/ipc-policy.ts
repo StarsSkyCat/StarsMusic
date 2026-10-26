@@ -3,17 +3,23 @@ export interface InvokeSource {
   senderFrame: { url: string } | null;
 }
 
-export function assertTrustedInvoke(
+export function assertTrustedSource(
   source: InvokeSource,
   expectedSender: unknown,
   mainFrame: unknown,
   documentUrl: string,
-  args: readonly unknown[],
 ): void {
   if (!expectedSender || !mainFrame || source.sender !== expectedSender
     || source.senderFrame !== mainFrame || source.senderFrame?.url !== documentUrl) {
     throw new Error('不允许的 IPC 来源');
   }
+}
+
+export function assertTrustedInvoke(
+  source: InvokeSource, expectedSender: unknown, mainFrame: unknown,
+  documentUrl: string, args: readonly unknown[],
+): void {
+  assertTrustedSource(source, expectedSender, mainFrame, documentUrl);
   if (args.length !== 0) throw new Error('此命令不接受参数');
 }
 
