@@ -86,12 +86,39 @@ function namesMatch(expected: string, fileName: string, artists: readonly string
   const left = normalizeName(stripKnownArtist(expected)); const right = normalizeName(stripKnownArtist(fileName));
   if (!left || !right) return false;
   if (left === right) return true;
-  if (artistNames.size > 0) return false;
   // 云歌单和取链接口可能分别返回「歌手 - 歌名」或单独歌名。
-  const leftParts = expected.split(/\s+-\s+/); const rightParts = fileName.split(/\s+-\s+/);
-  if (leftParts.length > 1 && rightParts.length > 1 && normalizeName(leftParts.slice(0, -1).join(' - ')) !== normalizeName(rightParts.slice(0, -1).join(' - '))) return false;
-  const title = (value: string) => normalizeName(value.split(/\s+-\s+/).at(-1) ?? value);
+  const title = (value: string) => normalizeName(stripKnownArtist(value).replace(/^.*?\s+[-–—]\s+/, ''));
   return title(expected) === title(fileName);
+}
+export interface KugouResourceIdentity {
+  readonly hash: string;
+  readonly hashes: readonly string[];
+  readonly name: string;
+}
+export function parseKugouResourceIdentity(value: unknown, hash: string): KugouResourceIdentity {
+  if (!/^[a-f0-9]{32}$/.test(hash)) throw new DomainError('invalid-input');
+  const raw = success(value);
+  if (!Array.isArray(raw.data)) throw new DomainError('invalid-response');
+  const matches = raw.data.filter((value: unknown) => {
+    const row = record(value, 'kugou.resource');
+    return typeof row.hash === 'string' && row.hash.toLowerCase() === hash;
+  });
+  // 不按数组位置配对，也不接受另一条资源的编码列表。
+  if (matches.length !== 1) throw new DomainError('track-mismatch');
+  const item = record(matches[0], 'kugou.resource');
+  const name = text(item.name, 'kugou.resource.name');
+  const hashes = new Set([hash]);
+  const add = (value: unknown): void => {
+    if (typeof value === 'string' && /^[a-f0-9]{32}$/i.test(value)) hashes.add(value.toLowerCase());
+  };
+  if (Array.isArray(item.relate_goods)) {
+    for (const value of item.relate_goods) add(record(value, 'kugou.resource.encoding').hash);
+  }
+  if (item.trans_param !== undefined) {
+    const variants = record(item.trans_param, 'kugou.resource.variants');
+    add(variants.ogg_128_hash); add(variants.ogg_320_hash);
+  }
+  return Object.freeze({ hash, name, hashes: Object.freeze([...hashes]) });
 }
 function decodedFileName(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -110,7 +137,7 @@ function previewAccess(raw: Record<string, unknown>): StreamResolution['access']
   if (start === undefined || end === undefined || end <= start) throw new DomainError('playback-access-unknown');
   return { kind: 'preview', startMs: 0, durationMs: end - start };
 }
-export function parseKugouStream(value: unknown, id: string, expected?: { name: string; durationMs: number; artists?: readonly string[] }, mode: 'full' | 'preview' = 'full'): StreamResolution {
+export function parseKugouStream(value: unknown, id: string, expected?: { name: string; durationMs: number; artists?: readonly string[] }, mode: 'full' | 'preview' = 'full', identity?: KugouResourceIdentity): StreamResolution {
   let raw: Record<string, unknown>;
   try { raw = success(value); } catch (error: unknown) {
     const body = typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -134,7 +161,10 @@ export function parseKugouStream(value: unknown, id: string, expected?: { name: 
   const nameMatch = expected !== undefined && fileName ? namesMatch(expected.name, fileName, expected.artists) : undefined;
   const responseHash = typeof raw.hash === 'string' ? raw.hash.toLowerCase() : '';
   const standardHash = typeof raw.std_hash === 'string' ? raw.std_hash.toLowerCase() : '';
-  const hashMatches = responseHash === id || standardHash === id;
+  if (identity && identity.hash !== id) throw new DomainError('track-mismatch');
+  if (identity && expected && !namesMatch(expected.name, identity.name, expected.artists)) throw new DomainError('track-mismatch');
+  const verifiedHashes = identity?.hashes ?? [];
+  const hashMatches = responseHash === id || standardHash === id || verifiedHashes.includes(responseHash) || verifiedHashes.includes(standardHash);
   const responseTimeLength = optionalInteger(raw.timeLength, 'kugou.timeLength');
   const responseSeconds = responseTimeLength === undefined ? undefined : responseTimeLength > 10000 ? responseTimeLength / 1000 : responseTimeLength;
   const expectedSeconds = expected !== undefined && expected.durationMs > 0 ? expected.durationMs / 1000 : undefined;
@@ -147,7 +177,7 @@ export function parseKugouStream(value: unknown, id: string, expected?: { name: 
   debugKugou(`media host accepted mode=${mode} host=${url.hostname} request=${id.slice(0, 6)} response=${responseHash ? responseHash.slice(0, 6) : 'none'} std=${standardHash ? standardHash.slice(0, 6) : 'none'} match=${hashMatches} expected=${expectedSeconds === undefined ? 'none' : Math.round(expectedSeconds)} responseTime=${responseSeconds === undefined ? 'none' : Math.round(responseSeconds)} durationMatch=${durationMatches} nameMatch=${nameMatch === undefined ? 'unknown' : nameMatch} fileName=${fileName ? 'set' : 'none'} priv=${String(raw.priv_status)} full=${String(raw.is_full_audio)} freeStart=${typeof raw.free_part_start} freeEnd=${typeof raw.free_part_end} ext=${typeof raw.extName} bitRate=${typeof raw.bitRate}`);
   // 明确冲突的文件名在 hash 相同的情况下也不能放行；时长接近更不能替代身份。
   if (nameMatch === false) throw new DomainError('track-mismatch');
-  // 完整资源必须回显请求 hash/std_hash；试听转码只允许完整名称匹配且时长范围已确认。
+  // 完整资源须匹配原 hash 或后台核验的同曲编码；试听另 hash 仍要求名称、歌手和有效范围。
   if (mode === 'full' && !hashMatches) throw new DomainError('track-mismatch');
   if (mode === 'preview' && !hashMatches) {
     const parts = fileName.split(/\s+-\s+/);
@@ -436,18 +466,28 @@ export class KugouService {
     this.#update({ error: undefined });
     // 只按 hash 取链；歌单里的 album_id/album_audio_id 可能与 hash 错配，导致平台返回别的歌曲。
     const request = (freePart: boolean) => transport.call('stream', { hash: item.hash, freePart }, lease.signal);
+    let identity: KugouResourceIdentity | undefined;
+    const parse = async (value: unknown, mode: 'full' | 'preview'): Promise<StreamResolution> => {
+      try { return parseKugouStream(value, id, item.track, mode); }
+      catch (error: unknown) {
+        if (!(error instanceof DomainError) || error.code !== 'track-mismatch') throw error;
+        identity ??= parseKugouResourceIdentity(await transport.call('resource', { hash: item.hash }, lease.signal), item.hash);
+        if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
+        return parseKugouStream(value, id, item.track, mode, identity);
+      }
+    };
     try {
       try {
         const value = await request(false);
         if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
-        return parseKugouStream(value, id, item.track);
+        return await parse(value, 'full');
       } catch (error: unknown) {
         // 完整资源不可用或权限未确认时只回退一次；身份不一致不再走更宽松的试听判断。
         if (!canFallbackPreview(error) || !this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw error;
       }
       const preview = await request(true);
       if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
-      return parseKugouStream(preview, id, item.track, 'preview');
+      return await parse(preview, 'preview');
     } catch (error: unknown) { if (resolution === this.#resolution) this.#operationError(lease, error); throw error; }
   }
 }

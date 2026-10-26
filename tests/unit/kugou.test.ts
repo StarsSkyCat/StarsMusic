@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { initialKugouSnapshot, kugouChannels, parseKugouArguments, parseKugouSnapshot } from '../../packages/contracts/src/kugou.ts';
-import { KugouService, parseKugouStream } from '../../packages/providers/src/kugou/service.ts';
+import { KugouService, parseKugouStream, parseKugouResourceIdentity } from '../../packages/providers/src/kugou/service.ts';
 import { DirectKugouTransport, type KugouEndpoint, type KugouTransport, type KugouTransportSession } from '../../packages/providers/src/kugou/transport.ts';
 import { DomainError } from '../../packages/contracts/src/errors.ts';
 import type { KugouCredentialBundle } from '../../packages/contracts/src/credentials.ts';
@@ -32,6 +32,7 @@ class FakeTransport implements KugouTransport {
     if (endpoint === 'qrPoll') return ok({ status: this.pollStatus, userid: this.account, token: 'synthetic-private-marker' });
     if (endpoint === 'account') return ok({ userid: this.profileAccount, nickname: '合成账号' });
     if (endpoint === 'playlists') return ok({ info: [{ listid: 1, name: '合成歌单', count: 1 }] });
+    if (endpoint === 'resource') return ok([{ hash: data.hash, name: '合成歌手 - 合成曲目', relate_goods: [{ hash: data.hash, quality: '128' }] }]);
     if (endpoint === 'playlist') return ok({ count: 1, info: [{ hash, name: '合成曲目', singerinfo: [{ name: '合成歌手' }], duration: 30, audio_id: 2, album_audio_id: 0 }] });
     return stream;
   }
@@ -257,6 +258,20 @@ test('真实 transport 固定 App 1005 渠道、拒绝重定向与安全验证�
       return new Response(JSON.stringify(ok({ info: [] })));
     };
     await transport.call('playlist', { id: '1', type: 0, page: 2 }, new AbortController().signal);
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const body = JSON.parse(String(init?.body));
+      assert.equal(url.pathname, '/v2/get_res_privilege/lite');
+      assert.equal(url.searchParams.get('token'), 'synthetic-private-marker');
+      assert.equal(url.searchParams.get('appid'), '1005');
+      assert.equal((init?.headers as Record<string, string>)['x-router'], 'media.store.kugou.com');
+      assert.deepEqual(body.resource, [{ type: 'audio', page_id: 0, hash: 'a'.repeat(32), album_id: 0 }]);
+      assert.deepEqual(body.qualities, ['128', '320', 'flac', 'high']);
+      assert.equal(JSON.stringify(body).includes('album_audio_id'), false);
+      return new Response(JSON.stringify(ok([])));
+    };
+    await transport.call('resource', { hash: 'A'.repeat(32) }, new AbortController().signal);
+    await assert.rejects(transport.call('resource', { hash: 'https://arbitrary.invalid' }, new AbortController().signal));
   } finally { transport.clear(); globalThis.fetch = original; }
 });
 
@@ -351,6 +366,73 @@ test('酷狗切歌清除上一首资源错误，旧取链晚到不能覆盖新�
     await service.resolveTrack(second, service.snapshot().generation);
     old.resolve({ status: 3 });
     await assert.rejects(pending);
+    assert.equal(service.snapshot().error, undefined);
+  } finally { service.dispose(); }
+});
+
+
+test('酷狗编码关系按原始 hash 配对，不接受相邻资源、位置回退或其他歌曲', () => {
+  const other = 'b'.repeat(32); const encoded = 'c'.repeat(32); const ogg = 'd'.repeat(32);
+  const identity = parseKugouResourceIdentity(ok([
+    { hash: other, name: '其他曲目', relate_goods: [{ hash: other }] },
+    { hash: hash.toUpperCase(), name: '合成歌手 - 合成曲目', relate_goods: [{ hash: encoded, quality: '128' }], trans_param: { ogg_128_hash: ogg, unrelated_hash: other } },
+  ]), hash);
+  assert.deepEqual(identity.hashes, [hash, encoded, ogg]);
+  assert.throws(() => parseKugouResourceIdentity(ok([{ hash: other, name: '合成曲目' }]), hash));
+  assert.throws(() => parseKugouResourceIdentity(ok([{ hash, name: '一' }, { hash, name: '二' }]), hash));
+  const response = { ...stream, hash: encoded, std_hash: encoded, fileName: '合成曲目' };
+  const expected = { name: '合成歌手 - 合成曲目.mp3', durationMs: 30000, artists: ['合成歌手'] };
+  assert.equal(parseKugouStream(response, hash, expected, 'full', identity).access.kind, 'full');
+  assert.throws(() => parseKugouStream({ ...response, hash: other, std_hash: other }, hash, expected, 'full', identity));
+  assert.throws(() => parseKugouStream(response, hash, { ...expected, name: '另一首曲目' }, 'full', identity));
+  assert.throws(() => parseKugouStream({ ...response, priv_status: 1 }, hash, expected, 'preview', identity), (e: unknown) => e instanceof DomainError && e.code === 'playback-access-unknown');
+});
+
+test('云歌单保存高码率 hash 时，使用同账号的资源关系确认标准编码，不按名称或时长猜测', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  const savedHash = 'b'.repeat(32); const calls: string[] = [];
+  try {
+    await connect(service); await service.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 1, info: [{ hash: savedHash, name: '合成歌手 - 合成曲目.mp3', singerinfo: [{ name: '合成歌手' }], duration: 30 }] }));
+    await service.loadPlaylist('1', 0);
+    transport.handlers.set('stream', async data => {
+      assert.equal(data.hash, savedHash); calls.push('stream');
+      return { ...stream, fileName: '合成曲目' };
+    });
+    transport.handlers.set('resource', async data => {
+      assert.equal(data.hash, savedHash); assert.equal(transport.authenticated, true); calls.push('resource');
+      return ok([{ hash: savedHash, name: '合成歌手 - 合成曲目', relate_goods: [{ hash, quality: '128' }] }]);
+    });
+    const resolution = await service.resolveTrack(savedHash, service.snapshot().generation);
+    assert.equal(resolution.track.id, savedHash); assert.equal(resolution.access.kind, 'full');
+    assert.deepEqual(calls, ['stream', 'resource']);
+    assert.equal(service.snapshot().error, undefined);
+    transport.handlers.set('resource', async () => ok([{ hash: 'c'.repeat(32), name: '合成歌手 - 合成曲目', relate_goods: [{ hash }] }]));
+    await assert.rejects(service.resolveTrack(savedHash, service.snapshot().generation), (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch');
+  } finally { service.dispose(); }
+});
+
+test('歌曲文件名的歌手别名差异不否定已确认 hash，但仍拒绝不同曲名', () => {
+  const expected = { name: '合成艺名 - 合成曲目.mp3', durationMs: 30000, artists: ['合成艺名（合成本名）'] };
+  assert.equal(parseKugouStream({ ...stream, fileName: '合成曲目' }, hash, expected).access.kind, 'full');
+  assert.throws(() => parseKugouStream({ ...stream, fileName: '另一首曲目' }, hash, expected));
+});
+
+
+test('编码关系查询晚到时仍丢弃旧曲目，不覆盖新的播放结果', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  const second = 'b'.repeat(32); const encoded = 'c'.repeat(32); const metadata = deferred<unknown>();
+  try {
+    await connect(service); await service.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 2, info: [{ hash, name: '合成 A' }, { hash: second, name: '合成 B' }] }));
+    await service.loadPlaylist('1', 0);
+    transport.handlers.set('stream', async data => ({ ...stream, hash: data.hash === hash ? encoded : second }));
+    transport.handlers.set('resource', async () => metadata.promise);
+    const pending = service.resolveTrack(hash, service.snapshot().generation);
+    await new Promise<void>(done => setImmediate(done));
+    await service.resolveTrack(second, service.snapshot().generation);
+    metadata.resolve(ok([{ hash, name: '合成 A', relate_goods: [{ hash: encoded }] }]));
+    await assert.rejects(pending, (e: unknown) => e instanceof DomainError && e.code === 'stale-operation');
     assert.equal(service.snapshot().error, undefined);
   } finally { service.dispose(); }
 });

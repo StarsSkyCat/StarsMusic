@@ -6,7 +6,7 @@ import { parseApiJson } from '../api-json.ts';
 import { accountProof, md5, registerProof, signature } from './crypto.ts';
 
 export const kugouProtocolBaseline = 'kugoumusicapi@1.6.2/62730f900dc9fdc51396a663b3d33a6c4c704046';
-export type KugouEndpoint = 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'register';
+export type KugouEndpoint = 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register';
 export interface KugouTransportSession {
   readonly userid: string;
   readonly token: string;
@@ -27,6 +27,7 @@ const endpoints: Record<KugouEndpoint, readonly [string, string | undefined]> = 
   playlists: ['https://gateway.kugou.com/v7/get_all_list', 'cloudlist.service.kugou.com'],
   playlist: ['https://gateway.kugou.com/v4/get_list_all_file_v3', 'cloudlist.service.kugou.com'],
   stream: ['https://gateway.kugou.com/v5/url', 'trackercdn.kugou.com'],
+  resource: ['https://gateway.kugou.com/v2/get_res_privilege/lite', 'media.store.kugou.com'],
   register: ['https://userservice.kugou.com/risk/v3/r_register_dev', undefined],
 };
 
@@ -71,6 +72,14 @@ export class DirectKugouTransport implements KugouTransport {
       params.plat = '1'; body = JSON.stringify({ userid: this.#userid, token: this.#token, total_ver: 979, type: 2, page: data.page, pagesize: 50 });
     } else if (endpoint === 'playlist') {
       body = JSON.stringify({ listid: data.id, userid: this.#userid, type: data.type, page: data.page, pagesize: kugouTrackPageSize, area_code: 1, allplatform: 1, show_cover: 1, token: this.#token });
+    } else if (endpoint === 'resource') {
+      const hash = text(data.hash, 'kugou.hash').toLowerCase();
+      if (!/^[a-f0-9]{32}$/.test(hash)) throw new DomainError('invalid-input');
+      body = JSON.stringify({ appid: 1005, area_code: 1, behavior: 'play', clientver: 20489,
+        need_hash_offset: 1, relate: 1, support_verify: 1,
+        resource: [{ type: 'audio', page_id: 0, hash, album_id: 0 }],
+        qualities: ['128', '320', 'flac', 'high'],
+      });
     } else if (endpoint === 'stream') {
       // 歌单/搜索数据里的 album_id/album_audio_id 可能与主 hash 错配，带上会被平台带到其他文件。
       // 固定 0，让平台只按 hash 解析；IsFreePart 默认 0，避免返回另一条试听音频。

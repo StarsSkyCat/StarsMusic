@@ -19,6 +19,7 @@
 | `gateway.kugou.com/v7/get_all_list` | 私人歌单分页 |
 | `gateway.kugou.com/v4/get_list_all_file_v3` | 歌单曲目分页 |
 | `gateway.kugou.com/v5/url` | 按已登记曲目解析播放资源 |
+| `gateway.kugou.com/v2/get_res_privilege/lite` | 只在身份冲突时核对原 hash 与同曲不同编码的关系 |
 
 实际媒体主机只允许 `fs-open.kugou.com`、`fsandroid.kugou.com`、`fsandroid.tx.kugou.com`、`fsmobile.kugou.com`、`fsmobile.tx.kugou.com`；不是放行整个 `kugou.com`。`fs-open` 来自公开客户端实测记录，仍需本次真实取链确认；新增渠道或 CDN 必须补充实测证据。
 
@@ -49,13 +50,13 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 
 选择曲目后通过 `v5/url` 请求 128kbps 资源，只按主 hash 解析（`album_id`/`album_audio_id` 固定 0）。这是为了避免歌单侧 ID 与 hash 错配时，平台按错误 ID 返回另一首歌。只接受 HTTPS 的已核实媒体主机；历史 HTTP 链接只尝试同主机 HTTPS，不向 HTTP 降级。展示平台实际返回的 `extName`/`bitRate`，无法确认时保持 unknown。
 
-完整请求默认 `IsFreePart=0`，始终携带当前标准版 App 会话，不混用概念版或网页会话。完整资源要求返回 `hash` 或 `std_hash` 对应登记 hash；即便 hash 一致，文件名明确冲突也拒绝。时长接近、同一歌手、部分词语相似不再被用作身份依据；已匹配 hash 时也不以云歌单旧时长单独否决。同曲另一编码需有 `std_hash` 对应，不能靠听感或时长猜测。
+完整请求默认 `IsFreePart=0`，始终携带当前标准版 App 会话，不混用概念版或网页会话。完整资源要求返回 `hash` 或 `std_hash` 对应登记 hash；即便 hash 一致，完整曲名明确冲突也拒绝。歌单文件名前缀与歌手艺名/本名的格式差异不再单独否决已确认 hash。时长接近、同一歌手、部分词语相似不再被用作身份依据；已匹配 hash 时也不以云歌单旧时长单独否决。同曲另一编码除 `std_hash` 外，也可由同一 App 会话查询资源详情确认：按原 hash 精确找到唯一资源，只接受该资源 `relate_goods[].hash` 和明确的 Ogg 编码字段；同时核对完整曲名，不按返回数组位置、同名搜索或时长猜测。只在初次身份校验失败时补查一次，不缓存跨账号关系；迟到结果按会话与解析序号丢弃。
 
 `is_full_audio` 明确为 1/true 时按完整资源处理，非 0 的 `priv_status` 不能覆盖这一明确结果。明确为 0/false、存在正试听边界或 `priv_status` 非 0 时要求有效的 `free_part_start` / `free_part_end`；资源总时长 `timeLength` 不是试听授权，不能用它或默认 30 秒补出试听权限。普通完整请求的 `priv_status=0` 且无试听限制可正常播放；缺少明确权限信息时返回 `playback-access-unknown`。界面分别显示“完整播放”与“试听”，不据此宣称账号有会员。
 
 完整请求不可用、无权限或权限未确认时只回退一次 `IsFreePart=1`。该端点的非空 URL 不等于完整授权：需要有效试听边界；如果明确返回完整授权，仍须 hash 对应。试听文件转码成另一 hash 时，还要求完整曲名和歌手前缀都匹配。身份冲突不再触发更宽松的试听回退。mpv 只播放已确认的试听长度，缺失边界则停止并显示原因。
 
-`status=2/3`、`35104` 或没有播放地址只说明本次资源解析不可用，不能直接推断为会员不足、歌曲下架或全部渠道不可播。免费/会员、标准版/概念版、音质与具体版本的差异仍需真实登录态对照。最新排查见 [资源与权限验证](validation/2026-10-26-kugou-resource-access.md)。
+`status=2/3`、`35104` 或没有播放地址只说明本次资源解析不可用，不能直接推断为会员不足、歌曲下架或全部渠道不可播。免费/会员、标准版/概念版、音质与具体版本的差异仍需真实登录态对照。最新排查见 [资源与权限验证](validation/2026-10-26-kugou-resource-access.md) 和 [编码误拒修复](validation/2026-10-26-kugou-encoding.md)。
 
 选择酷狗曲目会追加到统一队列并切换播放，也可加入下一首；多选会保持所选列表顺序，到播放时才解析资源，不自动把整张平台歌单加入队列。播放位置、暂停、音量和错误继续使用唯一播放器状态源，切歌与退出不会遗留重复 mpv 进程。
 
@@ -68,7 +69,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 ## 开发验证
 
 - `pnpm probe:kugou`：显式匿名联网，验证设备注册、二维码挑战和“等待扫码”端点；只打印固定基线和通过状态，不输出设备标识、key、二维码或响应原文，不登录账号。
-- `pnpm test`：合成响应验证 IPC 参数、扫码/确认/账号状态、身份不一致、过期、SSA、旧响应丢弃、歌单/曲目视图隔离、大页/字符串字段容错、流主机、试听边界、`is_full_audio`、完整 hash 身份、文件名冲突、权限缺失、真实试听边界和 301 首实际分页。
+- `pnpm test`：合成响应验证 IPC 参数、扫码/确认/账号状态、身份不一致、过期、SSA、旧响应丢弃、歌单/曲目视图隔离、大页/字符串字段容错、流主机、试听边界、`is_full_audio`、完整 hash/编码关系、文件名前缀兼容、权限缺失、真实试听边界、迟到关系请求和 301 首实际分页。
 - `pnpm test:playback`：实际 mpv 经 loopback 网关解码合成酷狗资源，验证平台隔离、试听上限和清理。
 - `pnpm test:e2e`：真实启动酷狗 utilityProcess，验证匿名状态、窄桥接和本地退出；不自动生成真实二维码。
 - `STARSMUSIC_DEBUG=1 pnpm dev`：仅在显式调试时输出酷狗媒体主机、取链字段名、hash 前缀、时长和权限字段；不输出完整签名 URL、Token、账号标识或歌曲名。
