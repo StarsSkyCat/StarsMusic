@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'packages/providers/*'
+  - 'packages/desktop/*'
+
+# Enable dependency build scripts only after reviewing the actual dependency.
+onlyBuiltDependencies: []

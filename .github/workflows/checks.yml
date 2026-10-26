@@ -1,0 +1,23 @@
+name: Repository checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Validate script syntax
+        run: node --check scripts/check.mjs
+      - name: Check repository files and documentation
+        run: node scripts/check.mjs
