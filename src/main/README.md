@@ -10,4 +10,4 @@ netease-client.ts 只协调受限 utilityProcess 消息与公开投影；netease
 
 kugou-client.ts 与 kugou-worker.ts 采用同一模式承载酷狗 App 扫码、设备标识、账号验证、歌单/曲目和流解析；主进程只接受已登记酷狗曲目 ID，退出时同时清理两个后台进程与播放器。
 
-credential-vault.ts 与 safe-storage-cipher.ts 负责可选的系统密钥登录保存：只在用户启用记住且 Linux 后端非 basic_text 时加密写入 userData，拒绝弱后端；启动恢复由对应 Provider 重新验证账号，退出平台删除保存项。渲染进程只接触不含账号 ID/昵称/密文的状态。实现边界见 [凭据持久化](../../docs/credentials.md)。
+credential-vault.ts 协调可选登录保存；local-key-cipher.ts 使用本地随机密钥与 AES-256-GCM。credential-store-client.ts 通过具体内部消息调用 credential-store-worker.ts，后者在独立 Node worker 中运行 SQLite；窗口主线程不执行同步数据库操作。新保存不依赖系统密钥服务，safe-storage-cipher.ts 只用于旧加密 JSON 的可选导入。启动恢复由对应 Provider 重新验证账号，退出平台删除保存项。renderer 只接触不含账号 ID/昵称/密文/密钥的状态。实现边界见 [凭据持久化](../../docs/credentials.md)。

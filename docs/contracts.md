@@ -34,7 +34,7 @@ StreamResolution.source.remote 包含临时 URL、请求头和可选过期时间
 
 - 网易云 bundle 只接受 `MUSIC_U`、`__csrf`、`NMTID`、`MUSIC_A` 白名单 Cookie，以及设备 ID、nuid、已验证账号和昵称。
 - 酷狗 bundle 只接受 userid/token/dfid/guid 及已验证账号和昵称；恢复时由 guid 重新计算 MID，网页与 App 渠道不混用。
-- `CredentialStatus` 只暴露可用性、后端名、是否记住、是否锁定、已保存平台和安全错误；不暴露账号 ID、昵称、密文或文件路径。
+- `CredentialStatus` 只暴露可用性、后端名、是否记住、是否锁定、已保存平台和安全错误；当前 backend 为 local-key-aes-256-gcm，不暴露账号 ID、昵称、密文、密钥或文件路径。
 - preload 只暴露 getStatus、setRemember、clear、onChanged。凭据 bundle 只在主进程与对应 Provider 之间流转，不能进入 renderer 或通用 IPC。
 
 ## 后台租约与写回

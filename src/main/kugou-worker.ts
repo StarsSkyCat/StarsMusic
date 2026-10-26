@@ -3,7 +3,7 @@ import { normalizeError } from '../../packages/contracts/src/errors';
 import { record, text, nonNegativeInteger } from '../../packages/contracts/src/validation';
 import { kugouId } from '../../packages/contracts/src/kugou';
 
-// 凭据只在此 utilityProcess 内解密使用；主进程仅保存系统密钥加密后的密文。
+// 平台凭据只在可信后台流转；主进程负责解密/加密，SQLite 仅保存密文。
 const port = process.parentPort;
 const service = new KugouService({ onCredentials: (credentials) => port.postMessage({ kind: 'credentials', credentials }) });
 service.subscribe((state) => port.postMessage({ kind: 'state', state }));

@@ -8,6 +8,10 @@ import {
   credentialChannels, parseCredentialArguments, parseCredentialBundle, parseCredentialStatus,
   type KugouCredentialBundle, type NeteaseCredentialBundle,
 } from '../../packages/contracts/src/credentials.ts';
+import { DatabaseSync } from 'node:sqlite';
+import { SqliteCredentialStore } from '../../packages/storage/src/credential-store.ts';
+import { LocalKeyCipher } from '../../src/main/local-key-cipher.ts';
+import { migrateLegacyCredentials } from '../../src/main/credential-migration.ts';
 import { CredentialVault, type VaultCipher } from '../../src/main/credential-vault.ts';
 
 // 明确标识的合成凭据；不连接平台，也不写入真实用户目录。
@@ -33,10 +37,22 @@ class FakeCipher implements VaultCipher {
     return text.slice('encrypted:'.length);
   }
 }
-async function temporaryVault(cipher = new FakeCipher(), now = () => 1000) {
+const openStores = new Map<string, SqliteCredentialStore[]>();
+function openStore(file: string): SqliteCredentialStore {
+  const store = new SqliteCredentialStore(file);
+  const directory = path.dirname(file);
+  openStores.set(directory, [...(openStores.get(directory) ?? []), store]);
+  return store;
+}
+async function cleanup(directory: string): Promise<void> {
+  for (const store of openStores.get(directory) ?? []) await store.close();
+  openStores.delete(directory);
+  await rm(directory, { recursive: true, force: true });
+}
+async function temporaryVault(cipher: VaultCipher = new FakeCipher(), now = () => 1000) {
   const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-vault-'));
-  const file = path.join(directory, 'credentials.json');
-  return { directory, file, vault: new CredentialVault(file, cipher, now) };
+  const file = path.join(directory, 'credentials.sqlite');
+  return { directory, file, vault: new CredentialVault(openStore(file), cipher, now) };
 }
 
 test('凭据 bundle 只接受白名单字段和格式', () => {
@@ -57,7 +73,7 @@ test('凭据 bundle 只接受白名单字段和格式', () => {
   assert.throws(() => parseCredentialArguments(credentialChannels.clear, ['extra']));
 });
 
-test('凭据文件只保存系统密钥密文，并支持保存/读取/删除/关闭记住', async () => {
+test('SQLite 只保存密文，并支持保存/读取/删除/关闭记住', async () => {
   const { directory, file, vault } = await temporaryVault();
   try {
     const initial = await vault.status();
@@ -66,7 +82,7 @@ test('凭据文件只保存系统密钥密文，并支持保存/读取/删除/�
     await Promise.all([vault.save(neteaseBundle), vault.save(kugouBundle)]);
     const status = await vault.status();
     assert.deepEqual(status.savedProviders, ['netease', 'kugou']);
-    const content = await readFile(file, 'utf8');
+    const content = (await readFile(file)).toString('latin1');
     assert.ok(!content.includes('synthetic-token'));
     assert.ok(!content.includes('synthetic-music-u'));
     assert.deepEqual(await vault.load('netease'), neteaseBundle);
@@ -79,10 +95,10 @@ test('凭据文件只保存系统密钥密文，并支持保存/读取/删除/�
     assert.equal(await vault.load('kugou'), undefined);
     const closed = await vault.status();
     assert.equal(closed.remembered, false); assert.deepEqual(closed.savedProviders, []);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { await cleanup(directory); }
 });
 
-test('系统密钥不可用时不写文件，也不假装启用记住登录', async () => {
+test('加密后端不可用时不写入凭据，也不假装启用记住登录', async () => {
   const cipher = new FakeCipher(false); const { directory, file, vault } = await temporaryVault(cipher);
   try {
     const status = await vault.status();
@@ -90,25 +106,25 @@ test('系统密钥不可用时不写文件，也不假装启用记住登录', as
     await assert.rejects(vault.setRemember(true), (error: unknown) => error instanceof DomainError && error.code === 'credential-unavailable');
     assert.equal(await vault.save(neteaseBundle), false);
     assert.equal(await vault.load('netease'), undefined);
-    await assert.rejects(stat(file));
-  } finally { await rm(directory, { recursive: true, force: true }); }
+    assert.equal(await openStore(file).read(), undefined);
+  } finally { await cleanup(directory); }
 });
 
 test('密文损坏或解密失败进入锁定状态，清除后恢复可用', async () => {
   const { directory, file, vault } = await temporaryVault();
   try {
     await vault.setRemember(true); await vault.save(neteaseBundle);
-    const stored = JSON.parse(await readFile(file, 'utf8')) as { entries: { netease: { ciphertext: string } } };
-    stored.entries.netease.ciphertext = Buffer.from('tampered', 'utf8').toString('base64');
-    await writeFile(file, JSON.stringify(stored), { mode: 0o600 });
-    const reopened = new CredentialVault(file, new FakeCipher(), () => 2000);
+    const database = new DatabaseSync(file);
+    database.prepare('UPDATE credentials SET ciphertext = ? WHERE provider = ?').run(Buffer.from('tampered').toString('base64'), 'netease');
+    database.close();
+    const reopened = new CredentialVault(openStore(file), new FakeCipher(), () => 2000);
     await assert.rejects(reopened.load('netease'), (error: unknown) => error instanceof DomainError && error.code === 'credential-locked');
     const locked = await reopened.status();
     assert.equal(locked.locked, true); assert.equal(locked.available, false);
     const cleared = await reopened.clear();
     assert.equal(cleared.locked, false); assert.equal(cleared.remembered, false);
     assert.equal((await reopened.status()).available, true);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { await cleanup(directory); }
 });
 
 
@@ -131,7 +147,7 @@ test('退出、清除或关闭后重新开启记住登录，都不会被迟到�
       assert.equal(await pending, false);
       assert.deepEqual((await vault.status()).savedProviders, []);
       assert.equal(await vault.load('kugou'), undefined);
-    } finally { release(); await rm(directory, { recursive: true, force: true }); }
+    } finally { release(); await cleanup(directory); }
   }
 });
 
@@ -139,12 +155,120 @@ test('重建保险库仍能恢复双平台密文保存项，各平台独立删�
   const { directory, file, vault } = await temporaryVault();
   try {
     await vault.setRemember(true); await vault.save(neteaseBundle); await vault.save(kugouBundle);
-    const restarted = new CredentialVault(file, new FakeCipher());
+    const restarted = new CredentialVault(openStore(file), new FakeCipher());
     assert.equal((await restarted.status()).remembered, true);
     assert.deepEqual(await restarted.load('netease'), neteaseBundle);
     assert.deepEqual(await restarted.load('kugou'), kugouBundle);
     await restarted.remove('kugou');
     assert.deepEqual(await restarted.load('netease'), neteaseBundle);
     assert.equal(await restarted.load('kugou'), undefined);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { await cleanup(directory); }
+});
+
+test('本地随机密钥 + SQLite 在不依赖系统服务的情况下加密并跨实例恢复双平台', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-local-vault-'));
+  const file = path.join(directory, 'credentials.sqlite'); const key = path.join(directory, 'keys', 'login.key');
+  const store = openStore(file); const cipher = new LocalKeyCipher(key, async () => Object.keys((await store.read())?.entries ?? {}).length > 0);
+  const vault = new CredentialVault(store, cipher);
+  try {
+    assert.equal((await vault.status()).available, true);
+    await assert.rejects(stat(key)); // 默认关闭时不生成密钥/保存平台凭据。
+    await vault.setRemember(true); await Promise.all([vault.save(neteaseBundle), vault.save(kugouBundle)]);
+    const first = (await store.read())!.entries.netease!.ciphertext;
+    await vault.save(neteaseBundle);
+    assert.notEqual((await store.read())!.entries.netease!.ciphertext, first); // 每次随机 nonce。
+    const raw = (await readFile(file)).toString('latin1');
+    for (const secret of ['synthetic-music-u', 'synthetic-token', '合成账号', 'synthetic-device']) assert.equal(raw.includes(secret), false);
+    assert.equal((await readFile(key)).length, 32);
+    if (process.platform !== 'win32') {
+      assert.equal((await stat(key)).mode & 0o777, 0o600);
+      assert.equal((await stat(path.dirname(key))).mode & 0o777, 0o700);
+      assert.equal((await stat(file)).mode & 0o777, 0o600);
+    }
+    await vault.close();
+    const reopened = openStore(file);
+    const restarted = new CredentialVault(reopened, new LocalKeyCipher(key, async () => Object.keys((await reopened.read())?.entries ?? {}).length > 0));
+    assert.equal((await restarted.status()).remembered, true);
+    assert.deepEqual(await restarted.load('netease'), neteaseBundle);
+    assert.deepEqual(await restarted.load('kugou'), kugouBundle);
+    await restarted.remove('kugou'); assert.equal(await restarted.load('kugou'), undefined);
+    assert.deepEqual(await restarted.load('netease'), neteaseBundle);
+    await restarted.clear(); await assert.rejects(stat(key));
+    assert.deepEqual((await restarted.status()).savedProviders, []);
+  } finally { await cleanup(directory); }
+});
+
+test('本地密钥丢失不自动替换，错误密钥/被篡改密文不能解密，明确清除后可重新保存', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-local-vault-'));
+  const file = path.join(directory, 'credentials.sqlite'); const key = path.join(directory, 'keys', 'login.key');
+  const openVault = () => {
+    const store = openStore(file);
+    return new CredentialVault(store, new LocalKeyCipher(key, async () => Object.keys((await store.read())?.entries ?? {}).length > 0));
+  };
+  try {
+    const original = openVault(); await original.setRemember(true); await original.save(kugouBundle); await original.close();
+    const savedKey = await readFile(key); await rm(key);
+    const missing = openVault();
+    assert.equal((await missing.status()).available, false);
+    await assert.rejects(missing.load('kugou')); await assert.rejects(missing.setRemember(true));
+    await assert.rejects(stat(key)); await missing.close();
+    await writeFile(key, Buffer.alloc(32, 1), { mode: 0o600 });
+    const wrong = openVault();
+    await assert.rejects(wrong.load('kugou'));
+    assert.equal((await wrong.status()).locked, true);
+    await wrong.clear(); await wrong.setRemember(true); await wrong.save(kugouBundle);
+    assert.deepEqual(await wrong.load('kugou'), kugouBundle);
+    assert.notDeepEqual(await readFile(key), savedKey);
+    const database = new DatabaseSync(file);
+    database.exec("UPDATE credentials SET ciphertext = 'v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'"); database.close();
+    const tampered = openVault(); await assert.rejects(tampered.load('kugou')); assert.equal((await tampered.status()).locked, true);
+  } finally { await cleanup(directory); }
+});
+
+test('SQLite 拒绝未知版本、损坏库并保留文件，用户明确清除后重建', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-local-vault-')); const file = path.join(directory, 'credentials.sqlite');
+  try {
+    const initial = openStore(file); await initial.write({ version: 1, remember: false, entries: {} }); await initial.close();
+    const database = new DatabaseSync(file); database.exec('PRAGMA user_version=99'); database.close();
+    const before = await readFile(file); const store = openStore(file); const vault = new CredentialVault(store, new FakeCipher());
+    assert.equal((await vault.status()).locked, true);
+    assert.deepEqual(await readFile(file), before);
+    await vault.clear(); assert.equal((await vault.status()).available, true);
+    await vault.close(); await writeFile(file, 'synthetic corrupted database');
+    const corrupt = new CredentialVault(openStore(file), new FakeCipher()); assert.equal((await corrupt.status()).locked, true);
+    await corrupt.clear(); assert.equal((await corrupt.status()).locked, false);
+  } finally { await cleanup(directory); }
+});
+
+test('旧系统密钥文件只在新库未初始化时导入，成功提交才删除旧文件，不可解密时保留', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-local-vault-'));
+  const file = path.join(directory, 'credentials.sqlite'); const legacyFile = path.join(directory, 'credentials.json');
+  const store = openStore(file); const oldCipher = new FakeCipher();
+  const cipher = new LocalKeyCipher(path.join(directory, 'keys', 'login.key'), async () => Object.keys((await store.read())?.entries ?? {}).length > 0);
+  const legacy = { version: 1, remember: true, entries: { kugou: { ciphertext: await oldCipher.encrypt(JSON.stringify(kugouBundle)), updatedAt: 1000 } } };
+  try {
+    await writeFile(legacyFile, JSON.stringify(legacy), { mode: 0o600 });
+    await migrateLegacyCredentials(store, cipher, new FakeCipher(false), legacyFile);
+    assert.equal(await store.read(), undefined); assert.ok(await stat(legacyFile));
+    await migrateLegacyCredentials(store, cipher, oldCipher, legacyFile);
+    await assert.rejects(stat(legacyFile));
+    const vault = new CredentialVault(store, cipher); assert.deepEqual(await vault.load('kugou'), kugouBundle);
+    await vault.clear();
+    await writeFile(legacyFile, JSON.stringify(legacy), { mode: 0o600 });
+    await migrateLegacyCredentials(store, cipher, oldCipher, legacyFile);
+    assert.deepEqual((await store.read())?.entries, {}); assert.ok(await stat(legacyFile));
+  } finally { await cleanup(directory); }
+});
+
+test('SQLite 事务写入失败时保留此前双平台保存项与记住设置', async () => {
+  const { directory, file, vault } = await temporaryVault();
+  try {
+    await vault.setRemember(true); await vault.save(neteaseBundle); await vault.save(kugouBundle);
+    const before = await openStore(file).read();
+    const database = new DatabaseSync(file);
+    database.exec("CREATE TRIGGER synthetic_abort BEFORE INSERT ON credentials BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END");
+    database.close();
+    await assert.rejects(vault.remove('kugou'));
+    assert.deepEqual(await openStore(file).read(), before);
+  } finally { await cleanup(directory); }
 });

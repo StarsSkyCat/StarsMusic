@@ -2,7 +2,7 @@
 
 ## 当前能运行什么
 
-已实现安全窗口、本地播放、网易云 App 临时扫码/歌单/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的系统密钥“记住登录”。preload 暴露 getAppInfo、playback、netease、kugou、presentation、credentials 的具体白名单方法；真实安全密钥持久化/跨重启恢复、目录扫描、SQLite、MPRIS 和安装包尚未验证或实现。
+已实现安全窗口、本地播放、网易云 App 临时扫码/歌单/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、playback、netease、kugou、presentation、credentials 的具体白名单方法；真实账号跨重启恢复、目录扫描、音乐库数据库、MPRIS 和安装包尚未验证或实现。
 
 领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)，登录保存见 [凭据持久化](credentials.md)。默认关闭“记住登录”时，应用关闭后不保留网易云或酷狗登录，需要重新扫码。
 
@@ -62,7 +62,7 @@ node --check scripts/check.mjs
 node scripts/check.mjs
 ```
 
-包管理器首次运行可能需要联网下载。已引入的直接依赖、版本、用途和许可见 [依赖记录](dependencies.md)。pnpm-workspace.yaml 保持 onlyBuiltDependencies 为空；Electron 运行时采用显式安装命令。SQLite 等后续依赖仍需单独审查。
+包管理器首次运行可能需要联网下载。已引入的直接依赖、版本、用途和许可见 [依赖记录](dependencies.md)。pnpm-workspace.yaml 保持 onlyBuiltDependencies 为空；Electron 运行时采用显式安装命令。凭据库已使用运行时内置 node:sqlite；其他后续依赖仍需单独审查。
 
 受限环境若用户缓存目录只读，可将缓存定向到临时目录，无需修改全局配置：
 
@@ -80,11 +80,12 @@ corepack pnpm dev
 
 “登录保存”面板默认关闭。勾选后需要成功登录才会保存；关闭勾选或点击“清除已保存登录”会删除保存项，退出单个平台会删除该平台保存项。
 
-- 使用 Electron `safeStorage` 异步接口，凭据加密后写到 `userData/credentials.json`，目录 0700、文件 0600。
-- Linux 只接受 `gnome_libsecret`、`kwallet`、`kwallet5`、`kwallet6`；`basic_text` 视为不可用，界面显示临时会话提示，不写入磁盘。
-- 启动时只有记住已启用且后端可用才解密并发送给后台；后台重新调用账号接口验证后才进入 connected。
-- 解密失败进入 locked，不覆盖原文件；清除保存后重新登录。
-- 本机当前 `safeStorage` 为 `basic_text`，真实 GNOME Keyring/KWallet 保存和跨重启恢复未验证。范围与测试见 [凭据持久化](credentials.md) 与 [验证记录](validation/2026-10-26-credentials.md)。
+- 凭据以 AES-256-GCM 加密后写到 `userData/credentials.sqlite`，本地随机 32 字节密钥单独存于 `userData/keys/login.key`；目录 0700、文件 0600（Linux 已验证）。
+- 当前按用户选择不依赖 GNOME Keyring/KWallet；本地密钥与数据库同时被读取时可解密，不把它描述成系统密钥库隔离。应用不保存密码或二维码。
+- SQLite 使用 Node/Electron 内置 `node:sqlite`，所有同步数据库操作在专用 Node worker 中执行；构建生成 `credential-store-worker.js`。没有新增 npm SQLite 绑定或系统数据库服务依赖。
+- 启动时恢复必须重新请求平台账号接口；损坏、缺失密钥或存储不可用时显示原因，不覆盖旧密文，明确清除后才重建。
+- 原 `credentials.json` 在新库未初始化且旧系统密钥仍可解密时自动转换，事务提交后才删除旧文件；无法解密时保留旧文件，需重新扫码保存。
+- 范围、保护边界与结果见 [凭据持久化](credentials.md) 和 [SQLite 验证](validation/2026-10-26-sqlite-credentials.md)。
 
 ## 目录边界
 
@@ -102,7 +103,7 @@ corepack pnpm dev
 | scripts | 可直接执行的仓库工具 |
 | docs | 设计、开发、决策及验证记录 |
 
-main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器和主进程 CredentialVault 已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js 与 kugou-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程解密/加密；业务请求仍由后台进程使用解密后的临时凭据。存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
+main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器、主进程 CredentialVault 和凭据 SQLite 后台已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js、kugou-worker.js 与 credential-store-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程协调本地密钥加密/解密和异步存储；业务请求仍由后台进程使用解密后的临时凭据。音乐库、队列存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
 
 公共 contracts 不导入 Electron/Vue/Provider SDK；renderer 只能使用 preload API。平台请求在 Provider 后台处理。重型扫描和数据库工作与窗口主进程分离。
 

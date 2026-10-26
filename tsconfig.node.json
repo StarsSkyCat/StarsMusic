@@ -12,6 +12,7 @@
     "packages/contracts/src/**/*.ts",
     "packages/providers/src/**/*.ts",
     "packages/playback/src/**/*.ts",
+    "packages/storage/src/**/*.ts",
     "tests/**/*.ts",
     "scripts/**/*.ts"
   ]

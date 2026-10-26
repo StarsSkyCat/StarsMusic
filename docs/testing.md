@@ -20,7 +20,7 @@ test:playback 有 4 项实际 mpv 场景，使用 null 输出与合成 WAV，检
 
 test:e2e 先构建，再启动实际 Electron，检查桥接/沙箱、弹窗与导航、960×640 布局以及本地选择/播放/暂停/定位。只替代原生选择器交互，使用实际 mpv 和默认系统音频输出，拒绝 null 输出；关闭应用后验证 mpv PID 已退出。需要 Linux、mpv、可用的图形和音频会话。Playwright 显式启用 chromiumSandbox；通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs。临时配置和合成文件会清理，截图留在 Git 忽略的 artifacts/；不需要下载 Playwright 浏览器。
 
-桌面 E2E 也实际启动网易云与酷狗 utilityProcess，验证匿名 getState/本地退出及窄桥接，禁止自动生成真实二维码或授权账号；同时验证 preload 的 credentials 白名单、状态投影，以及本机 `basic_text` 下不会假装启用记住登录。pnpm probe:netease、pnpm probe:kugou 是显式匿名联网探测，不在 CI 执行。真实听音与权限结果独立记录在 [网易云验证](validation/2026-10-26-netease.md) 与 [酷狗验证](validation/2026-10-26-kugou.md)；凭据结果见 [凭据持久化验证](validation/2026-10-26-credentials.md)。
+桌面 E2E 也实际启动网易云与酷狗 utilityProcess，验证匿名 getState/本地退出及窄桥接，禁止自动生成真实二维码或授权账号；同时验证 preload 的 credentials 白名单、状态投影，以及 basic 密码库环境下本地加密保存仍可用。pnpm probe:netease、pnpm probe:kugou 是显式匿名联网探测，不在 CI 执行。真实听音与权限结果独立记录在 [网易云验证](validation/2026-10-26-netease.md) 与 [酷狗验证](validation/2026-10-26-kugou.md)；凭据结果见 [SQLite 保存验证](validation/2026-10-26-sqlite-credentials.md)。
 
 CI 执行文档、冻结安装、类型、合成契约、mpv null 集成测试和构建；没有真实平台登录、图形、安装包或系统音频验收。远端 CI 结果需实际观察。
 
@@ -43,7 +43,7 @@ CI 执行文档、冻结安装、类型、合成契约、mpv null 集成测试�
 
 酷狗网页登录与 App 扫码分渠道记录。无法播放时区分身份状态、Token 渠道、曲目权限和网络问题，不擅自判断为会员问题。
 
-凭据保存需记录 `safeStorage` 实际后端、文件权限、保存/重启恢复、锁定/清除和退出删除结果。`basic_text` 只能证明临时会话回退，不能算系统密钥持久化通过。
+凭据保存需记录实际本地加密后端、数据库/密钥权限、真实账号保存/重启恢复、损坏/密钥丢失、清除和退出删除结果；无系统密钥服务不能阻断当前 SQLite 记住登录。
 
 使用 [验证模板](templates/p0-validation.md) 记录每次实验。结果状态只能是未执行、通过、失败、受限；“受限”要写明实际可用能力和影响。
 
@@ -54,3 +54,5 @@ CI 执行文档、冻结安装、类型、合成契约、mpv null 集成测试�
 每个发布渠道检查安装、启动、声音、切歌、媒体控制、退出、重启与卸载。AppImage 检查 FUSE 和解包路径；原生包验证 mpv 及系统库依赖。构建成功或无界面容器通过不代替实机验收。
 
 歌词/封面回归使用明确标识的合成 LRC、图片头与后台响应，覆盖时间标签/偏移、定位高亮、图片域名/类型限制、快速切歌旧结果、未登记 ID 和会话退出。桌面 E2E 额外注入标明合成的 presentation 快照来验证图片解码、歌词渲染及最小窗口布局；实际音频仍由 mpv/PipeWire 播放。匿名平台探测与真实账号验收另记，不以合成快照宣称平台可用，见 [记录](validation/2026-10-26-presentation.md)。
+
+登录保存现已改为本地随机密钥 + SQLite；当前共 68 项单元回归，包含 SQLite 事务失败回滚检查，数量以执行结果为准。凭据测试使用真实 SQLite 与 AES-GCM 验证双平台跨实例恢复、密钥丢失/替换、数据篡改与旧加密 JSON 转换，不依赖系统密钥库。桌面 E2E 显式指定 basic 密码库，验证记住开关可用和实际 Electron 重启后设置保留；不自动向平台提交真实或合成账号。参见 [SQLite 记录](validation/2026-10-26-sqlite-credentials.md)。

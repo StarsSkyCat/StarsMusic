@@ -1,6 +1,4 @@
-import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { emptyCredentials, parseStoredCredentials, type CredentialStore, type StoredCredentials } from '../../packages/storage/src/credential-store.ts';
 import { DomainError, type AppError, appError } from '../../packages/contracts/src/errors.ts';
 import {
   credentialProviderIds, parseCredentialBundle, type CredentialBundle, type CredentialProvider, type CredentialStatus,
@@ -11,65 +9,33 @@ export interface VaultCipher {
   available(): Promise<boolean>;
   encrypt(value: string): Promise<string>;
   decrypt(value: string): Promise<string>;
-}
-
-interface StoredEntry { readonly ciphertext: string; readonly updatedAt: number }
-interface StoredFile {
-  version: 1;
-  remember: boolean;
-  entries: Partial<Record<CredentialProvider, StoredEntry>>;
-}
-
-function emptyFile(): StoredFile { return { version: 1, remember: false, entries: {} }; }
-function validEntry(value: unknown): value is StoredEntry {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const entry = value as Record<string, unknown>;
-  return typeof entry.ciphertext === 'string' && entry.ciphertext.length > 0 && entry.ciphertext.length <= 500_000
-    && typeof entry.updatedAt === 'number' && Number.isSafeInteger(entry.updatedAt) && entry.updatedAt >= 0;
-}
-function parseStoredFile(value: unknown): StoredFile {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('vault.invalid');
-  const input = value as Record<string, unknown>;
-  if (input.version !== 1 || typeof input.remember !== 'boolean'
-    || typeof input.entries !== 'object' || input.entries === null || Array.isArray(input.entries)) throw new Error('vault.invalid');
-  const entries: Partial<Record<CredentialProvider, StoredEntry>> = {};
-  for (const provider of credentialProviderIds) {
-    const entry = (input.entries as Record<string, unknown>)[provider];
-    if (entry === undefined) continue;
-    if (!validEntry(entry)) throw new Error('vault.invalid');
-    entries[provider] = { ciphertext: entry.ciphertext, updatedAt: entry.updatedAt };
-  }
-  return { version: 1, remember: input.remember, entries };
+  reset?(): Promise<void>;
 }
 
 export class CredentialVault {
-  readonly #file: string;
+  readonly #store: CredentialStore;
   readonly #cipher: VaultCipher;
   readonly #now: () => number;
-  #state: StoredFile | undefined;
+  #state: StoredCredentials | undefined;
   #locked = false;
   #error: AppError | undefined;
   #queue: Promise<void> = Promise.resolve();
   #epoch = 0;
   #providerEpoch: Record<CredentialProvider, number> = { netease: 0, kugou: 0 };
 
-  constructor(file: string, cipher: VaultCipher, now: () => number = Date.now) {
-    this.#file = file; this.#cipher = cipher; this.#now = now;
+  constructor(store: CredentialStore, cipher: VaultCipher, now: () => number = Date.now) {
+    this.#store = store; this.#cipher = cipher; this.#now = now;
   }
 
-  async #ready(): Promise<StoredFile> {
+  async #ready(): Promise<StoredCredentials> {
     if (this.#locked) throw new DomainError('credential-locked');
     if (this.#state) return this.#state;
     try {
-      const content = await readFile(this.#file, 'utf8');
-      this.#state = parseStoredFile(JSON.parse(content) as unknown);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        this.#state = emptyFile();
-      } else {
-        this.#locked = true; this.#error = appError('credential-locked');
-        throw new DomainError('credential-locked');
-      }
+      const stored = await this.#store.read();
+      this.#state = stored === undefined ? emptyCredentials() : parseStoredCredentials(stored);
+    } catch {
+      this.#locked = true; this.#error = appError('credential-locked');
+      throw new DomainError('credential-locked');
     }
     return this.#state;
   }
@@ -78,28 +44,12 @@ export class CredentialVault {
     try { return await this.#cipher.available(); } catch { return false; }
   }
 
-  async #writeNow(next: StoredFile): Promise<void> {
-    const directory = path.dirname(this.#file);
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    await chmod(directory, 0o700).catch(() => undefined);
-    const temporary = `${this.#file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
-    try {
-      await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-      await chmod(temporary, 0o600);
-      await rename(temporary, this.#file);
-      await chmod(this.#file, 0o600);
-    } catch (error: unknown) {
-      await unlink(temporary).catch(() => undefined);
-      throw error;
-    }
-  }
-
-  async #mutate(change: (state: StoredFile) => StoredFile | undefined): Promise<boolean> {
+  async #mutate(change: (state: StoredCredentials) => StoredCredentials | undefined): Promise<boolean> {
     const operation = this.#queue.then(async () => {
       if (!this.#state) throw new Error('vault.not-ready');
       const next = change(this.#state);
       if (!next) return false;
-      await this.#writeNow(next);
+      await this.#store.write(next);
       this.#state = next; this.#error = undefined;
       return true;
     });
@@ -112,7 +62,7 @@ export class CredentialVault {
   }
 
   async status(): Promise<CredentialStatus> {
-    let ready: StoredFile | undefined;
+    let ready: StoredCredentials | undefined;
     try { ready = await this.#ready(); } catch { ready = undefined; }
     const available = !this.#locked && await this.#available();
     if (!available && !this.#error && !this.#locked) this.#error = appError('credential-unavailable');
@@ -195,11 +145,18 @@ export class CredentialVault {
     });
   }
 
+  async close(): Promise<void> {
+    this.#epoch++;
+    await this.#queue;
+    await this.#store.close();
+  }
+
   async clear(): Promise<CredentialStatus> {
     this.#epoch++;
     const operation = this.#queue.then(async () => {
-      await this.#writeNow(emptyFile());
-      this.#state = emptyFile(); this.#locked = false; this.#error = undefined;
+      await this.#store.reset();
+      await this.#cipher.reset?.();
+      this.#state = emptyCredentials(); this.#locked = false; this.#error = undefined;
     });
     this.#queue = operation.then(() => undefined).catch(() => undefined);
     try { await operation; }

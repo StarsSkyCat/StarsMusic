@@ -20,8 +20,9 @@
 | [参考项目播放接入对照](reference-playback-comparison.md) | YesPlayMusic 与 Mineradio 的歌曲关联、登录渠道和权限处理源码核对 |
 | [酷狗编码误拒修复](validation/2026-10-26-kugou-encoding.md) | 同曲不同编码的真实响应复现、资源关系验证与别名兼容 |
 | [酷狗资源与权限排查](validation/2026-10-26-kugou-resource-access.md) | 分页漏歌、曲目身份、试听范围与 A/B 匿名核对的限制 |
-| [凭据持久化](credentials.md) | 系统密钥保险库、记住登录、恢复、锁定与临时会话回退 |
+| [凭据持久化](credentials.md) | SQLite 与本地随机密钥、恢复、锁定、旧格式迁移和保护边界 |
 | [凭据持久化验证](validation/2026-10-26-credentials.md) | 保险库自动化结果与本机密钥后端限制 |
+| [SQLite 登录保存验证](validation/2026-10-26-sqlite-credentials.md) | 无系统密钥服务下的加密存储、事务、迁移与实际应用重启 |
 | [音乐工作区验证](validation/2026-10-26-music-workspace.md) | 页面设计、多选下一首、会话队列与桌面布局检查 |
 | [歌词与封面验证](validation/2026-10-26-presentation.md) | 当前在线曲目行级歌词、内存封面、竞态与桌面验证边界 |
 | [架构决策 ADR](adr/README.md) | 已选方向、备选方案和未验证的决策 |

@@ -18,7 +18,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
   env.GSETTINGS_BACKEND = 'memory';
-  const args = ['.', `--user-data-dir=${profile}`];
+  const args = ['.', `--user-data-dir=${profile}`, '--password-store=basic'];
   const desktop = await _electron.launch({ args, env, chromiumSandbox: true, timeout: 10_000 })
     .catch(async (error: unknown) => {
       await rm(profile, { recursive: true, force: true });
@@ -83,12 +83,9 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       });
       expect(credentials.keys).toEqual(['clear', 'getStatus', 'onChanged', 'setRemember']);
       expect(credentials.initial).toMatchObject({ remembered: false, locked: false });
-      expect(typeof credentials.initial.backend).toBe('string');
-      if (!credentials.initial.available) {
-        expect(credentials.enabled.available).toBe(false);
-        expect(credentials.enabled.remembered).toBe(false);
-        expect(credentials.enabled.error?.code).toBe('credential-unavailable');
-      }
+      expect(credentials.initial.backend).toBe('local-key-aes-256-gcm');
+      expect(credentials.initial.available).toBe(true);
+      expect(credentials.enabled.remembered).toBe(true);
       expect(credentials.cleared.remembered).toBe(false); expect(credentials.cleared.savedProviders).toEqual([]);
       await page.getByRole('button', { name: '音乐库', exact: true }).click();
       await page.screenshot({ path: 'artifacts/music-library.png' });
@@ -253,4 +250,29 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
     await desktop.close();
     await rm(profile, { recursive: true, force: true });
   }
+});
+
+test('SQLite 登录设置在禁用系统密码库时仍能随实际 Electron 重启保留', async () => {
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-vault-e2e-'));
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
+  delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL;
+  env.GSETTINGS_BACKEND = 'memory';
+  const launch = () => _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true, timeout: 10_000 });
+  let desktop: Awaited<ReturnType<typeof launch>> | undefined;
+  try {
+    desktop = await launch(); let page = await desktop.firstWindow();
+    const enabled = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { setRemember(value: boolean): Promise<{ available: boolean; remembered: boolean; backend: string }> } } }).starsMusic.credentials.setRemember(true));
+    expect(enabled).toMatchObject({ available: true, remembered: true, backend: 'local-key-aes-256-gcm' });
+    await desktop.close(); desktop = undefined;
+    desktop = await launch(); page = await desktop.firstWindow();
+    const restored = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { getStatus(): Promise<{ available: boolean; remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.getStatus());
+    expect(restored).toMatchObject({ available: true, remembered: true, savedProviders: [] });
+    // 不注入账号、不调用真实登录；平台凭据的加密往返由实际 SQLite/AES 单元测试验证。
+    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: '记住登录（应用重启后自动验证）' })).toBeChecked();
+    await expect(page.getByText('在本机加密记住登录，无需额外的系统密钥服务；不保存密码或二维码。', { exact: true })).toBeVisible();
+    const cleared = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { clear(): Promise<{ remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.clear());
+    expect(cleared).toMatchObject({ remembered: false, savedProviders: [] });
+  } finally { await desktop?.close(); await rm(profile, { recursive: true, force: true }); }
 });

@@ -128,7 +128,7 @@ Electron 内置 Chromium / Node.js，Tauri 使用系统 WebView，这分别见 [
 | 接口 | Node.js Provider 进程 | 直接调用经过验证的接口模块，默认不启动公开 HTTP API 服务 |
 | 播放 | mpv 子进程 + JSON IPC | 独立解码与音频输出，避免将所有格式依赖于 WebView |
 | 数据 | SQLite + better-sqlite3 | 在独立数据进程执行；需为 Electron ABI 与目标架构构建原生模块 |
-| 凭据 | Electron safeStorage 异步接口与系统密钥服务 | 封装为 CredentialVault；必须验证真实安全后端，不能仅检查 API 可用 |
+| 凭据 | 本地随机密钥 + AES-GCM + SQLite | 按用户选择免系统服务；同获数据库和密钥即可解密，详见 ADR 0005 |
 | 本地标签 | music-metadata | 在后台扫描，限制并发，缓存结果 |
 | Linux 系统控制 | MPRIS / D-Bus 适配层 | 库选型以兼容性验证为准，不让第三方库类型进入业务模型 |
 | 分发 | electron-builder；后续独立 Flatpak 清单 | AppImage / DEB / RPM；各渠道独立验证和更新策略 |
@@ -239,12 +239,12 @@ P0 仍需分别验证官方网页登录和 App 扫码的“登录 → 账号 →
 - Cookie / Token 仅在主进程凭据服务和对应 Provider 内流转，不进入 Pinia、URL 查询参数、页面 localStorage、错误日志或遥测。
 - 官方页面使用无 Node 权限、无业务 preload 的独立窗口；允许的跳转域名按实际授权链列举并验证，不能任意打开页面后提取凭据。
 - 网页授权窗口优先用内存 session；成功后仅提取所需凭据并交给 Vault。若官方流程必须保留持久 session，须单独验证 Electron Cookie 存储保护与退出清理，不能让它成为绕过 Vault 的明文副本。
-- 密钥服务缺失、锁定或仅有弱后端时，进入临时会话模式；不静默降级为明文或使用硬编码密钥长期保存。恢复密钥服务后再提供“记住登录”。
+- 当前凭据方案无需系统密钥服务；本地密钥丢失、损坏或存储不可用时进入临时会话模式，不写明文、不使用硬编码密钥。数据库与本地密钥分文件保存，明确本地保护边界。
 - 退出立即使会话 generation 失效、取消请求、停止相应在线播放、清除凭据与授权窗口会话。保留本地文件、设置与本地历史；清理该账号私有歌单缓存，避免继续显示已退出账号的个人库。
 
 safeStorage 在 Linux 的安全语义取决于密钥后端，旧接口的 basic_text 并不提供有效保护；新异步接口也需要检查所选版本的实际后端行为。见 [官方 safeStorage 文档](https://www.electronjs.org/docs/latest/api/safe-storage)。
 
-当前实现采用异步接口，显式拒绝 `basic_text`，并提供可选的“记住登录”与临时会话回退；边界和未验证项见 [凭据持久化](credentials.md) 与 [ADR 0004](adr/0004-credential-vault.md)。
+原系统密钥方案见 [ADR 0004](adr/0004-credential-vault.md)，随后按用户选择改为免系统服务的本地随机密钥 + SQLite，safeStorage 仅用于旧文件迁移；当前边界和未验证项见 [凭据持久化](credentials.md) 与 [ADR 0005](adr/0005-local-key-sqlite.md)。
 
 ## 8. 播放引擎与数据流
 

@@ -34,4 +34,4 @@ YesPlayMusic 的 [LICENSE](https://github.com/qier222/YesPlayMusic/blob/5d5fa23b
 
 补充核对同一固定提交的 YesPlayMusic `src/api/track.js` 歌词入口与 Mineradio `kugou-api.js` 的歌词搜索/下载流程：网易云按歌曲 ID 关联详情/歌词，酷狗按 hash 查候选后通过歌词 ID/accesskey 下载。StarsMusic 据平台响应格式独立实现行级 LRC 解析、当前曲目投影和受限图片获取；没有复制这两个播放器的实现、歌词缓存、视觉或资产。协议端点字段同时核对已有 MIT API 基线的 `lyric.js`/`search_lyric.js`。
 
-参考项目的网页 Cookie/session 保存方式不能直接复用于本项目 App Token；继续使用现有系统密钥保险库，并补上退出/关闭记住期间的迟到加密写入保护。没有安全系统密钥后端时保持临时会话。实际范围见 [歌词与封面验证](validation/2026-10-26-presentation.md) 与 [凭据说明](credentials.md)。
+参考项目的网页 Cookie/session 保存方式不能直接复用于本项目 App Token；最初继续使用系统密钥保险库并补上迟到写入保护，随后按用户要求改为本地随机密钥与 SQLite，以消除新保存对系统密钥服务的依赖；保护边界见凭据说明。实际范围见 [歌词与封面验证](validation/2026-10-26-presentation.md) 与 [凭据说明](credentials.md)。

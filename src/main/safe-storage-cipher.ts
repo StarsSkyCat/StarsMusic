@@ -1,7 +1,7 @@
 import { safeStorage } from 'electron';
 import type { VaultCipher } from './credential-vault.ts';
 
-// Linux 的 basic_text 只是可逆编码，不是系统密钥保护；必须拒绝持久化。
+// 仅用于旧加密文件迁移；不接受旧 basic_text 作为受保护的凭据来源。
 const secureLinuxBackends = new Set(['gnome_libsecret', 'kwallet', 'kwallet5', 'kwallet6']);
 
 export class SafeStorageCipher implements VaultCipher {

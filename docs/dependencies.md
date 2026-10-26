@@ -17,7 +17,7 @@
 | qrcode | 1.5.4 | 后台把官方登录挑战 URL 转为内存 PNG | MIT |
 | @types/qrcode | 1.5.6 | 二维码生成器类型检查 | MIT |
 
-Vue、@lucide/vue 和 qrcode 为应用依赖，其余为开发依赖。SQLite、Pinia、Router 和打包器未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Electron 内置 `safeStorage` 与 Node 文件 API，没有新增密钥管理依赖。
+Vue、@lucide/vue 和 qrcode 为应用依赖，其余为开发依赖。SQLite 凭据库使用 Node/Electron 内置 node:sqlite；Pinia、Router 和发行打包器尚未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Node 内置 crypto/fs 与 node:sqlite，没有新增 npm SQLite 绑定或密钥管理依赖。node:sqlite 随固定的 Electron 45/Node 24 运行时提供，Node 为 MIT、SQLite 核心为公有领域；完整运行时许可仍随发行物审查。safeStorage 仅用于旧加密 JSON 的可选迁移。
 
 ## 系统音频依赖
 

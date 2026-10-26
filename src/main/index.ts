@@ -1,3 +1,6 @@
+import { CredentialStoreClient } from './credential-store-client';
+import { LocalKeyCipher } from './local-key-cipher';
+import { migrateLegacyCredentials } from './credential-migration';
 import { presentationChannels } from '../../packages/contracts/src/presentation';
 import { PresentationController } from '../../packages/playback/src/presentation';
 import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
@@ -119,13 +122,18 @@ async function restoreSavedCredentials(): Promise<void> {
   broadcastCredentials();
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   const uiSession = session.fromPartition('starsmusic-ui');
   uiSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   uiSession.setPermissionCheckHandler(() => false);
   uiSession.on('will-download', (event) => event.preventDefault());
   Menu.setApplicationMenu(null);
-  vault = new CredentialVault(path.join(app.getPath('userData'), 'credentials.json'), new SafeStorageCipher());
+  const profile = app.getPath('userData');
+  const credentialStore = new CredentialStoreClient(fileURLToPath(new URL('./credential-store-worker.js', import.meta.url)), path.join(profile, 'credentials.sqlite'));
+  const credentialCipher = new LocalKeyCipher(path.join(profile, 'keys', 'login.key'), async () => Object.keys((await credentialStore.read())?.entries ?? {}).length > 0);
+  try { await migrateLegacyCredentials(credentialStore, credentialCipher, new SafeStorageCipher(), path.join(profile, 'credentials.json')); }
+  catch { /* 旧加密文件保留，不能导入时由用户重新扫码。 */ }
+  vault = new CredentialVault(credentialStore, credentialCipher);
   netease.subscribeCredentials((bundle) => {
     const current = netease.snapshot();
     if (quitting || current.status !== 'connected' || current.account?.id !== bundle.accountId) return;
@@ -316,7 +324,7 @@ app.on('before-quit', (event) => {
   quitting = true;
   presentation.dispose();
   selectionGeneration++;
-  void Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose()]).then(() => app.quit());
+  void Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose(), vault?.close()]).then(() => app.quit());
 });
 app.on('will-quit', () => {
   ipcMain.removeHandler(desktopChannels.getAppInfo);

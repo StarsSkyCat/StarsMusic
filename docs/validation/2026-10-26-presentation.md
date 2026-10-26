@@ -1,5 +1,7 @@
 # 当前歌词、封面与队列修复验证
 
+> 历史验证记录：登录保存随后按用户要求改为本地随机密钥 + SQLite；当前行为与结果见 [SQLite 记录](2026-10-26-sqlite-credentials.md)。
+
 日期：2026-10-26。环境：Linux x86_64、Node.js 24、Electron 45、系统 mpv 0.41.0 / PipeWire；不代表 Windows/macOS 或发行包验证。
 
 ## 本次范围
