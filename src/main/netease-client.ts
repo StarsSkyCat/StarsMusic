@@ -86,15 +86,16 @@ export class NeteaseClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#requests.delete(requestId); reject(new DomainError('timeout')); this.#fail(worker);
-      }, 30000);
+      }, operation === 'browse' ? 45000 : 30000);
       this.#requests.set(requestId, { resolve, reject, timer });
       worker.postMessage({ operation, requestId, ...args });
     });
   }
   async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
+    const generation = this.#state.generation;
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
-      if (!this.#disposed) {
+      if (!this.#disposed && generation === this.#state.generation) {
         this.#state = parseNeteaseSnapshot({ ...this.#state, error: normalizeError(error), revision: this.#state.revision + 1 });
         for (const listener of this.#listeners) listener(this.#state);
       }

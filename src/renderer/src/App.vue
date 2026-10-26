@@ -36,6 +36,9 @@ import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
 import GlassScene from './GlassScene.vue';
 import AppearancePanel from './AppearancePanel.vue';
+import NeteaseExplore from './NeteaseExplore.vue';
+import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
+import type { CatalogRequest } from '../../../packages/contracts/src/netease-catalog';
 import {
   parsePresentationSnapshot,
   type PresentationSnapshot,
@@ -55,6 +58,8 @@ const selected = ref<string[]>([]);
 const queueDialog = ref<HTMLDialogElement>();
 const nowPlayingOpen = ref(false);
 const selectedPlaylistId = ref<string>();
+const neteaseTab = ref<'hot' | 'playlists' | 'search' | 'owned'>('hot');
+const neteaseState = computed(() => providers.netease.state.value as NeteaseSnapshot);
 let browsingScroll = 0;
 const backLabel = computed(() =>
   view.value === 'library'
@@ -291,8 +296,22 @@ function selectAll(): void {
 }
 async function openPlaylist(provider: Provider, id: string): Promise<void> {
   navigate(provider);
+  if (provider === 'netease') neteaseTab.value = 'owned';
   selectedPlaylistId.value = id;
   await providers[provider].run((api) => api.loadPlaylist(id, 0));
+}
+async function browseNetease(request: CatalogRequest): Promise<void> {
+  await providers.netease.run(() => window.starsMusic!.netease.browse(request));
+}
+async function enqueueCatalog(ids: string[]): Promise<void> {
+  const generation = neteaseState.value.generation;
+  let count = 0;
+  for (const id of ids) {
+    if (view.value !== 'netease' || neteaseState.value.generation !== generation) break;
+    if (!(await addNext(id, true))) break;
+    count++;
+  }
+  if (count) notify(`已将 ${count} 首歌曲加入下一首播放`);
 }
 async function refreshInfo(): Promise<void> {
   loading.value = true;
@@ -334,6 +353,11 @@ function shortcuts(event: KeyboardEvent): void {
   }
   if (event.key === '/' && view.value !== 'settings' && !nowPlayingOpen.value) {
     event.preventDefault();
+    if (view.value === 'netease' && !selectedPlaylistId.value) {
+      neteaseTab.value = 'search';
+      void nextTick(() => mainPane.value?.querySelector<HTMLInputElement>('.catalog-search input')?.focus());
+      return;
+    }
     queryInput.value?.focus();
   }
 }
@@ -464,7 +488,7 @@ onUnmounted(() => {
           <span>{{ nowPlayingOpen ? '聆听空间' : '我的音乐' }}</span
           ><ChevronRight :size="13" /><strong>{{ title }}</strong>
         </div>
-        <label v-if="view !== 'settings' && !nowPlayingOpen" class="search-field"
+        <label v-if="view !== 'settings' && (view !== 'netease' || selectedPlaylistId) && !nowPlayingOpen" class="search-field"
           ><Search :size="17" /><input
             ref="queryInput"
             v-model="query"
@@ -595,17 +619,19 @@ onUnmounted(() => {
               </button>
             </div>
           </section>
-          <div v-if="view !== 'library' && !selectedPlaylistId" class="page-heading">
+          <div v-if="view !== 'library' && !selectedPlaylistId" class="page-heading" :class="{ 'netease-heading': view === 'netease' }">
             <div>
               <span class="eyebrow">{{
-                view === 'local' ? 'ON YOUR DEVICE' : 'CONNECTED TO YOUR MUSIC'
+                view === 'local' ? 'ON YOUR DEVICE' : view === 'netease' ? 'EXPLORE NETEASE MUSIC' : 'CONNECTED TO YOUR MUSIC'
               }}</span>
               <h1>{{ title }}</h1>
               <p>
                 {{
                   view === 'local'
                     ? '把收藏的声音，留在身边。本次导入仅保留在当前会话。'
-                    : '熟悉的歌单，新的聆听方式。'
+                    : view === 'netease'
+                      ? '热歌榜、发现歌单，搜索下一首喜欢的。'
+                      : '熟悉的歌单，新的聆听方式。'
                 }}
               </p>
             </div>
@@ -632,8 +658,22 @@ onUnmounted(() => {
               </div>
             </div>
           </section>
+          <NeteaseExplore
+            v-if="view === 'netease' && !selectedPlaylistId"
+            v-model:tab="neteaseTab"
+            :state="neteaseState"
+            :current-id="currentTrack?.provider === 'netease' ? currentTrack.sourceId : undefined"
+            :error="providers.netease.error.value"
+            @browse="browseNetease"
+            @play="play"
+            @next="addNext"
+            @enqueue="enqueueCatalog"
+            @open-owned="id => openPlaylist('netease', id)"
+            @load-owned="providers.netease.run(api => api.loadPlaylists())"
+            @manage="navigate('settings')"
+          />
           <div
-            v-if="activeProvider && providerState && providerState.status !== 'connected'"
+            v-if="activeProvider === 'kugou' && providerState && providerState.status !== 'connected'"
             class="provider-onboarding"
           >
             <ProviderAccount
@@ -660,7 +700,7 @@ onUnmounted(() => {
             </aside>
           </div>
           <section
-            v-if="view !== 'local' && !selectedPlaylistId"
+            v-if="view !== 'local' && view !== 'netease' && !selectedPlaylistId"
             class="playlist-section"
             aria-labelledby="playlists-title"
           >
@@ -902,7 +942,7 @@ onUnmounted(() => {
             </section>
           </details>
           <p class="settings-footnote">
-            StarsMusic · Linux 开发预览 / 本地目录扫描与在线搜索仍在规划中。
+            StarsMusic · Linux 开发预览 / 本地目录扫描与酷狗搜索仍在规划中。
           </p>
         </template>
       </div>

@@ -218,6 +218,10 @@ test('匿名热歌与公开歌单真实归一化路径、登记 ID 与分页顺�
     await assert.rejects(instance.browse({ kind: 'playlist', id: '666', offset: 0 }));
     await instance.browse({ kind: 'playlist', id: '99', offset: 0 });
     assert.equal(instance.snapshot().catalog.playlist?.name, '合成公开歌单');
+    transport.handlers.set('playlist', async () => { throw new DomainError('network'); });
+    await instance.browse({ kind: 'playlist', id: '99', offset: 0 });
+    assert.equal(instance.snapshot().catalog.status, 'error');
+    assert.equal(instance.snapshot().catalog.playlist?.id, '99');
     await assert.rejects(instance.resolveTrack('1', instance.snapshot().generation));
   } finally { instance.dispose(); }
 });

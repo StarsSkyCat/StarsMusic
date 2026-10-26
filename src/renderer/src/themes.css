@@ -180,3 +180,36 @@ dialog::backdrop { background: #10172045; }
   .sidebar, .player, .library-current, .library-start-note { background: var(--canvas); }
   .queue-drawer { background: var(--canvas); }
 }
+
+/* 网易云发现与在线搜索：沿用双主题语义颜色。 */
+.catalog-tabs { display: flex; gap: 7px; padding: 6px; border: 1px solid var(--line); background: var(--glass); border-radius: 18px; margin-bottom: 20px; flex-wrap: wrap; }
+.catalog-tabs button { flex: 1; border-color: transparent; box-shadow: none; background: transparent; color: var(--muted); font-size: 12px; white-space: nowrap; padding-inline: 12px; }
+.catalog-tabs button.active { color: var(--accent); border-color: var(--active-edge); background: var(--active); }
+.catalog-login-note { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--muted); font-size: 11px; margin: -5px 3px 20px; line-height: 1.8; }
+.catalog-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 23px; margin-bottom: 22px; border: 1px solid var(--glass-edge); border-radius: 24px; background: radial-gradient(ellipse at 100% 0, #eeb8c50e, transparent 70%), var(--glass); }
+.catalog-heading h2 { font-size: 23px; line-height: 1.5; font-weight: 600; margin-top: 8px; overflow-wrap: anywhere; }
+.catalog-heading p { color: var(--muted); font-size: 11px; line-height: 1.8; margin-top: 9px; }
+.catalog-hot-symbol { display: grid; place-items: center; color: var(--rose); height: 58px; width: 58px; flex-shrink: 0; border-radius: 18px; background: #d78caa0a; border: 1px solid #d78caa30; transform: rotate(-7deg); }
+.catalog-filters { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 0 2px 20px; }
+.catalog-filters label { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+.catalog-filters select { min-height: 42px; padding: 8px 35px 8px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); color: var(--text); font: inherit; cursor: pointer; }
+.catalog-filters select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.catalog-search { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 5px 0 22px; }
+.catalog-search label { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 160px; padding: 13px 16px; border: 1px solid var(--line); border-radius: 100px; background: var(--glass); color: var(--muted); }
+.catalog-search label:focus-within { border-color: var(--accent); }
+.catalog-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 12px; }
+.catalog-search input::placeholder { color: var(--muted); }
+.catalog-search-types { display: flex; gap: 3px; }
+.catalog-search-types button { background: transparent; border-color: transparent; box-shadow: none; min-height: 42px; padding: 8px 12px; color: var(--muted); font-size: 11px; }
+.catalog-search-types button[aria-pressed='true'] { color: var(--accent); background: var(--active); border-color: var(--active-edge); }
+.catalog-loading { display: grid; place-items: center; min-height: 160px; color: var(--muted); font-size: 13px; border: 1px solid var(--line); border-radius: 22px; background: var(--glass); }
+.catalog-pagination { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 24px; }
+.catalog-pagination > span { color: var(--muted); font-size: 11px; text-align: center; }
+.catalog-back { margin-bottom: 12px; }
+.netease-explore > .error-message .text-button { margin-left: 12px; }
+@media (max-width: 1000px) { .catalog-tabs button { padding-inline: 8px; gap: 6px; } .catalog-search-types { width: 100%; } }
+@media (max-width: 760px) { .catalog-heading { padding: 22px; } .catalog-heading h2 { font-size: 22px; } .catalog-tabs button { flex-basis: 40%; } .catalog-login-note { align-items: flex-start; } .catalog-hot-symbol { display: none; } .catalog-pagination { gap: 8px; } .catalog-pagination button { padding-inline: 10px; font-size: 10px; } }
+.netease-heading { padding-top: 12px; padding-bottom: 18px; }
+.catalog-heading-plain { border: 0; background: transparent; box-shadow: none; padding: 8px 3px 4px; margin-bottom: 18px; }
+.catalog-heading-plain .eyebrow { display: none; }
+.catalog-heading-plain h2 { font-size: 21px; margin-top: 0; }

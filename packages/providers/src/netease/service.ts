@@ -311,7 +311,8 @@ export class NeteaseService {
     this.#update({ catalog: parseCatalog({ ...previous, kind: request.kind, offset: request.offset,
       ...(request.kind === 'search' ? { query: request.query, searchType: request.searchType } : {}),
       ...(request.kind === 'hot' || request.kind === 'playlists' ? { category: request.category, order: request.order } : {}),
-      playlist: undefined, tracks: [], playlists: [], more: false, total: 0, status: 'loading', error: undefined }) });
+      playlist: request.kind === 'playlist' ? this.#publicPlaylists.get(request.id) : undefined,
+      tracks: [], playlists: [], more: false, total: 0, status: 'loading', error: undefined }) });
     try {
       const result = await fetchCatalog(request, previous, this.#publicPlaylists, transport, signal);
       if (!current()) return this.#state;

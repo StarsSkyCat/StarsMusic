@@ -8,6 +8,7 @@ defineProps<{
   selected: readonly string[];
   currentId?: string | undefined;
   removable?: boolean;
+  rowOffset?: number;
 }>();
 defineEmits<{
   select: [id: string];
@@ -50,7 +51,7 @@ defineEmits<{
         />
         <span class="row-number"
           ><AudioLines v-if="track.id === currentId" :size="16" /><span v-else>{{
-            String(index + 1).padStart(2, '0')
+            String(index + 1 + (rowOffset ?? 0)).padStart(2, '0')
           }}</span></span
         >
         <button
