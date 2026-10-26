@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
 import { parseCredentialBundle, type KugouCredentialBundle } from '../../../contracts/src/credentials.ts';
-import { initialKugouSnapshot, kugouId, parseKugouSnapshot, type KugouSnapshot, type KugouTrack, type KugouLoginDiagnostic } from '../../../contracts/src/kugou.ts';
+import { initialKugouSnapshot, kugouId, kugouTrackPageSize, parseKugouSnapshot, type KugouSnapshot, type KugouTrack, type KugouLoginDiagnostic } from '../../../contracts/src/kugou.ts';
 import { parseStreamResolution, type StreamResolution } from '../../../contracts/src/music.ts';
 import { allowedKugouMediaHost } from '../../../contracts/src/media-policy.ts';
 import { nonNegativeInteger, record, text } from '../../../contracts/src/validation.ts';
@@ -18,7 +18,7 @@ function success(value: unknown): Record<string, unknown> {
   return body;
 }
 interface BackendTrack { track: KugouTrack; hash: string }
-const trackPageSize = 300;
+const trackPageSize = kugouTrackPageSize;
 let loggedTrackRow = false;
 function numericId(value: unknown): string {
   const id = apiId(value); if (!/^\d{1,30}$/.test(id)) throw new DomainError('invalid-response'); return id;

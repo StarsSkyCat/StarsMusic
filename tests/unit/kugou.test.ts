@@ -249,5 +249,41 @@ test('真实 transport 固定 App 1005 渠道、拒绝重定向与安全验证�
       return new Response(JSON.stringify(ok({})));
     };
     await transport.call('stream', { hash: 'a'.repeat(32), freePart: true }, new AbortController().signal);
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.pagesize, 300);
+      assert.equal(body.page, 2);
+      assert.equal(body.listid, '1');
+      return new Response(JSON.stringify(ok({ info: [] })));
+    };
+    await transport.call('playlist', { id: '1', type: 0, page: 2 }, new AbortController().signal);
   } finally { transport.clear(); globalThis.fetch = original; }
+});
+
+
+test('酷狗曲目按 300 条实际分页，第二页曲目的展示 ID 与取链 hash 不错位', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  const hashOf = (n: number) => n.toString(16).padStart(32, '0');
+  try {
+    await connect(service); await service.loadPlaylists();
+    const pages: unknown[] = [];
+    transport.handlers.set('playlist', async (data) => {
+      pages.push(data.page);
+      const indexes = data.page === 1 ? Array.from({ length: 300 }, (_, i) => i) : [300];
+      return ok({ count: 301, info: indexes.map(i => ({ hash: hashOf(i), name: `合成曲目 ${i}`, duration: 30 })) });
+    });
+    await service.loadPlaylist('1', 0);
+    assert.equal(service.snapshot().tracks.length, 300);
+    assert.equal(service.snapshot().tracksMore, true);
+    await service.loadPlaylist('1', service.snapshot().nextTrackOffset);
+    assert.deepEqual(pages, [1, 2]);
+    assert.equal(service.snapshot().tracks.length, 301);
+    assert.equal(service.snapshot().tracks[300]?.name, '合成曲目 300');
+    assert.equal(service.snapshot().tracksMore, false);
+    transport.handlers.set('stream', async data => {
+      assert.equal(data.hash, hashOf(300));
+      return { ...stream, hash: hashOf(300) };
+    });
+    assert.equal((await service.resolveTrack(hashOf(300), service.snapshot().generation)).track.id, hashOf(300));
+  } finally { service.dispose(); }
 });

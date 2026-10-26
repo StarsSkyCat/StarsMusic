@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { kugouTrackPageSize } from '../../../contracts/src/kugou.ts';
 import { DomainError } from '../../../contracts/src/errors.ts';
 import { record, text } from '../../../contracts/src/validation.ts';
 import { parseApiJson } from '../api-json.ts';
@@ -69,7 +70,7 @@ export class DirectKugouTransport implements KugouTransport {
     } else if (endpoint === 'playlists') {
       params.plat = '1'; body = JSON.stringify({ userid: this.#userid, token: this.#token, total_ver: 979, type: 2, page: data.page, pagesize: 50 });
     } else if (endpoint === 'playlist') {
-      body = JSON.stringify({ listid: data.id, userid: this.#userid, type: data.type, page: data.page, pagesize: 50, area_code: 1, allplatform: 1, show_cover: 1, token: this.#token });
+      body = JSON.stringify({ listid: data.id, userid: this.#userid, type: data.type, page: data.page, pagesize: kugouTrackPageSize, area_code: 1, allplatform: 1, show_cover: 1, token: this.#token });
     } else if (endpoint === 'stream') {
       // 歌单/搜索数据里的 album_id/album_audio_id 可能与主 hash 错配，带上会被平台带到其他文件。
       // 固定 0，让平台只按 hash 解析；IsFreePart 默认 0，避免返回另一条试听音频。
