@@ -5,6 +5,7 @@ import { credentialChannels, credentialProviderIds, parseCredentialStatus, type 
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
 import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/kugou';
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
+import { parseCatalogRequest, type CatalogRequest } from '../../packages/contracts/src/netease-catalog';
 import { appearanceChannels, parseThemePreference, type ThemePreference } from '../../packages/contracts/src/appearance';
 
 const invokePlayback = async (channel: string, ...args: unknown[]) => {
@@ -59,6 +60,7 @@ const api: DesktopApi = Object.freeze({
     },
   }),
   netease: Object.freeze({
+    browse: (request: CatalogRequest) => invokeNetease(neteaseChannels.browse, parseCatalogRequest(request)),
     getState: () => invokeNetease(neteaseChannels.getState),
     startLogin: () => invokeNetease(neteaseChannels.startLogin),
     cancelLogin: () => invokeNetease(neteaseChannels.cancelLogin),

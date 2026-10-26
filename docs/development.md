@@ -40,6 +40,7 @@ pnpm test:e2e
 - typecheck 分别检查主进程/preload/测试与 Vue 页面，均为严格模式。
 - test 使用 Node 内置测试器验证 IPC、领域契约、会话竞态和两个平台的白名单投影；不依赖图形会话。
 - probe:netease 显式联网探测匿名二维码 key 端点，只报告结果，不输出 key 或二维码；不在 CI 运行，也不替代用户扫码验证。
+- probe:netease-discovery 显式匿名联网检查热歌分页、公开歌单/详情及歌曲/歌单搜索，只输出归一化计数，不登录、不写凭据，CI 不运行。
 - probe:kugou 显式联网验证酷狗设备注册与匿名扫码挑战，只报告固定基线和通过状态，不输出设备标识、key、二维码或响应原文；不登录账号。
 - test:playback 使用实际 mpv 与合成 WAV，显式指定 null 输出，验证本地/本机网关音频、试听上限、切歌、错误与清理；不调用平台、不需要账号。需要 Linux 与 mpv，缺失时失败。
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。

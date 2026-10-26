@@ -9,6 +9,8 @@ export const endpoints = {
   account: ['/api/nuser/account/get', 'weapi'], playlists: ['/api/user/playlist', 'weapi'],
   playlist: ['/api/v6/playlist/detail', 'eapi'], songs: ['/api/v3/song/detail', 'weapi'],
   stream: ['/api/song/enhance/player/url', 'eapi'], lyric: ['/api/song/lyric', 'weapi'],
+  search: ['/api/cloudsearch/pc', 'weapi'], publicPlaylists: ['/api/playlist/list', 'weapi'],
+  toplists: ['/api/toplist', 'weapi'],
 } as const;
 export type NeteaseEndpoint = keyof typeof endpoints;
 export interface NeteaseTransportSession {

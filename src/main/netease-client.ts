@@ -10,7 +10,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
+type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;

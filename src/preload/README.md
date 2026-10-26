@@ -9,3 +9,5 @@ netease 与 kugou 各自只暴露读状态、扫码/取消/本地退出、读取
 credentials 只暴露 getStatus、setRemember、clear 和 onChanged；不暴露密文、账号 ID、昵称或文件路径。
 
 appearance 仅暴露 getPreference() / setPreference(system | light | dark)，请求和响应都校验枚举；不暴露任意设置、文件路径或文件读写。
+
+netease.browse 只接受热歌、分类歌单、歌曲/歌单搜索及已登记公开歌单详情的领域联合参数；同时检查关键词、分类、偏移与 ID，不接受端点、Cookie、媒体 URL 或任意请求头。

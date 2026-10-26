@@ -205,7 +205,8 @@ void app.whenReady().then(async () => {
       if (channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) {
         if (channel === neteaseChannels.playTrack) selectionGeneration++;
         const state = netease.snapshot();
-        const track = state.tracks.find((track) => track.id === argument.id);
+        const track = state.tracks.find((track) => track.id === argument.id)
+          ?? state.catalog.tracks.find((track) => track.id === argument.id);
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
         const resolve = (signal: AbortSignal) => netease.resolveTrack(track.id, state.generation, signal);
         if (channel === neteaseChannels.enqueueNext) {
@@ -234,6 +235,7 @@ void app.whenReady().then(async () => {
         return snapshot;
       }
       if (channel === neteaseChannels.loadPlaylists) return netease.command('loadPlaylists');
+      if (channel === neteaseChannels.browse) return netease.command('browse', { catalog: argument.catalog });
       if (channel === neteaseChannels.loadPlaylist) return netease.command('loadPlaylist', { id: argument.id, offset: argument.offset });
       return netease.command('getState');
     });

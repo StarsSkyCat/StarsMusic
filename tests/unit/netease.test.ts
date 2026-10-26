@@ -5,6 +5,7 @@ import type { NeteaseCredentialBundle } from '../../packages/contracts/src/crede
 import { initialNeteaseSnapshot, neteaseChannels, parseNeteaseArguments, parseNeteaseSnapshot } from '../../packages/contracts/src/netease.ts';
 import { apiId, NeteaseService, parseNeteaseStream } from '../../packages/providers/src/netease/service.ts';
 import { parseApiJson, type NeteaseEndpoint, type NeteaseTransport, type NeteaseTransportSession } from '../../packages/providers/src/netease/transport.ts';
+import { initialCatalog, parseCatalog, parseCatalogRequest } from '../../packages/contracts/src/netease-catalog.ts';
 
 // 明确标识的合成响应；不连接平台，不含真实二维码、凭据或账号。
 const fakePng = 'data:image/png;base64,c3ludGhldGlj';
@@ -187,5 +188,97 @@ test('网易云歌词和封面仅对已登记曲目读取，公开歌单不携�
     const old = instance.getPresentation('7', instance.snapshot().generation);
     instance.logout(); pendingLyric.resolve({ code: 200, lrc: { lyric: '[00:00]旧歌词' } });
     await assert.rejects(old);
+  } finally { instance.dispose(); }
+});
+
+test('发现与搜索契约限制类型、关键词、分页、ID，投影不暴露额外字段', () => {
+  const search = { kind: 'search', query: '  合成歌曲  ', searchType: 'songs', offset: 0 };
+  assert.deepEqual(parseNeteaseArguments(neteaseChannels.browse, [search]).catalog, { ...search, query: '合成歌曲' });
+  for (const value of [{ ...search, query: '' }, { ...search, query: 'x'.repeat(101) }, { ...search, query: 'x\n' }, { ...search, offset: 1 }, { ...search, offset: 3030 }, { ...search, searchType: 'url' }, { ...search, url: 'https://example.invalid/' }, { kind: 'playlist', id: 'https://example.invalid/', offset: 0 }]) assert.throws(() => parseCatalogRequest(value));
+  assert.throws(() => parseNeteaseArguments(neteaseChannels.browse, [search, 'extra']));
+  assert.deepEqual(parseCatalog({ ...initialCatalog(), privateMarker: 'hidden' }), initialCatalog());
+  assert.throws(() => parseCatalog({ ...initialCatalog(), tracks: Array(31).fill({}) }));
+});
+
+test('匿名热歌与公开歌单真实归一化路径、登记 ID 与分页顺序，不冒充登录', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  transport.handlers.set('toplists', async () => ({ code: 200, list: [{ id: 123, name: '云音乐热歌榜', trackCount: 32 }] }));
+  transport.handlers.set('playlist', async data => ({ code: 200, playlist: { id: data.id, trackIds: Array.from({ length: 32 }, (_, index) => ({ id: index + 1 })) } }));
+  transport.handlers.set('songs', async data => ({ code: 200, songs: (JSON.parse(data.c as string) as { id: string }[]).reverse().map(({ id }) => ({ id, name: `合成 ${id}`, ar: [{ name: '合成歌手' }], dt: 30000 })) }));
+  transport.handlers.set('publicPlaylists', async data => { assert.equal(data.cat, '华语'); assert.equal(data.order, 'new'); return { code: 200, playlists: [{ id: 99, name: '合成公开歌单', trackCount: 32, coverImgUrl: 'https://private.invalid/' }], more: false, total: 1 }; });
+  try {
+    await instance.browse({ kind: 'hot', category: '全部', order: 'hot', offset: 0 });
+    assert.equal(instance.snapshot().status, 'signed-out');
+    assert.deepEqual(instance.snapshot().catalog.tracks.map(track => track.id), Array.from({ length: 30 }, (_, index) => String(index + 1)));
+    assert.equal(instance.snapshot().catalog.more, true);
+    await instance.browse({ kind: 'hot', category: '全部', order: 'hot', offset: 30 });
+    assert.deepEqual(instance.snapshot().catalog.tracks.map(track => track.id), ['31', '32']); assert.equal(instance.snapshot().catalog.more, false);
+    await instance.browse({ kind: 'playlists', category: '华语', order: 'new', offset: 0 });
+    assert.equal(JSON.stringify(instance.snapshot()).includes('private.invalid'), false);
+    await assert.rejects(instance.browse({ kind: 'playlist', id: '666', offset: 0 }));
+    await instance.browse({ kind: 'playlist', id: '99', offset: 0 });
+    assert.equal(instance.snapshot().catalog.playlist?.name, '合成公开歌单');
+    await assert.rejects(instance.resolveTrack('1', instance.snapshot().generation));
+  } finally { instance.dispose(); }
+});
+
+test('歌曲/歌单搜索分别归一化，空结果与限流不伪造成功数据', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  transport.handlers.set('search', async data => {
+    assert.equal(data.limit, 30); assert.equal(data.offset, 30);
+    return data.type === 1 ? { code: 200, result: { songCount: 32, songs: [{ id: 7, name: '合成歌曲', artists: [{ name: '合成歌手' }], duration: 30000, album: { name: '合成专辑', picUrl: 'https://p1.music.126.net/synthetic.jpg' } }] } }
+      : { code: 200, result: { playlistCount: 31, playlists: [{ id: 9, name: '合成搜索歌单', trackCount: 1 }] } };
+  });
+  try {
+    await instance.browse({ kind: 'search', query: '合成', searchType: 'songs', offset: 30 });
+    assert.equal(instance.snapshot().catalog.tracks[0]?.durationMs, 30000);
+    assert.equal(instance.snapshot().catalog.more, true);
+    assert.equal(JSON.stringify(instance.snapshot()).includes('synthetic.jpg'), false);
+    await instance.browse({ kind: 'search', query: '合成', searchType: 'playlists', offset: 30 });
+    assert.equal(instance.snapshot().catalog.playlists[0]?.id, '9');
+    transport.handlers.set('search', async () => ({ code: 200, result: { songCount: 0 } }));
+    await instance.browse({ kind: 'search', query: '不存在', searchType: 'songs', offset: 0 });
+    assert.equal(instance.snapshot().catalog.status, 'ready'); assert.deepEqual(instance.snapshot().catalog.tracks, []);
+    transport.handlers.set('search', async () => ({ code: 429, message: 'upstream secret' }));
+    await instance.browse({ kind: 'search', query: '合成', searchType: 'songs', offset: 0 });
+    assert.equal(instance.snapshot().catalog.status, 'error'); assert.equal(instance.snapshot().catalog.error?.code, 'rate-limited');
+    assert.equal(JSON.stringify(instance.snapshot()).includes('upstream secret'), false);
+  } finally { instance.dispose(); }
+});
+
+test('新搜索和退出会取消旧请求，旧搜索成功/失败均不能覆盖新结果', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  const pending = deferred<unknown>(); let oldSignal: AbortSignal | undefined;
+  transport.handlers.set('search', async (data, signal) => {
+    if (data.s === '旧') { oldSignal = signal; return pending.promise; }
+    return { code: 200, result: { songCount: 1, songs: [{ id: 8, name: '新结果', ar: [], dt: 1000 }] } };
+  });
+  try {
+    const old = instance.browse({ kind: 'search', query: '旧', searchType: 'songs', offset: 0 });
+    await instance.browse({ kind: 'search', query: '新', searchType: 'songs', offset: 0 });
+    pending.resolve({ code: 403 }); await old;
+    assert.equal(oldSignal?.aborted, true); assert.equal(instance.snapshot().catalog.tracks[0]?.id, '8');
+    const late = deferred<unknown>(); transport.handlers.set('search', async () => late.promise);
+    const operation = instance.browse({ kind: 'search', query: '迟到', searchType: 'songs', offset: 0 });
+    instance.logout(); late.resolve({ code: 200, result: { songCount: 0 } }); await operation;
+    assert.deepEqual(instance.snapshot().catalog, initialCatalog());
+  } finally { instance.dispose(); }
+});
+
+test('已登录搜索结果可按登记 ID 解析和取歌词，切账号清空发现登记', async () => {
+  const first = new FakeTransport(); const second = new FakeTransport(); second.account = 43;
+  let count = 0; const instance = service(() => count++ === 0 ? first : second);
+  first.handlers.set('search', async () => ({ code: 200, result: { songCount: 1, songs: [{ id: 7, name: '合成搜索曲目', ar: [], dt: 30000 }] } }));
+  first.handlers.set('stream', async data => { assert.equal(data.ids, '["7"]'); return { code: 200, data: [{ id: 7, code: 200, url: 'https://m1.music.126.net/synthetic', type: 'mp3' }] }; });
+  first.handlers.set('lyric', async () => ({ code: 200, lrc: { lyric: '[00:00]合成歌词' } }));
+  try {
+    await connect(instance);
+    await instance.browse({ kind: 'search', query: '合成', searchType: 'songs', offset: 0 });
+    const generation = instance.snapshot().generation;
+    assert.equal((await instance.resolveTrack('7', generation)).track.id, '7');
+    assert.equal((await instance.getPresentation('7', generation)).lyrics.length, 1);
+    instance.logout(); await connect(instance);
+    assert.deepEqual(instance.snapshot().catalog, initialCatalog());
+    await assert.rejects(instance.resolveTrack('7', instance.snapshot().generation));
   } finally { instance.dispose(); }
 });

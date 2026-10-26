@@ -1,10 +1,12 @@
 import { parseAppError, type AppError } from './errors.ts';
 import { choice, ContractValidationError, nonNegativeInteger, record, text } from './validation.ts';
+import { initialCatalog, parseCatalog, parseCatalogRequest, type CatalogRequest, type NeteaseCatalog } from './netease-catalog.ts';
 
 export const neteaseChannels = {
   getState: 'starsmusic:netease:get-state', startLogin: 'starsmusic:netease:start-login',
   cancelLogin: 'starsmusic:netease:cancel-login', logout: 'starsmusic:netease:logout',
   loadPlaylists: 'starsmusic:netease:load-playlists', loadPlaylist: 'starsmusic:netease:load-playlist',
+  browse: 'starsmusic:netease:browse',
   enqueueNext: 'starsmusic:netease:enqueue-next', playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
 } as const;
 export interface NeteasePlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
@@ -24,6 +26,7 @@ export interface NeteaseSnapshot {
   readonly nextTrackOffset: number;
   readonly busy: boolean;
   readonly error?: AppError;
+  readonly catalog: NeteaseCatalog;
 }
 export interface NeteaseApi {
   getState(): Promise<NeteaseSnapshot>;
@@ -32,6 +35,7 @@ export interface NeteaseApi {
   logout(): Promise<NeteaseSnapshot>;
   loadPlaylists(): Promise<NeteaseSnapshot>;
   loadPlaylist(id: string, offset: number): Promise<NeteaseSnapshot>;
+  browse(request: CatalogRequest): Promise<NeteaseSnapshot>;
   playTrack(id: string): Promise<void>;
   enqueueNext(id: string): Promise<void>;
   onStateChanged(listener: (state: NeteaseSnapshot) => void): () => void;
@@ -74,13 +78,15 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
     nextTrackOffset: status === 'connected' ? nonNegativeInteger(input.nextTrackOffset, 'netease.nextTrackOffset') : 0,
     ...(status === 'connected' && input.playlistId !== undefined ? { playlistId: neteaseId(input.playlistId) } : {}),
     busy: input.busy,
+    catalog: input.catalog === undefined ? initialCatalog() : parseCatalog(input.catalog),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),
   });
 }
 export function initialNeteaseSnapshot(): NeteaseSnapshot {
   return parseNeteaseSnapshot({ revision: 0, generation: 0, status: 'signed-out', playlists: [], tracks: [], playlistsMore: false, tracksMore: false, nextTrackOffset: 0, busy: false });
 }
-export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number } {
+export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number; catalog?: CatalogRequest } {
+  if (channel === neteaseChannels.browse && args.length === 1) return { catalog: parseCatalogRequest(args[0]) };
   if ((channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) && args.length === 1) return { id: neteaseId(args[0]) };
   if (channel === neteaseChannels.loadPlaylist && args.length === 2) {
     const offset = nonNegativeInteger(args[1], 'netease.offset');

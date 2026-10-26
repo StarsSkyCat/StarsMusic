@@ -60,3 +60,9 @@ SessionGeneration 每个平台只保留一个活动 SessionLease。租约包含�
 ## 外观偏好
 
 appearance.ts 定义 system / light / dark 三种 ThemePreference。appearance.getPreference 无参数，setPreference 只接受一个枚举；preload 与主进程双重校验，主进程仍验证可信主文档。公开选择以版本 1 保存到 userData/appearance.json，串行原子替换；renderer 不提供路径或任意键值。缺失、未知版本或损坏设置回退系统模式，保存失败保留旧选择。有效主题由 renderer 的 prefers-color-scheme 监听解析，显式浅色/暗色优先。
+
+## 网易云发现与搜索
+
+netease.browse 接受固定 CatalogRequest 联合：hot / playlists（分类、hot/new、偏移）、search（关键词、songs/playlists、偏移）、playlist（已登记的纯数字字符串 ID、偏移）。拒绝额外字段、URL、空白/超长/含控制字符的关键词、非 30 整数倍偏移与超过 3000 的偏移。主进程仍检查可信主文档，preload 与 worker 复核请求，不暴露任意端点。
+
+NeteaseSnapshot.catalog 独立显示公开浏览状态、分页元数据、每页最多 30 项曲目/歌单以及归一化错误；不携带图片原地址、Cookie 或播放地址。未登录可浏览公开元数据，不代表已登录；私人 playlists/tracks 仍在非连接状态下清空。登录/退出和换账号取消旧发现操作并清空登记；已登录搜索/榜单/公开歌单曲目沿用同一 ID 注册、播放解析和歌词读取规则。

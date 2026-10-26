@@ -5,7 +5,7 @@
 packages/providers/src/netease/crypto.ts 的 eapi/weapi 格式和公开协议常量参考 NeteaseCloudMusicApiEnhanced/api-enhanced 4.41.1，以 Node.js crypto 重新实现；所需端点字段同样以该版本为基线。没有复制参考播放器代码或视觉资产，也没有加载该 SDK 的服务器、日志、共享令牌文件或音源解锁模块。
 
 - 来源：[api-enhanced 4.41.1](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced/tree/2db6684453297ee86dec0492842f2320b08182d9)
-- 对应文件：util/crypto.js、util/config.json、module/login_qr_key.js、login_qr_check.js、user_account.js、user_playlist.js、playlist_detail.js、song_detail.js、song_url.js、lyric.js。
+- 对应文件：util/crypto.js、util/config.json、module/login_qr_key.js、login_qr_check.js、user_account.js、user_playlist.js、playlist_detail.js、song_detail.js、song_url.js、lyric.js、cloudsearch.js、top_playlist.js、toplist.js。
 - 提交：2db6684453297ee86dec0492842f2320b08182d9。
 - 原许可：[MIT](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced/blob/2db6684453297ee86dec0492842f2320b08182d9/LICENSE)。完整声明如下；项目整体许可仍未确定。
 

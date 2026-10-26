@@ -2,6 +2,10 @@ import { parseLrc } from '../lyrics.ts';
 import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
 import { loadArtwork, type LoadArtwork } from '../artwork.ts';
 import QRCode from 'qrcode';
+import { apiId, success, parseTracks } from './response.ts';
+export { apiId, parseTracks } from './response.ts';
+import { fetchCatalog } from './catalog.ts';
+import { parseCatalog, parseCatalogRequest, type CatalogRequest, type CatalogPlaylist } from '../../../contracts/src/netease-catalog.ts';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
 import { parseCredentialBundle, type NeteaseCredentialBundle } from '../../../contracts/src/credentials.ts';
 import { initialNeteaseSnapshot, neteaseId, parseNeteaseSnapshot, type NeteaseSnapshot, type NeteaseTrack } from '../../../contracts/src/netease.ts';
@@ -10,30 +14,6 @@ import { nonNegativeInteger, record, text } from '../../../contracts/src/validat
 import { SessionGeneration, type SessionLease } from '../session-generation.ts';
 import { DirectNeteaseTransport, type NeteaseTransport } from './transport.ts';
 
-export function apiId(value: unknown): string {
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
-  return neteaseId(value);
-}
-function success(value: unknown): Record<string, unknown> {
-  const body = record(value, 'netease.response');
-  if (body.code === 301 || body.code === 302) throw new DomainError('session-expired');
-  if (body.code === 403) throw new DomainError('permission-denied');
-  if (body.code === 429) throw new DomainError('rate-limited');
-  if (body.code !== 200) throw new DomainError('unavailable');
-  return body;
-}
-export function parseTracks(value: unknown): NeteaseTrack[] {
-  if (!Array.isArray(value)) throw new DomainError('invalid-response');
-  return value.map((item: unknown) => {
-    const raw = record(item, 'netease.song');
-    if (!Array.isArray(raw.ar)) throw new DomainError('invalid-response');
-    return {
-      id: apiId(raw.id), name: text(raw.name, 'netease.name'),
-      artists: raw.ar.map((artist: unknown) => text(record(artist, 'netease.artist').name, 'netease.artist.name')),
-      durationMs: nonNegativeInteger(raw.dt, 'netease.duration'),
-    };
-  });
-}
 export function parseNeteaseStream(value: unknown, id: string, now: number): StreamResolution {
   const body = success(value);
   if (!Array.isArray(body.data) || body.data.length !== 1) throw new DomainError('invalid-response');
@@ -95,6 +75,10 @@ export class NeteaseService {
   #knownTracks = new Map<string, NeteaseTrack>();
   #albums = new Map<string, { name?: string; cover?: string }>();
   #listBusy = false;
+  #catalogView = 0;
+  #catalogAbort: AbortController | undefined;
+  #guestTransport: NeteaseTransport | undefined;
+  #publicPlaylists = new Map<string, CatalogPlaylist>();
   #pollingLease: SessionLease | undefined;
 
   constructor(options: ServiceOptions = {}) { this.#options = options; }
@@ -107,7 +91,13 @@ export class NeteaseService {
     this.#state = parseNeteaseSnapshot({ ...this.#state, ...patch, revision: this.#state.revision + 1 });
     for (const listener of this.#listeners) listener(this.#state);
   }
+  #clearCatalog(): void {
+    this.#catalogView++; this.#catalogAbort?.abort(); this.#catalogAbort = undefined;
+    if (this.#guestTransport !== this.#transport) this.#guestTransport?.clear();
+    this.#guestTransport = undefined; this.#publicPlaylists.clear();
+  }
   #clear(): void {
+    this.#clearCatalog();
     clearTimeout(this.#timer); this.#timer = undefined;
     this.#transport?.clear(); this.#transport = undefined; this.#key = '';
     this.#knownTracks.clear(); this.#albums.clear(); this.#knownPlaylists.clear(); this.#playlistOffset = 0; this.#listBusy = false; this.#view++;
@@ -176,8 +166,9 @@ export class NeteaseService {
         if (!this.#sessions.isCurrent(lease)) return this.#state;
         const nickname = text(profile.nickname, 'netease.nickname');
         const connected = this.#sessions.activate({ provider: 'netease', clientChannel: 'netease-app', accountId: id });
+        this.#clearCatalog(); this.#knownTracks.clear(); this.#albums.clear();
         this.#lease = connected; this.#key = ''; clearTimeout(this.#timer);
-        this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, error: undefined });
+        this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, catalog: initialNeteaseSnapshot().catalog, error: undefined });
         this.#emitCredentials();
       } else throw new DomainError('invalid-response');
     } catch (error: unknown) {
@@ -233,8 +224,9 @@ export class NeteaseService {
       const nickname = text(profile.nickname, 'netease.nickname');
       if (!this.#sessions.isCurrent(lease)) return this.#state;
       const connected = this.#sessions.activate({ provider: 'netease', clientChannel: 'netease-app', accountId: id });
+      this.#clearCatalog(); this.#knownTracks.clear(); this.#albums.clear();
       this.#lease = connected;
-      this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, error: undefined });
+      this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, catalog: initialNeteaseSnapshot().catalog, error: undefined });
       this.#emitCredentials();
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
@@ -303,6 +295,49 @@ export class NeteaseService {
       });
     } catch (error: unknown) { if (view === this.#view) this.#operationError(lease, error); }
     return this.#state;
+  }
+  async browse(input: CatalogRequest): Promise<NeteaseSnapshot> {
+    const request = parseCatalogRequest(input);
+    if (request.kind === 'playlist' && !this.#publicPlaylists.has(request.id)) throw new DomainError('invalid-input');
+    const sequence = ++this.#catalogView;
+    this.#catalogAbort?.abort();
+    const controller = new AbortController(); this.#catalogAbort = controller;
+    const generation = this.#state.generation;
+    const connected = this.#state.status === 'connected';
+    const transport = connected ? this.#transport! : (this.#guestTransport ??= this.#options.transport?.() ?? new DirectNeteaseTransport());
+    const signal = connected && this.#lease ? AbortSignal.any([controller.signal, this.#lease.signal]) : controller.signal;
+    const previous = this.#state.catalog;
+    const current = () => sequence === this.#catalogView && generation === this.#state.generation && !signal.aborted;
+    this.#update({ catalog: parseCatalog({ ...previous, kind: request.kind, offset: request.offset,
+      ...(request.kind === 'search' ? { query: request.query, searchType: request.searchType } : {}),
+      ...(request.kind === 'hot' || request.kind === 'playlists' ? { category: request.category, order: request.order } : {}),
+      playlist: undefined, tracks: [], playlists: [], more: false, total: 0, status: 'loading', error: undefined }) });
+    try {
+      const result = await fetchCatalog(request, previous, this.#publicPlaylists, transport, signal);
+      if (!current()) return this.#state;
+      for (const playlist of result.catalog.playlists) this.#publicPlaylists.set(playlist.id, playlist);
+      if (result.catalog.playlist) this.#publicPlaylists.set(result.catalog.playlist.id, result.catalog.playlist);
+      for (const track of result.catalog.tracks) this.#knownTracks.set(track.id, track);
+      this.#rememberAlbums(result.originals);
+      this.#update({ catalog: result.catalog });
+    } catch (error: unknown) {
+      if (current()) {
+        const safe = normalizeError(error);
+        if (connected && safe.code === 'session-expired') this.#end('expired', safe);
+        else this.#update({ catalog: { ...this.#state.catalog, status: 'error', error: safe } });
+      }
+    }
+    return this.#state;
+  }
+  #rememberAlbums(songs: readonly unknown[]): void {
+    for (const value of songs) {
+      const row = record(value, 'netease.song');
+      const id = apiId(row.id);
+      if (!this.#knownTracks.has(id)) continue;
+      const raw = row.al ?? row.album;
+      const album = raw && typeof raw === 'object' ? record(raw, 'netease.album') : {};
+      this.#albums.set(id, { ...(typeof album.name === 'string' ? { name: album.name.slice(0, 500) } : {}), ...(typeof album.picUrl === 'string' ? { cover: album.picUrl } : {}) });
+    }
   }
   async getPresentation(id: string, generation: number): Promise<PresentationContent> {
     const { lease, transport } = this.#connected();
