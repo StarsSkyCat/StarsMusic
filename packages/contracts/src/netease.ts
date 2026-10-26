@@ -5,7 +5,7 @@ export const neteaseChannels = {
   getState: 'starsmusic:netease:get-state', startLogin: 'starsmusic:netease:start-login',
   cancelLogin: 'starsmusic:netease:cancel-login', logout: 'starsmusic:netease:logout',
   loadPlaylists: 'starsmusic:netease:load-playlists', loadPlaylist: 'starsmusic:netease:load-playlist',
-  playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
+  enqueueNext: 'starsmusic:netease:enqueue-next', playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
 } as const;
 export interface NeteasePlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
 export interface NeteaseTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number }
@@ -33,6 +33,7 @@ export interface NeteaseApi {
   loadPlaylists(): Promise<NeteaseSnapshot>;
   loadPlaylist(id: string, offset: number): Promise<NeteaseSnapshot>;
   playTrack(id: string): Promise<void>;
+  enqueueNext(id: string): Promise<void>;
   onStateChanged(listener: (state: NeteaseSnapshot) => void): () => void;
 }
 export function neteaseId(value: unknown): string {
@@ -80,7 +81,7 @@ export function initialNeteaseSnapshot(): NeteaseSnapshot {
   return parseNeteaseSnapshot({ revision: 0, generation: 0, status: 'signed-out', playlists: [], tracks: [], playlistsMore: false, tracksMore: false, nextTrackOffset: 0, busy: false });
 }
 export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number } {
-  if (channel === neteaseChannels.playTrack && args.length === 1) return { id: neteaseId(args[0]) };
+  if ((channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) && args.length === 1) return { id: neteaseId(args[0]) };
   if (channel === neteaseChannels.loadPlaylist && args.length === 2) {
     const offset = nonNegativeInteger(args[1], 'netease.offset');
     if (offset > 100000 || offset % 50 !== 0) throw new ContractValidationError('netease.offset');

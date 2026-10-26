@@ -9,7 +9,7 @@ import { MediaGateway } from './media-gateway.ts';
 
 export const audioExtensions = ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'aif', 'aiff'];
 interface PlayerTrack {
-  id: string; title: string; path?: string; provider?: OnlineProviderId;
+  id: string; title: string; artist?: string; detail?: string; path?: string; provider?: OnlineProviderId;
   resolve?: (signal: AbortSignal) => Promise<StreamResolution>;
 }
 interface PlayerOptions extends Pick<MpvOptions, 'executable' | 'audioOutput'> {
@@ -61,7 +61,7 @@ export class MusicPlayer {
       return Promise.resolve(this.reportError(appError('file-unavailable')));
     }
     this.#tracks = paths.map((file) => ({ id: randomUUID(), title: path.basename(file), path: file }));
-    this.#update({ queue: this.#tracks.map(({ id, title }) => ({ id, title })), currentIndex: null, status: 'idle' });
+    this.#update({ queue: this.#queue(), currentIndex: null, status: 'idle' });
     return this.#switch(0);
   }
 
@@ -71,19 +71,65 @@ export class MusicPlayer {
     return this.#switch(index);
   }
 
-  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>): Promise<PlaybackSnapshot> {
-    if (this.#disposed) return Promise.resolve(this.#state);
-    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider };
-    this.#tracks = [track];
-    this.#update({ queue: [{ id: track.id, title }], currentIndex: null, status: 'idle' });
-    return this.#switch(0);
+  #queue(): PlaybackSnapshot['queue'] {
+    return this.#tracks.map(({ id, title, provider, artist, detail }) => ({ id, title, provider: provider ?? 'local',
+      ...(artist ? { artist } : {}), ...(detail ? { detail } : {}),
+    }));
   }
+
+  moveNext(id: string): PlaybackSnapshot {
+    const currentId = this.#state.queue[this.#state.currentIndex ?? -1]?.id;
+    const index = this.#tracks.findIndex((track) => track.id === id);
+    if (index < 0) return this.reportError(appError('invalid-input'));
+    if (id === currentId) return this.#state;
+    const [track] = this.#tracks.splice(index, 1);
+    const currentIndex = this.#tracks.findIndex((track) => track.id === currentId);
+    this.#tracks.splice(currentIndex + 1, 0, track!);
+    this.#update({ queue: this.#queue(), currentIndex: currentId ? currentIndex : null });
+    return this.#state;
+  }
+
+  removeTrack(id: string): PlaybackSnapshot {
+    const currentId = this.#state.queue[this.#state.currentIndex ?? -1]?.id;
+    if (id === currentId) return this.#state;
+    if (!this.#tracks.some((track) => track.id === id)) return this.reportError(appError('invalid-input'));
+    this.#tracks = this.#tracks.filter((track) => track.id !== id);
+    this.#update({ queue: this.#queue(), currentIndex: currentId ? this.#tracks.findIndex((track) => track.id === currentId) : null });
+    return this.#state;
+  }
+
+  clearUpcoming(): PlaybackSnapshot {
+    this.#tracks = this.#tracks.slice(0, (this.#state.currentIndex ?? -1) + 1);
+    this.#update({ queue: this.#queue() });
+    return this.#state;
+  }
+
+  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string): Promise<PlaybackSnapshot> {
+    if (this.#disposed) return Promise.resolve(this.#state);
+    if (this.#tracks.length >= 200) return Promise.resolve(this.reportError(appError('invalid-input')));
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}) };
+    this.#tracks.push(track);
+    this.#update({ queue: this.#queue() });
+    return this.#switch(this.#tracks.length - 1);
+  }
+
+  enqueueRemoteNext(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string): PlaybackSnapshot {
+    if (this.#disposed) return this.#state;
+    if (this.#tracks.length >= 200) throw new DomainError('invalid-input');
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}) };
+    this.#tracks.splice((this.#state.currentIndex ?? -1) + 1, 0, track);
+    this.#update({ queue: this.#queue() });
+    return this.#state;
+  }
+
   async clearRemote(provider: OnlineProviderId): Promise<void> {
-    if (!this.#tracks.some((track) => track.resolve && track.provider === provider)) return;
-    this.#tracks = [];
-    await this.stop();
-    // 清理过程中可能已经选择本地文件，不覆盖更新的队列。
-    if (this.#tracks.length === 0) this.#update({ queue: [], currentIndex: null });
+    if (!this.#tracks.some((track) => track.provider === provider)) return;
+    const current = this.#tracks[this.#state.currentIndex ?? -1];
+    const stopping = current?.provider === provider ? this.stop() : undefined;
+    this.#tracks = this.#tracks.filter((track) => track.provider !== provider);
+    const index = current ? this.#tracks.findIndex((track) => track.id === current.id) : -1;
+    this.#update({ queue: this.#queue(), currentIndex: index < 0 ? null : index });
+    await stopping;
   }
 
   #enqueue(task: () => Promise<void>): Promise<PlaybackSnapshot> {
@@ -121,9 +167,12 @@ export class MusicPlayer {
           this.#gateway = await (this.#options.openGateway?.(stream.source.url, signal, track.provider!) ?? MediaGateway.open(stream.source.url, signal, undefined, track.provider!));
           filename = this.#gateway.address;
           if (stream.access.kind === 'preview') previewSeconds = stream.access.durationMs / 1000;
+          signal.throwIfAborted();
+          if (this.#disposed || this.#state.generation !== generation) return;
           this.#previewSeconds = previewSeconds;
           const quality = { unknown: '音质未知', standard: '标准', high: '高音质', lossless: '无损', 'hi-res': 'Hi-Res' }[stream.quality.level];
-          this.#update({ queue: [{ id: track.id, title: `${track.title} · ${track.provider === 'kugou' ? '酷狗' : '网易云'} · ${stream.access.kind === 'preview' ? '试听 · ' : ''}${quality}` }] });
+          track.detail = `${stream.access.kind === 'preview' ? '试听 · ' : ''}${quality}`;
+          this.#update({ queue: this.#queue() });
         } else {
           try {
             if (!track.path) throw new Error('no file');
@@ -172,7 +221,11 @@ export class MusicPlayer {
       void this.#control(['set_property', 'volume', this.#desiredVolume]);
     } else if (event.event === 'end-file') {
       this.#loaded = false;
-      if (event.reason === 'eof') this.#update({ status: 'ended' });
+      if (event.reason === 'eof') {
+        const next = (this.#state.currentIndex ?? -1) + 1;
+        if (next < this.#tracks.length) void this.#switch(next);
+        else this.#update({ status: 'ended' });
+      }
       else if (event.reason === 'error' || event.reason === 'redirect') {
         this.#update({ status: 'error', error: appError('playback-failed') });
       }

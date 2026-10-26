@@ -137,7 +137,7 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
   try {
     await player.openRemote('netease', '合成在线曲目', async () => resource);
     await until(() => player.snapshot().status === 'playing');
-    assert.ok(player.snapshot().queue[0]?.title.includes('试听'));
+    assert.ok(player.snapshot().queue[0]?.detail?.includes('试听'));
     assert.ok(!JSON.stringify(player.snapshot()).includes('music.126.net'));
     await until(() => player.snapshot().durationSeconds > 0);
     assert.ok(player.snapshot().durationSeconds <= 1);
@@ -147,7 +147,7 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
     const kugou: StreamResolution = { ...resource, track: { provider: 'kugou', id: 'synthetic' }, source: { kind: 'remote', url: 'https://fsandroid.kugou.com/synthetic', headers: {} } };
     await player.openRemote('kugou', '合成酷狗曲目', async () => kugou);
     await until(() => player.snapshot().status === 'playing');
-    assert.ok(player.snapshot().queue[0]?.title.includes('酷狗'));
+    assert.ok(player.snapshot().queue[0]?.provider === 'kugou');
     const kugouGeneration = player.snapshot().generation;
     await player.clearRemote('netease'); assert.equal(player.snapshot().generation, kugouGeneration);
     await player.clearRemote('kugou');
@@ -162,4 +162,27 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
     assert.equal((await children()).length, 1);
   } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
   assert.deepEqual(await children(), []);
+});
+
+test('插队不打断实际音频，EOF 自动播放下一首并保留唯一 mpv 进程', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-next-mpv-'));
+  const first = path.join(directory, 'first.wav');
+  const second = path.join(directory, 'second.wav');
+  const third = path.join(directory, 'third.wav');
+  const player = new MusicPlayer({ audioOutput: 'null' });
+  try {
+    await Promise.all([writeSilentWav(first, 1), writeSilentWav(second, 10), writeSilentWav(third, 10)]);
+    await player.openFiles([first, second, third]);
+    await until(() => player.snapshot().status === 'playing');
+    const generation = player.snapshot().generation;
+    const pid = (await children())[0];
+    const thirdId = player.snapshot().queue[2]!.id;
+    player.moveNext(thirdId);
+    assert.equal(player.snapshot().generation, generation);
+    assert.equal((await children())[0], pid);
+    await until(() => player.snapshot().status === 'playing' && player.snapshot().queue[player.snapshot().currentIndex!]?.id === thirdId);
+    assert.equal(player.snapshot().currentIndex, 1);
+    assert.equal((await children()).length, 1);
+    assert.throws(() => process.kill(pid!, 0));
+  } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
 });

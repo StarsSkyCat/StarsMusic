@@ -5,6 +5,9 @@ export const playbackChannels = {
   getState: 'starsmusic:playback:get-state',
   openFiles: 'starsmusic:playback:open-files',
   playTrack: 'starsmusic:playback:play-track',
+  moveNext: 'starsmusic:playback:move-next',
+  removeTrack: 'starsmusic:playback:remove-track',
+  clearUpcoming: 'starsmusic:playback:clear-upcoming',
   resume: 'starsmusic:playback:resume',
   pause: 'starsmusic:playback:pause',
   stop: 'starsmusic:playback:stop',
@@ -16,6 +19,9 @@ export const playbackChannels = {
 export interface QueueTrack {
   readonly id: string;
   readonly title: string;
+  readonly provider?: 'local' | 'netease' | 'kugou';
+  readonly artist?: string;
+  readonly detail?: string;
 }
 
 export interface PlaybackSnapshot {
@@ -36,6 +42,9 @@ export interface PlaybackApi {
   getState(): Promise<PlaybackSnapshot>;
   openFiles(): Promise<PlaybackSnapshot>;
   playTrack(id: string): Promise<PlaybackSnapshot>;
+  moveNext(id: string): Promise<PlaybackSnapshot>;
+  removeTrack(id: string): Promise<PlaybackSnapshot>;
+  clearUpcoming(): Promise<PlaybackSnapshot>;
   resume(): Promise<PlaybackSnapshot>;
   pause(): Promise<PlaybackSnapshot>;
   stop(): Promise<PlaybackSnapshot>;
@@ -56,7 +65,11 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
   if (!Array.isArray(input.queue)) throw new ContractValidationError('playback.queue');
   const queue = input.queue.map((value: unknown) => {
     const item = record(value, 'playback.queue.item');
-    return Object.freeze({ id: text(item.id, 'playback.queue.id'), title: text(item.title, 'playback.queue.title') });
+    return Object.freeze({ id: text(item.id, 'playback.queue.id'), title: text(item.title, 'playback.queue.title'),
+      ...(item.provider === undefined ? {} : { provider: choice(item.provider, ['local', 'netease', 'kugou'], 'playback.queue.provider') }),
+      ...(item.artist === undefined ? {} : { artist: text(item.artist, 'playback.queue.artist') }),
+      ...(item.detail === undefined ? {} : { detail: text(item.detail, 'playback.queue.detail') }),
+    });
   });
   if (new Set(queue.map((track) => track.id)).size !== queue.length) throw new ContractValidationError('playback.queue.id');
   const currentIndex = input.currentIndex === null ? null : nonNegativeInteger(input.currentIndex, 'playback.currentIndex');
@@ -79,11 +92,12 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
 }
 
 export function parsePlaybackArgument(command: string, args: readonly unknown[]): string | number | undefined {
-  if (command === playbackChannels.playTrack && args.length === 1) return text(args[0], 'playback.trackId');
+  const trackCommands: readonly string[] = [playbackChannels.playTrack, playbackChannels.moveNext, playbackChannels.removeTrack];
+  if (trackCommands.includes(command) && args.length === 1) return text(args[0], 'playback.trackId');
   if (command === playbackChannels.seek && args.length === 1) return playbackNumber(args[0]);
   if (command === playbackChannels.setVolume && args.length === 1) return playbackNumber(args[0], 100);
   const noArguments: readonly string[] = [playbackChannels.getState, playbackChannels.openFiles,
-    playbackChannels.resume, playbackChannels.pause, playbackChannels.stop];
+    playbackChannels.resume, playbackChannels.pause, playbackChannels.stop, playbackChannels.clearUpcoming];
   if (noArguments.includes(command) && args.length === 0) return undefined;
   throw new ContractValidationError('playback.command');
 }

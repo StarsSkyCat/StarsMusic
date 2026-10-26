@@ -5,7 +5,7 @@ export const kugouChannels = {
   getState: 'starsmusic:kugou:get-state', startLogin: 'starsmusic:kugou:start-login',
   cancelLogin: 'starsmusic:kugou:cancel-login', logout: 'starsmusic:kugou:logout',
   loadPlaylists: 'starsmusic:kugou:load-playlists', loadPlaylist: 'starsmusic:kugou:load-playlist',
-  playTrack: 'starsmusic:kugou:play-track', stateChanged: 'starsmusic:kugou:state-changed',
+  enqueueNext: 'starsmusic:kugou:enqueue-next', playTrack: 'starsmusic:kugou:play-track', stateChanged: 'starsmusic:kugou:state-changed',
 } as const;
 export interface KugouPlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
 export interface KugouTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number }
@@ -36,6 +36,7 @@ export interface KugouApi {
   loadPlaylists(): Promise<KugouSnapshot>;
   loadPlaylist(id: string, offset: number): Promise<KugouSnapshot>;
   playTrack(id: string): Promise<void>;
+  enqueueNext(id: string): Promise<void>;
   onStateChanged(listener: (state: KugouSnapshot) => void): () => void;
 }
 export function kugouId(value: unknown): string {
@@ -84,7 +85,7 @@ export function initialKugouSnapshot(): KugouSnapshot {
   return parseKugouSnapshot({ revision: 0, generation: 0, status: 'signed-out', playlists: [], tracks: [], playlistsMore: false, tracksMore: false, nextTrackOffset: 0, busy: false });
 }
 export function parseKugouArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number } {
-  if (channel === kugouChannels.playTrack && args.length === 1) return { id: kugouId(args[0]) };
+  if ((channel === kugouChannels.playTrack || channel === kugouChannels.enqueueNext) && args.length === 1) return { id: kugouId(args[0]) };
   if (channel === kugouChannels.loadPlaylist && args.length === 2) {
     const offset = nonNegativeInteger(args[1], 'kugou.offset');
     if (offset > 100000 || offset % 300 !== 0) throw new ContractValidationError('kugou.offset');

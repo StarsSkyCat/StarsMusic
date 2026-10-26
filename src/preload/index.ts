@@ -33,6 +33,9 @@ const api: DesktopApi = Object.freeze({
     getState: () => invokePlayback(playbackChannels.getState),
     openFiles: () => invokePlayback(playbackChannels.openFiles),
     playTrack: (id: string) => invokePlayback(playbackChannels.playTrack, id),
+    moveNext: (id: string) => invokePlayback(playbackChannels.moveNext, id),
+    removeTrack: (id: string) => invokePlayback(playbackChannels.removeTrack, id),
+    clearUpcoming: () => invokePlayback(playbackChannels.clearUpcoming),
     resume: () => invokePlayback(playbackChannels.resume),
     pause: () => invokePlayback(playbackChannels.pause),
     stop: () => invokePlayback(playbackChannels.stop),
@@ -53,6 +56,7 @@ const api: DesktopApi = Object.freeze({
     loadPlaylists: () => invokeNetease(neteaseChannels.loadPlaylists),
     loadPlaylist: (id: string, offset: number) => invokeNetease(neteaseChannels.loadPlaylist, id, offset),
     async playTrack(id: string): Promise<void> { await ipcRenderer.invoke(neteaseChannels.playTrack, id); },
+    async enqueueNext(id: string): Promise<void> { await ipcRenderer.invoke(neteaseChannels.enqueueNext, id); },
     onStateChanged(listener: (state: ReturnType<typeof parseNeteaseSnapshot>) => void) {
       if (typeof listener !== 'function') throw new Error('监听器无效');
       const receive = (_event: unknown, value: unknown) => listener(parseNeteaseSnapshot(value));
@@ -68,6 +72,7 @@ const api: DesktopApi = Object.freeze({
     loadPlaylists: () => invokeKugou(kugouChannels.loadPlaylists),
     loadPlaylist: (id: string, offset: number) => invokeKugou(kugouChannels.loadPlaylist, id, offset),
     async playTrack(id: string): Promise<void> { await ipcRenderer.invoke(kugouChannels.playTrack, id); },
+    async enqueueNext(id: string): Promise<void> { await ipcRenderer.invoke(kugouChannels.enqueueNext, id); },
     onStateChanged(listener: (state: ReturnType<typeof parseKugouSnapshot>) => void) {
       if (typeof listener !== 'function') throw new Error('监听器无效');
       const receive = (_event: unknown, value: unknown) => listener(parseKugouSnapshot(value));
