@@ -114,6 +114,26 @@ test('受保护账号接口成功但不回显 ID 时仍验证昵称；回显不�
   } finally { service.dispose(); }
 });
 
+test('酷狗歌单兼容缺总数、字符串时长、损坏单条和超过 50 条的有效曲目', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  try {
+    await connect(service); await service.loadPlaylists();
+    const rows: Record<string, unknown>[] = Array.from({ length: 300 }, (_, index) => ({
+      hash: index.toString(16).padStart(32, '0'), name: `合成曲目 ${index}`,
+      singerinfo: [{ name: '合成歌手' }], timelen: '30000', album_id: 1, audio_id: 2,
+    }));
+    rows.push({ invalid: true });
+    transport.handlers.set('playlist', async () => ok({ info: rows }));
+    await service.loadPlaylist('1', 0);
+    assert.equal(service.snapshot().tracks.length, 300);
+    assert.equal(service.snapshot().tracks[0]?.durationMs, 30000);
+    assert.equal(service.snapshot().tracksMore, true);
+    assert.equal(service.snapshot().nextTrackOffset, 300);
+    assert.deepEqual(parseKugouArguments(kugouChannels.loadPlaylist, ['1', 300]), { id: '1', offset: 300 });
+    assert.throws(() => parseKugouArguments(kugouChannels.loadPlaylist, ['1', 50]));
+  } finally { service.dispose(); }
+});
+
 test('流只接受明确权限、HTTPS 官方媒体主机，响应缺少试听边界时拒绝', () => {
   assert.equal(parseKugouStream(stream, hash).quality.bitrateKbps, 128);
   assert.equal(parseKugouStream({ ...stream, priv_status: 1, free_part_start: 0, free_part_end: 30000 }, hash).access.kind, 'preview');

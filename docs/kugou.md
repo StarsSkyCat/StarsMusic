@@ -45,7 +45,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 
 登录后读取私人歌单：`v7/get_all_list` 按页请求，兼容 `collect`、`love`、`self`、`list` 分组。歌单 ID 与类型只用于后续登记查询；页面和主进程只能传本次账号已读取的 ID，不能传任意 URL 或平台参数。
 
-打开歌单时请求 `v4/get_list_all_file_v3`，每批最多 50 条。曲目以 32 位十六进制 `hash` 作为页面可见 ID；后台同时保存 `album_id` 与 `album_audio_id`，这些参数不暴露给页面。平台数字 ID 在安全数值范围内转为 string，超出安全整数时保留原始十进制文本。
+打开歌单时请求 `v4/get_list_all_file_v3`，每批最多 300 条。曲目以 32 位十六进制 `hash` 作为页面可见 ID；后台同时保存 `album_id`、`album_audio_id`/`audio_id`，这些参数不暴露给页面。平台数字 ID 在安全数值范围内转为 string，超出安全整数时保留原始十进制文本。部分云歌单响应不返回总数，或把时长/数量作为十进制字符串返回；后台接受这两种形式，并以本页实际条数判断是否还有下一页。单条无法安全解析的记录会被跳过，但整页没有可用曲目时仍报错，不伪造空歌单。
 
 选择曲目后通过 `v5/url` 请求 128kbps 资源。只接受 HTTPS 的已核实媒体主机；历史 HTTP 链接只尝试同主机 HTTPS，不向 HTTP 降级。展示平台实际返回的 `extName`/`bitRate`，无法确认时保持 unknown。`priv_status` 非 0 时必须同时取得合法的试听起止边界，否则拒绝播放，不由“账号已登录”推断完整权限；试听会标记并限制 mpv 播放长度。无资源、权限不足、试听和网络错误分别归一化，不自动换源或推断会员状态。
 

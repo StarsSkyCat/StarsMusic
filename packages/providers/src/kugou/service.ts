@@ -17,21 +17,53 @@ function success(value: unknown): Record<string, unknown> {
   return body;
 }
 interface BackendTrack { track: KugouTrack; hash: string; albumId: string; audioId: string }
+const trackPageSize = 300;
 function numericId(value: unknown): string {
   const id = apiId(value); if (!/^\d{1,30}$/.test(id)) throw new DomainError('invalid-response'); return id;
 }
-function parseTracks(value: unknown): BackendTrack[] {
-  if (!Array.isArray(value) || value.length > 50) throw new DomainError('invalid-response');
-  return value.map((value: unknown) => {
-    const raw = record(value, 'kugou.song');
-    const hash = text(raw.hash, 'kugou.hash').toLowerCase();
-    if (!/^[a-f0-9]{32}$/.test(hash)) throw new DomainError('invalid-response');
-    const artists = Array.isArray(raw.singerinfo) ? raw.singerinfo.map((v: unknown) => text(record(v, 'kugou.singer').name, 'kugou.singer.name')) : [];
-    const name = text(raw.name ?? raw.filename, 'kugou.song.name');
-    const durationMs = raw.timelen !== undefined ? nonNegativeInteger(raw.timelen, 'kugou.timelen') : nonNegativeInteger(raw.duration ?? 0, 'kugou.duration') * 1000;
-    const album = raw.albuminfo === undefined ? {} : record(raw.albuminfo, 'kugou.album');
-    return { track: { id: hash, name, artists, durationMs }, hash, albumId: numericId(raw.album_id ?? album.id ?? 0), audioId: numericId(raw.album_audio_id ?? raw.mixsongid ?? 0) };
-  });
+// 平台不同端点可能把数量/时长作为数字或十进制字符串返回；只接受非负安全整数。
+function integerValue(value: unknown, field: string): number {
+  if (typeof value === 'number') return nonNegativeInteger(value, field);
+  if (typeof value === 'string' && /^\d{1,15}$/.test(value)) {
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed)) return parsed;
+  }
+  throw new DomainError('invalid-response');
+}
+function optionalInteger(value: unknown, field: string): number | undefined {
+  return value === undefined || value === null || value === '' ? undefined : integerValue(value, field);
+}
+function parseTracks(value: unknown): { items: BackendTrack[]; received: number } {
+  if (!Array.isArray(value) || value.length > 500) throw new DomainError('invalid-response');
+  const items: BackendTrack[] = [];
+  for (const entry of value) {
+    // 单条损坏不应让整页不可用；仍要求至少有一条可播放曲目。
+    try {
+      const raw = record(entry, 'kugou.song');
+      const hash = text(raw.hash ?? raw.filehash, 'kugou.hash').toLowerCase();
+      if (!/^[a-f0-9]{32}$/.test(hash)) continue;
+      const singers = Array.isArray(raw.singerinfo) ? raw.singerinfo
+        : Array.isArray(raw.authors) ? raw.authors : [];
+      const artists = singers.flatMap((value: unknown) => {
+        try {
+          const singer = record(value, 'kugou.singer');
+          return [text(singer.name ?? singer.author_name, 'kugou.singer.name')];
+        } catch { return []; }
+      });
+      const name = text(raw.name ?? raw.filename ?? raw.songname, 'kugou.song.name');
+      const timelen = optionalInteger(raw.timelen, 'kugou.timelen');
+      const seconds = optionalInteger(raw.duration, 'kugou.duration');
+      const durationMs = timelen ?? (seconds === undefined ? 0 : seconds * 1000);
+      const album = raw.albuminfo === undefined ? {} : record(raw.albuminfo, 'kugou.album');
+      items.push({
+        track: { id: hash, name, artists, durationMs }, hash,
+        albumId: numericId(raw.album_id ?? album.id ?? 0),
+        audioId: numericId(raw.album_audio_id ?? raw.audio_id ?? raw.mixsongid ?? 0),
+      });
+    } catch { /* 跳过无法安全解析的单条记录 */ }
+  }
+  if (value.length > 0 && items.length === 0) throw new DomainError('invalid-response');
+  return { items, received: value.length };
 }
 export function parseKugouStream(value: unknown, id: string): StreamResolution {
   const raw = success(value);
@@ -230,21 +262,24 @@ export class KugouService {
   async loadPlaylist(id: string, offset: number): Promise<KugouSnapshot> {
     kugouId(id); nonNegativeInteger(offset, 'kugou.offset');
     const { lease, transport } = this.#connected();
-    if (!this.#knownPlaylists.has(id) || (offset !== 0 && (this.#state.playlistId !== id || offset !== this.#state.nextTrackOffset))) throw new DomainError('invalid-input');
+    if (offset % trackPageSize !== 0 || !this.#knownPlaylists.has(id) || (offset !== 0 && (this.#state.playlistId !== id || offset !== this.#state.nextTrackOffset))) throw new DomainError('invalid-input');
     const view = ++this.#view;
     this.#update({ playlistId: id, ...(offset === 0 ? { tracks: [], tracksMore: false, nextTrackOffset: 0 } : {}), busy: true, error: undefined });
     try {
-      const data = record(success(await transport.call('playlist', { id, type: this.#knownPlaylists.get(id), page: offset / 50 + 1 }, lease.signal)).data, 'kugou.playlist');
+      const data = record(success(await transport.call('playlist', { id, type: this.#knownPlaylists.get(id), page: offset / trackPageSize + 1 }, lease.signal)).data, 'kugou.playlist');
       const rows = data.info ?? data.songs ?? data.lists ?? data.file;
-      const parsed = parseTracks(Array.isArray(rows) ? rows : record(rows, 'kugou.files').file);
-      const total = nonNegativeInteger(data.count, 'kugou.total');
+      // 末页可能没有 info 字段；首屏缺少列表仍按无效响应处理。
+      if (rows === undefined && offset === 0) throw new DomainError('invalid-response');
+      const parsed = parseTracks(rows === undefined ? [] : Array.isArray(rows) ? rows : record(rows, 'kugou.files').file);
+      const total = optionalInteger(data.count ?? data.total, 'kugou.total');
       if (view !== this.#view) return this.#state;
       this.#sessions.commit(lease, () => {
-        for (const item of parsed) this.#knownTracks.set(item.track.id, item);
-        const tracks = parsed.map((item) => item.track);
+        for (const item of parsed.items) this.#knownTracks.set(item.track.id, item);
+        const tracks = parsed.items.map((item) => item.track);
         const merged = new Map([...(offset === 0 ? [] : this.#state.tracks), ...tracks].map((track) => [track.id, track]));
-        this.#update({ tracks: [...merged.values()], nextTrackOffset: offset + 50,
-          tracksMore: parsed.length > 0 && offset + parsed.length < total, busy: false });
+        // 部分云歌单响应不返回总数；此时只有满页才继续请求，避免把末页误判为还有数据。
+        const more = parsed.received >= trackPageSize && (total === undefined || offset + parsed.received < total);
+        this.#update({ tracks: [...merged.values()], nextTrackOffset: offset + trackPageSize, tracksMore: more, busy: false });
       });
     } catch (error: unknown) { if (view === this.#view) this.#operationError(lease, error); }
     return this.#state;

@@ -87,7 +87,7 @@ export function parseKugouArguments(channel: string, args: readonly unknown[]): 
   if (channel === kugouChannels.playTrack && args.length === 1) return { id: kugouId(args[0]) };
   if (channel === kugouChannels.loadPlaylist && args.length === 2) {
     const offset = nonNegativeInteger(args[1], 'kugou.offset');
-    if (offset > 100000 || offset % 50 !== 0) throw new ContractValidationError('kugou.offset');
+    if (offset > 100000 || offset % 300 !== 0) throw new ContractValidationError('kugou.offset');
     return { id: kugouId(args[0]), offset };
   }
   const empty: readonly string[] = [kugouChannels.getState, kugouChannels.startLogin, kugouChannels.cancelLogin, kugouChannels.logout, kugouChannels.loadPlaylists];
