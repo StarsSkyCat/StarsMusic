@@ -316,17 +316,17 @@ test('扫码未完成时的勾选不带到下次启动，另一个平台退出�
   } finally { await cleanup(directory); }
 });
 
-test('等候存储可用性时退出或清除，迟到的勾选不会重新启用保存', async () => {
+test('等候存储可用性时退出或清除，迟到的勾选不会重新启用保存', { timeout: 5000 }, async () => {
   for (const mode of ['logout', 'clear'] as const) {
     const cipher = new FakeCipher(); const { directory, vault } = await temporaryVault(cipher);
     let release!: () => void;
     const barrier = new Promise<void>(done => { release = done; }); let first = true;
-    cipher.available = async () => { if (first) { first = false; await barrier; } return true; };
+    let enter!: () => void; const entered = new Promise<void>(done => { enter = done; });
+    cipher.available = async () => { if (first) { first = false; enter(); await barrier; } return true; };
     try {
       const pending = vault.setRemember('kugou', true);
-      await new Promise<void>(done => setImmediate(done));
-      // SQLite 初次打开是异步操作，等到延迟的可用性检查实际开始。
-      while (first) await new Promise<void>(done => setImmediate(done));
+      // 等待实际进入检查；初始化失败时直接传播，避免测试空转。
+      await Promise.race([entered, pending]);
       if (mode === 'logout') await vault.remove('kugou'); else await vault.clear();
       release(); await pending;
       assert.deepEqual((await vault.status()).rememberedProviders, []);

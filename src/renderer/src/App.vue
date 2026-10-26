@@ -34,7 +34,7 @@ import CredentialPanel from './CredentialPanel.vue';
 import ProviderAccount from './ProviderAccount.vue';
 import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
-import TrackLyrics from './TrackLyrics.vue';
+import NowPlayingPage from './NowPlayingPage.vue';
 import {
   parsePresentationSnapshot,
   type PresentationSnapshot,
@@ -52,7 +52,16 @@ const view = ref<'library' | 'local' | 'settings' | Provider>('library');
 const query = ref('');
 const selected = ref<string[]>([]);
 const queueDialog = ref<HTMLDialogElement>();
-const playingDialog = ref<HTMLDialogElement>();
+const nowPlayingOpen = ref(false);
+const selectedPlaylistId = ref<string>();
+let browsingScroll = 0;
+const backLabel = computed(() =>
+  view.value === 'library'
+    ? '音乐库'
+    : view.value === 'settings'
+      ? '账号与设置'
+      : providerNames[view.value],
+);
 const queryInput = ref<HTMLInputElement>();
 const mainPane = ref<HTMLElement>();
 const info = ref<AppInfo>();
@@ -105,11 +114,13 @@ const connectedCount = computed(
   () => providerIds.filter((id) => providers[id].state.value.status === 'connected').length,
 );
 const title = computed(() =>
-  view.value === 'library'
-    ? '音乐库'
-    : view.value === 'settings'
-      ? '账号与设置'
-      : providerNames[view.value],
+  nowPlayingOpen.value
+    ? '正在播放'
+    : view.value === 'library'
+      ? '音乐库'
+      : view.value === 'settings'
+        ? '账号与设置'
+        : providerNames[view.value],
 );
 const activeProvider = computed(() =>
   view.value === 'netease' || view.value === 'kugou' ? view.value : undefined,
@@ -128,13 +139,15 @@ const filteredPlaylists = computed(() =>
   ),
 );
 const playlistTitle = computed(
-  () => providerState.value?.playlists.find((p) => p.id === providerState.value?.playlistId)?.name,
+  () => providerState.value?.playlists.find((p) => p.id === selectedPlaylistId.value)?.name,
 );
 const tableTitle = computed(
   () => playlistTitle.value ?? (view.value === 'local' ? '本次导入' : '当前播放队列'),
 );
 const tracks = computed<readonly DisplayTrack[]>(() => {
-  if (providerState.value)
+  if (providerState.value) {
+    if (!selectedPlaylistId.value || selectedPlaylistId.value !== providerState.value.playlistId)
+      return [];
     return providerState.value.tracks.map((t) => ({
       id: t.id,
       title: t.name,
@@ -142,6 +155,7 @@ const tracks = computed<readonly DisplayTrack[]>(() => {
       provider: activeProvider.value!,
       durationSeconds: t.durationMs / 1000,
     }));
+  }
   const list = view.value === 'local' ? localTracks.value : playback.value.queue;
   return list.map((track) => ({
     ...track,
@@ -165,10 +179,39 @@ function matches(text: string): boolean {
   return text.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase());
 }
 function navigate(to: typeof view.value): void {
+  nowPlayingOpen.value = false;
+  selectedPlaylistId.value = undefined;
   view.value = to;
   query.value = '';
   selected.value = [];
   void nextTick(() => mainPane.value?.scrollTo({ top: 0 }));
+}
+async function openPlaying(): Promise<void> {
+  if (nowPlayingOpen.value) return;
+  browsingScroll = mainPane.value?.scrollTop ?? 0;
+  nowPlayingOpen.value = true;
+  await nextTick();
+  mainPane.value?.scrollTo({ top: 0 });
+  mainPane.value
+    ?.querySelector<HTMLElement>('.now-playing-page h1')
+    ?.focus({ preventScroll: true });
+}
+async function closePlaying(): Promise<void> {
+  nowPlayingOpen.value = false;
+  await nextTick();
+  mainPane.value?.scrollTo({ top: browsingScroll });
+  document.querySelector<HTMLElement>('.now-playing')?.focus({ preventScroll: true });
+}
+async function continueListening(): Promise<void> {
+  if (currentTrack.value && ['paused', 'ended'].includes(playback.value.status))
+    await control((api) => api.resume());
+  await openPlaying();
+}
+function backToPlaylists(): void {
+  selectedPlaylistId.value = undefined;
+  query.value = '';
+  selected.value = [];
+  mainPane.value?.scrollTo({ top: 0 });
 }
 function receivePlayback(snapshot: PlaybackSnapshot): void {
   if (snapshot.revision >= playback.value.revision) playback.value = snapshot;
@@ -247,6 +290,7 @@ function selectAll(): void {
 }
 async function openPlaylist(provider: Provider, id: string): Promise<void> {
   navigate(provider);
+  selectedPlaylistId.value = id;
   await providers[provider].run((api) => api.loadPlaylist(id, 0));
 }
 async function refreshInfo(): Promise<void> {
@@ -269,6 +313,11 @@ async function showQueue(): Promise<void> {
   queueDialog.value?.showModal();
 }
 function shortcuts(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && nowPlayingOpen.value && !queueDialog.value?.open) {
+    event.preventDefault();
+    void closePlaying();
+    return;
+  }
   const target = event.target as HTMLElement;
   if (
     target.closest('input, textarea, button, [contenteditable], dialog') ||
@@ -282,7 +331,7 @@ function shortcuts(event: KeyboardEvent): void {
     if (currentTrack.value)
       void control((api) => (playback.value.status === 'playing' ? api.pause() : api.resume()));
   }
-  if (event.key === '/' && view.value !== 'settings') {
+  if (event.key === '/' && view.value !== 'settings' && !nowPlayingOpen.value) {
     event.preventDefault();
     queryInput.value?.focus();
   }
@@ -331,17 +380,30 @@ onUnmounted(() => {
       >
       <p class="sidebar-label">音乐，随心而至</p>
       <nav class="main-navigation" aria-label="音乐库">
-        <button :class="{ active: view === 'library' }" @click="navigate('library')">
+        <button
+          :class="{ active: view === 'library' && !nowPlayingOpen }"
+          @click="navigate('library')"
+        >
           <Library :size="19" />音乐库<ChevronRight
-            v-if="view === 'library'"
+            v-if="view === 'library' && !nowPlayingOpen"
             class="nav-arrow"
             :size="14"
           />
         </button>
-        <button :class="{ active: view === 'local' }" @click="navigate('local')">
+        <button :class="{ active: view === 'local' && !nowPlayingOpen }" @click="navigate('local')">
           <FolderOpen :size="19" />本地音乐<span v-if="localTracks.length" class="nav-count">{{
             localTracks.length
           }}</span>
+        </button>
+        <button
+          :class="{ active: nowPlayingOpen }"
+          :aria-current="nowPlayingOpen ? 'page' : undefined"
+          @click="openPlaying"
+        >
+          <AudioLines :size="19" />正在播放<span
+            v-if="playback.status === 'playing'"
+            class="nav-playing-dot"
+          ></span>
         </button>
       </nav>
       <p class="sidebar-label source-label">音乐来源</p>
@@ -349,7 +411,7 @@ onUnmounted(() => {
         <button
           v-for="id in providerIds"
           :key="id"
-          :class="{ active: view === id }"
+          :class="{ active: view === id && !nowPlayingOpen }"
           @click="navigate(id)"
         >
           <Cloud :size="19" :class="`provider-${id}`" />{{ providerNames[id]
@@ -363,12 +425,15 @@ onUnmounted(() => {
         </button>
       </nav>
       <div class="sidebar-note">
-        <Headphones :size="23" /><strong>所有喜欢，都在一起。</strong>
-        <p>网易云、酷狗与本地音乐<br />一个安静的音乐空间。</p>
+        <p>本次播放队列</p>
+        <button class="sidebar-queue" @click="showQueue">
+          <ListMusic :size="18" /><strong>{{ playback.queue.length }} 首音乐</strong
+          ><ChevronRight :size="15" /></button
+        ><small>顺序播放 · 本次会话</small>
       </div>
       <button
         class="settings-nav"
-        :class="{ active: view === 'settings' }"
+        :class="{ active: view === 'settings' && !nowPlayingOpen }"
         @click="navigate('settings')"
       >
         <Settings2 :size="18" />账号与设置
@@ -376,12 +441,13 @@ onUnmounted(() => {
       <span class="sidebar-footer">DESIGNED FOR LISTENING</span>
     </aside>
 
-    <main id="main" ref="mainPane">
+    <main id="main" ref="mainPane" :class="{ 'is-playing-view': nowPlayingOpen }">
       <header class="topbar">
         <div class="breadcrumb">
-          <span>我的音乐</span><ChevronRight :size="13" /><strong>{{ title }}</strong>
+          <span>{{ nowPlayingOpen ? '聆听空间' : '我的音乐' }}</span
+          ><ChevronRight :size="13" /><strong>{{ title }}</strong>
         </div>
-        <label v-if="view !== 'settings'" class="search-field"
+        <label v-if="view !== 'settings' && !nowPlayingOpen" class="search-field"
           ><Search :size="17" /><input
             ref="queryInput"
             v-model="query"
@@ -394,22 +460,58 @@ onUnmounted(() => {
           ><span>{{ connectedCount ? `${connectedCount} 个账号已连接` : '连接音乐账号' }}</span>
         </button>
       </header>
-      <div class="content" :class="{ 'settings-content': view === 'settings' }">
-        <template v-if="view !== 'settings'">
-          <section v-if="view === 'library' && !query" class="library-hero">
-            <div class="hero-copy">
-              <span class="eyebrow"><span></span> YOUR MUSIC, TOGETHER</span>
-              <h1>让喜欢的音乐，<br />在这里相遇。</h1>
-              <p>从一首熟悉的歌，开始今天的好心情。</p>
-              <div class="hero-actions">
+      <div
+        class="content"
+        :class="{
+          'settings-content': view === 'settings' && !nowPlayingOpen,
+          'playing-content': nowPlayingOpen,
+        }"
+      >
+        <NowPlayingPage
+          v-if="nowPlayingOpen"
+          :playback="playback"
+          :track="currentTrack"
+          :presentation="presentation"
+          :artwork="artwork"
+          :album="currentPresentation?.content?.album"
+          :status="statusText"
+          :back-label="backLabel"
+          @back="closePlaying"
+          @queue="showQueue"
+        />
+        <template v-else-if="view !== 'settings'">
+          <section v-if="view === 'library' && !query" class="library-overview">
+            <div class="library-intro">
+              <span class="eyebrow">YOUR MUSIC, TOGETHER</span>
+              <h1>音乐库</h1>
+              <p>你的歌单、设备里的音乐，都在这里。</p>
+              <div class="library-actions">
                 <button class="primary-button" @click="openFiles">
                   <FolderOpen :size="16" />选择本地音频</button
-                ><button class="hero-link" @click="navigate('settings')">
-                  连接音乐账号<ArrowRight :size="16" />
+                ><button class="text-button" @click="navigate('settings')">
+                  {{ connectedCount ? '管理音乐账号' : '连接音乐账号' }}<ArrowRight :size="16" />
                 </button>
               </div>
             </div>
-            <span class="hero-caption">STARS AFTER HOURS <span>VOL. 01</span></span>
+            <button v-if="currentTrack" class="library-current" @click="continueListening">
+              <span class="library-current-art"
+                ><img
+                  v-if="artwork && !artworkFailed"
+                  :src="artwork"
+                  alt=""
+                  @error="artworkFailed = true" /><Disc3 v-else :size="35" /></span
+              ><span class="library-current-copy"
+                ><small>继续聆听</small><strong>{{ currentTrack.title }}</strong
+                ><span>{{
+                  currentTrack.artist || providerNames[currentTrack.provider ?? 'local']
+                }}</span></span
+              ><Play :size="18" fill="currentColor" />
+            </button>
+            <div v-else class="library-start-note">
+              <span class="library-start-icon"><Headphones :size="30" :stroke-width="1.5" /></span
+              ><strong>从喜欢的声音开始</strong>
+              <p>导入本地歌曲，或打开你的平台歌单。</p>
+            </div>
           </section>
           <section
             v-if="view === 'library' && !query"
@@ -452,7 +554,7 @@ onUnmounted(() => {
               </button>
             </div>
           </section>
-          <div v-if="view !== 'library'" class="page-heading">
+          <div v-if="view !== 'library' && !selectedPlaylistId" class="page-heading">
             <div>
               <span class="eyebrow">{{
                 view === 'local' ? 'ON YOUR DEVICE' : 'CONNECTED TO YOUR MUSIC'
@@ -472,20 +574,37 @@ onUnmounted(() => {
               管理账号<ChevronRight :size="16" />
             </button>
           </div>
+          <section v-if="activeProvider && selectedPlaylistId" class="playlist-detail-heading">
+            <button class="text-button" @click="backToPlaylists">
+              <ChevronRight class="back-chevron" :size="15" />返回全部歌单
+            </button>
+            <div class="playlist-detail-summary">
+              <span class="playlist-detail-art"><ListMusic :size="38" /></span>
+              <div>
+                <span class="eyebrow">{{ providerNames[activeProvider] }} · 歌单</span>
+                <h1>{{ playlistTitle ?? '正在读取歌单…' }}</h1>
+                <p>
+                  {{ providerState?.account?.nickname
+                  }}<span v-if="providerState?.tracksMore"> · 已加载 {{ tracks.length }} 首</span
+                  ><span v-else> · {{ tracks.length }} 首歌曲</span>
+                </p>
+              </div>
+            </div>
+          </section>
           <ProviderAccount
             v-if="activeProvider && providerState && providerState.status !== 'connected'"
             :provider="activeProvider"
             :state="providerState"
             :credentials="credentials.status.value"
             :saving="credentials.busy[activeProvider]"
-            @remember="value => credentials.setRemember(activeProvider!, value)"
+            @remember="(value) => credentials.setRemember(activeProvider!, value)"
             :error="providers[activeProvider].error.value"
             @login="providers[activeProvider].run((api) => api.startLogin())"
             @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
             @logout="providers[activeProvider].run((api) => api.logout())"
           />
           <section
-            v-if="view !== 'local'"
+            v-if="view !== 'local' && !selectedPlaylistId"
             class="playlist-section"
             aria-labelledby="playlists-title"
           >
@@ -569,7 +688,7 @@ onUnmounted(() => {
             </div>
           </section>
           <section
-            v-if="tracks.length || view === 'local' || providerState?.playlistId"
+            v-if="tracks.length || view === 'local' || selectedPlaylistId"
             class="songs-section"
             aria-labelledby="songs-title"
           >
@@ -686,50 +805,62 @@ onUnmounted(() => {
               :state="providers[id].state.value"
               :credentials="credentials.status.value"
               :saving="credentials.busy[id]"
-              @remember="value => credentials.setRemember(id, value)"
+              @remember="(value) => credentials.setRemember(id, value)"
               :error="providers[id].error.value"
               @login="providers[id].run((api) => api.startLogin())"
               @cancel="providers[id].run((api) => api.cancelLogin())"
               @logout="providers[id].run((api) => api.logout())"
             />
           </div>
-          <CredentialPanel :status="credentials.status.value" :error="credentials.error.value" @clear="credentials.clear" />
-          <section class="runtime" aria-labelledby="runtime-title">
-            <div class="section-heading">
-              <div class="account-heading">
-                <Monitor :size="21" />
-                <div>
-                  <h2 id="runtime-title">桌面连接</h2>
-                  <p>当前应用的实际运行信息</p>
+          <CredentialPanel
+            :status="credentials.status.value"
+            :error="credentials.error.value"
+            @clear="credentials.clear"
+          />
+          <details class="runtime-disclosure">
+            <summary><Monitor :size="17" />应用信息与诊断</summary>
+            <section class="runtime" aria-labelledby="runtime-title">
+              <div class="section-heading">
+                <div class="account-heading">
+                  <Monitor :size="21" />
+                  <div>
+                    <h2 id="runtime-title">桌面连接</h2>
+                    <p>当前应用的实际运行信息</p>
+                  </div>
                 </div>
+                <button class="subtle-button" :disabled="loading" @click="refreshInfo">
+                  {{ loading ? '读取中…' : '重新检查' }}
+                </button>
               </div>
-              <button class="subtle-button" :disabled="loading" @click="refreshInfo">
-                {{ loading ? '读取中…' : '重新检查' }}
-              </button>
-            </div>
-            <p v-if="infoError" class="error-message" role="alert">
-              {{ infoError }}
-            </p>
-            <div v-else-if="info" class="runtime-info" role="status">
-              <span class="connection"><Check :size="13" />桌面桥接已连接</span
-              ><span>{{ info.name }} {{ info.version }}</span
-              ><span>{{ info.platform }} · {{ info.arch }}</span
-              ><span>Electron {{ info.electron }}</span
-              ><span v-if="playback.engineVersion"
-                >{{ playback.engineVersion }} · 输出
-                {{ playback.audioOutput ?? '等待音频设备' }}</span
-              >
-            </div>
-          </section>
+              <p v-if="infoError" class="error-message" role="alert">
+                {{ infoError }}
+              </p>
+              <div v-else-if="info" class="runtime-info" role="status">
+                <span class="connection"><Check :size="13" />桌面桥接已连接</span
+                ><span>{{ info.name }} {{ info.version }}</span
+                ><span>{{ info.platform }} · {{ info.arch }}</span
+                ><span>Electron {{ info.electron }}</span
+                ><span v-if="playback.engineVersion"
+                  >{{ playback.engineVersion }} · 输出
+                  {{ playback.audioOutput ?? '等待音频设备' }}</span
+                >
+              </div>
+            </section>
+          </details>
           <p class="settings-footnote">
-            StarsMusic · Linux 开发预览 / 本地目录扫描、歌词与在线搜索仍在规划中。
+            StarsMusic · Linux 开发预览 / 本地目录扫描与在线搜索仍在规划中。
           </p>
         </template>
       </div>
     </main>
 
     <footer class="player" aria-label="播放状态">
-      <button class="now-playing" aria-label="展开播放页" @click="playingDialog?.showModal()">
+      <button
+        class="now-playing"
+        :aria-label="nowPlayingOpen ? '返回音乐列表' : '打开播放页'"
+        :aria-expanded="nowPlayingOpen"
+        @click="nowPlayingOpen ? closePlaying() : openPlaying()"
+      >
         <span class="mini-art"
           ><img
             v-if="artwork && !artworkFailed"
@@ -851,59 +982,6 @@ onUnmounted(() => {
         </div>
       </div>
       <p class="drawer-footnote">顺序播放 · 会话队列 · 最多 200 首</p>
-    </dialog>
-    <dialog ref="playingDialog" class="playing-dialog" aria-labelledby="playing-title">
-      <button
-        class="icon-button close-playing"
-        aria-label="收起播放页"
-        @click="playingDialog?.close()"
-      >
-        <ChevronDown :size="24" /></button
-      ><span class="eyebrow">STARS AFTER HOURS</span>
-      <div class="playing-layout">
-        <div class="playing-details">
-          <div class="playing-art">
-            <img
-              v-if="artwork && !artworkFailed"
-              :src="artwork"
-              alt="当前歌曲专辑封面"
-              @error="artworkFailed = true"
-            /><img
-              v-else
-              src="./assets/stars-night.png"
-              alt="StarsMusic 原创星夜山景，默认播放背景"
-            />
-          </div>
-          <span class="playing-source">{{
-            currentTrack ? providerNames[currentTrack.provider ?? 'local'] : 'YOUR MUSIC, TOGETHER'
-          }}</span>
-          <h2 id="playing-title">
-            {{ currentTrack?.title ?? '等一首歌，也等一个好心情。' }}
-          </h2>
-          <p>
-            {{
-              currentTrack?.artist || (currentTrack ? statusText : '从本地音乐或已连接的歌单开始。')
-            }}
-          </p>
-          <p v-if="currentPresentation?.content?.album" class="playing-album">
-            {{ currentPresentation.content.album }}
-          </p>
-
-          <span v-if="currentTrack?.detail" class="quality-label">{{ currentTrack.detail }}</span>
-        </div>
-        <TrackLyrics
-          :presentation="presentation"
-          :position-seconds="playback.positionSeconds"
-          :generation="playback.generation"
-          :track-id="currentTrack?.id"
-        />
-      </div>
-      <PlaybackControls :playback="playback" @control="control" />
-      <p class="playing-note">
-        {{
-          currentTrack ? '播放状态与底栏同步 · Esc 收起' : '原创默认背景 · 选择歌曲后获取歌词与封面'
-        }}
-      </p>
     </dialog>
   </div>
 </template>

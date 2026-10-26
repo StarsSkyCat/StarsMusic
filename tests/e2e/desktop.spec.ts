@@ -30,9 +30,13 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await test.step('页面与真实 IPC', async () => {
-      await expect(page.getByRole('heading', { name: /让喜欢的音乐/ })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '正在播放', exact: true }).click();
+      await expect(page.getByRole('heading', { name: '还没有正在播放的音乐', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '返回音乐库', exact: true }).click();
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByText('应用信息与诊断', { exact: true }).click();
       await expect(page.getByRole('status')).toContainText('桌面桥接已连接');
       await page.getByRole('button', { name: '重新检查' }).click();
       await expect(page.getByRole('status')).toContainText('StarsMusic 0.0.0');
@@ -123,6 +127,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.screenshot({ path: 'artifacts/desktop-default.png' });
       await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(960, 640));
       await page.setViewportSize({ width: 960, height: 640 });
+      await page.getByText('应用信息与诊断', { exact: true }).click();
       await page.getByRole('button', { name: '重新检查' }).scrollIntoViewIfNeeded();
       await expect(page.getByRole('button', { name: '重新检查' })).toBeInViewport();
       await page.screenshot({ path: 'artifacts/desktop-minimum.png' });
@@ -161,7 +166,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.screenshot({ path: 'artifacts/local-playback.png' });
     });
 
-    await test.step('筛选、多选插队、展开播放页和队列管理共用后台状态', async () => {
+    await test.step('筛选、多选插队、独立播放页和队列管理共用后台状态', async () => {
       const state = () => page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { playback: { getState(): Promise<{ generation: number; currentIndex: number | null; queue: { title: string }[] }> } } }).starsMusic.playback;
         return api.getState();
@@ -179,37 +184,57 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.getByRole('button', { name: '下一首播放 test-third.wav', exact: true }).click();
       expect((await state()).queue.map(t => t.title)).toEqual(['test-audio.wav', 'test-third.wav', 'test-second.wav']);
       expect((await state()).generation).toBe(before.generation);
-      await page.getByRole('button', { name: '展开播放页', exact: true }).click();
-      const playing = page.getByRole('dialog', { name: 'test-audio.wav', exact: true });
+      await page.getByRole('textbox', { name: '筛选歌曲、歌手或歌单' }).fill('test-');
+      await page.getByRole('button', { name: '打开播放页', exact: true }).click();
+      const playing = page.getByRole('region', { name: '正在播放', exact: true });
+      const controls = page.locator('footer.player');
+      await expect(page.getByRole('dialog', { name: 'test-audio.wav', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('navigation', { name: '音乐库', exact: true }).getByRole('button', { name: /^本地音乐/ })).toBeVisible();
       await expect(playing).toBeVisible();
+      await expect(page.locator('.breadcrumb strong')).toHaveText('正在播放');
       await expect(playing.getByRole('img')).toBeVisible();
       await expect(playing.getByText('暂无可用歌词', { exact: true })).toBeVisible();
+      await page.screenshot({ path: 'artifacts/now-playing-default.png' });
       // 仅注入明确标识的合成 UI 投影，验证歌词/封面渲染；不模拟平台接入或音频成功。
       const metadataState = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { playback: { getState(): Promise<{ generation: number; currentIndex: number; queue: { id: string }[] }> }; presentation: { getState(): Promise<{ revision: number }> } } }).starsMusic;
         const playback = await api.playback.getState();
         return { revision: (await api.presentation.getState()).revision + 1, generation: playback.generation, trackId: playback.queue[playback.currentIndex]!.id, status: 'ready',
-          content: { album: '合成测试专辑', artwork: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', lyrics: [{ timeMs: 0, text: '合成第一行' }, { timeMs: 1000, text: '合成第二行' }, { timeMs: 10000, text: '合成第三行' }] } };
+          content: { album: '合成测试专辑', artwork: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', lyrics: [{ timeMs: 0, text: '合成第一行' }, { timeMs: 1000, text: '合成第二行' }, ...Array.from({ length: 50 }, (_, index) => ({ timeMs: (10 + index) * 1000, text: `合成后续第${index + 1}行` }))] } };
       });
       await desktop.evaluate(({ BrowserWindow }, snapshot) => BrowserWindow.getAllWindows()[0]!.webContents.send('starsmusic:presentation:changed', snapshot), metadataState);
       await expect(playing.getByText('合成测试专辑', { exact: true })).toBeVisible();
       await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成第二行');
       await expect(playing.getByRole('img', { name: '当前歌曲专辑封面' })).toBeVisible();
       expect(await playing.getByRole('img', { name: '当前歌曲专辑封面' }).evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-      await playing.getByRole('button', { name: '暂停', exact: true }).click();
-      await expect(playing.getByRole('button', { name: '播放', exact: true })).toBeEnabled();
-      await playing.getByRole('slider', { name: '播放进度' }).fill('0');
+      await controls.getByRole('button', { name: '暂停', exact: true }).click();
+      await expect(controls.getByRole('button', { name: '播放', exact: true })).toBeEnabled();
+      await controls.getByRole('slider', { name: '播放进度' }).fill('0');
       await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成第一行');
-      await playing.getByRole('slider', { name: '播放进度' }).fill('5');
+      await controls.getByRole('slider', { name: '播放进度' }).fill('5');
       await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成第二行');
       await page.setViewportSize({ width: 960, height: 640 });
-      await expect(playing.getByRole('button', { name: '播放', exact: true })).toBeInViewport();
-      await expect(playing.getByRole('slider', { name: '播放进度' })).toBeInViewport();
-      await page.screenshot({ path: 'artifacts/expanded-player-minimum.png' });
+      await expect(controls.getByRole('button', { name: '播放', exact: true })).toBeInViewport();
+      await expect(controls.getByRole('slider', { name: '播放进度' })).toBeInViewport();
+      expect(await page.locator('main').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await expect(playing.locator('.np-next')).toBeInViewport();
+      await page.screenshot({ path: 'artifacts/now-playing-page-minimum.png' });
       await page.setViewportSize({ width: 1280, height: 800 });
-      await page.screenshot({ path: 'artifacts/expanded-player.png' });
-      await playing.press('Escape');
+      await page.screenshot({ path: 'artifacts/now-playing-page.png' });
+      await controls.getByRole('slider', { name: '播放进度' }).fill('25');
+      await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成后续第16行');
+      await playing.getByRole('button', { name: /播放队列/ }).click();
+      await expect(page.getByRole('dialog', { name: /播放队列/ })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(playing).toBeVisible();
+      const generation = (await state()).generation;
+      await page.keyboard.press('Escape');
       await expect(playing).not.toBeVisible();
+      await expect(page.getByRole('textbox', { name: '筛选歌曲、歌手或歌单' })).toHaveValue('test-');
+      await page.getByRole('button', { name: '打开播放页', exact: true }).click();
+      await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toBeInViewport();
+      expect((await state()).generation).toBe(generation);
+      await playing.getByRole('button', { name: '返回本地音乐', exact: true }).click();
       await page.getByRole('button', { name: '打开播放队列', exact: true }).click();
       const queue = page.getByRole('dialog', { name: /播放队列/ });
       await expect(queue).toBeVisible();
@@ -293,4 +318,37 @@ test('扫码保存选择按平台隔离，未成功登录的选择不跨应用�
     const cleared = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { clear(): Promise<{ remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.clear());
     expect(cleared).toMatchObject({ remembered: false, savedProviders: [] });
   } finally { await desktop?.close(); await rm(profile, { recursive: true, force: true }); }
+});
+
+test('歌单详情直接展示曲目，往返播放页保留筛选且不显示另一歌单的旧曲目', async () => {
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-navigation-e2e-'));
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
+  delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL; env.GSETTINGS_BACKEND = 'memory';
+  const desktop = await _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true, timeout: 10_000 });
+  try {
+    const page = await desktop.firstWindow();
+    // 明确标识的合成只读 UI 投影；不认证、不播放、不模拟平台请求成功。
+    const snapshot = await page.evaluate(async () => {
+      const api = (window as unknown as { starsMusic: { kugou: { getState(): Promise<Record<string, unknown>> } } }).starsMusic.kugou;
+      return { ...await api.getState(), revision: 100, status: 'connected', account: { id: '4242', nickname: '合成展示账号' }, playlists: [{ id: '1', name: '合成歌单一', trackCount: 1 }, { id: '2', name: '合成歌单二', trackCount: 1 }], playlistId: '1', tracks: [{ id: 'a'.repeat(32), name: '合成展示曲目', artists: ['合成歌手'], durationMs: 30000 }] };
+    });
+    await desktop.evaluate(({ BrowserWindow }, state) => BrowserWindow.getAllWindows()[0]!.webContents.send('starsmusic:kugou:state-changed', state), snapshot);
+    await page.getByRole('button', { name: /合成歌单一/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '合成歌单一', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '播放 合成展示曲目', exact: true })).toBeVisible();
+    await expect(page.locator('.playlist-grid')).toHaveCount(0);
+    const search = page.getByRole('textbox', { name: '筛选歌曲、歌手或歌单', exact: true });
+    await search.fill('合成展示');
+    await page.getByRole('button', { name: '正在播放', exact: true }).click();
+    await expect(page.getByRole('region', { name: '正在播放', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '返回酷狗音乐', exact: true }).click();
+    await expect(search).toHaveValue('合成展示');
+    await expect(page.getByRole('heading', { level: 1, name: '合成歌单一', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '返回全部歌单', exact: true }).click();
+    await expect(search).toHaveValue('');
+    await page.getByRole('button', { name: /合成歌单二/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '合成歌单二', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '播放 合成展示曲目', exact: true })).toHaveCount(0);
+  } finally { await desktop.close(); await rm(profile, { recursive: true, force: true }); }
 });

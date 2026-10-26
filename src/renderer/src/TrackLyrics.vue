@@ -19,18 +19,22 @@ const valid = computed(() =>
 );
 const lyrics = computed(() => valid.value?.content?.lyrics ?? []);
 const current = computed(() => activeLyricIndex(lyrics.value, props.positionSeconds));
-watch([current, lyrics], async () => {
-  await nextTick();
-  const row = rows.value?.querySelector<HTMLElement>('[aria-current="true"]');
-  if (row && rows.value)
-    rows.value.scrollTo({
-      top: Math.max(
-        0,
-        row.offsetTop - rows.value.offsetTop - rows.value.clientHeight / 2 + row.clientHeight / 2,
-      ),
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-    });
-});
+watch(
+  [current, lyrics],
+  async () => {
+    await nextTick();
+    const row = rows.value?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (row && rows.value)
+      rows.value.scrollTo({
+        top: Math.max(
+          0,
+          row.offsetTop - rows.value.offsetTop - rows.value.clientHeight / 2 + row.clientHeight / 2,
+        ),
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+  },
+  { immediate: true },
+);
 </script>
 <template>
   <section class="track-lyrics" aria-label="歌词">
