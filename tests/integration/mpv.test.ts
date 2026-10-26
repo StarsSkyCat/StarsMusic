@@ -129,23 +129,33 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
       ...(start > 0 ? { 'content-range': `bytes ${start}-${audio.length - 1}/${audio.length}` } : {}),
     }, stream: Readable.from([body]) };
   };
-  const player = new MusicPlayer({ audioOutput: 'null', openGateway: (url, signal) => MediaGateway.open(url, signal, fetcher) });
+  const player = new MusicPlayer({ audioOutput: 'null', openGateway: (url, signal, provider) => MediaGateway.open(url, signal, fetcher, provider) });
   const resource: StreamResolution = {
     track: { provider: 'netease', id: '7' }, source: { kind: 'remote', url: 'https://m1.music.126.net/synthetic', headers: {} },
     access: { kind: 'preview', startMs: 0, durationMs: 1000 }, quality: { level: 'unknown' },
   };
   try {
-    await player.openRemote('合成在线曲目', async () => resource);
+    await player.openRemote('netease', '合成在线曲目', async () => resource);
     await until(() => player.snapshot().status === 'playing');
     assert.ok(player.snapshot().queue[0]?.title.includes('试听'));
     assert.ok(!JSON.stringify(player.snapshot()).includes('music.126.net'));
     await until(() => player.snapshot().durationSeconds > 0);
     assert.ok(player.snapshot().durationSeconds <= 1);
-    await player.clearRemote(); assert.deepEqual(player.snapshot().queue, []);
+    const generation = player.snapshot().generation;
+    await player.clearRemote('kugou'); assert.equal(player.snapshot().generation, generation);
+    await player.clearRemote('netease'); assert.deepEqual(player.snapshot().queue, []);
+    const kugou: StreamResolution = { ...resource, track: { provider: 'kugou', id: 'synthetic' }, source: { kind: 'remote', url: 'https://fsandroid.kugou.com/synthetic', headers: {} } };
+    await player.openRemote('kugou', '合成酷狗曲目', async () => kugou);
+    await until(() => player.snapshot().status === 'playing');
+    assert.ok(player.snapshot().queue[0]?.title.includes('酷狗'));
+    const kugouGeneration = player.snapshot().generation;
+    await player.clearRemote('netease'); assert.equal(player.snapshot().generation, kugouGeneration);
+    await player.clearRemote('kugou');
+
     assert.deepEqual(await children(), []);
     let resolve!: (value: StreamResolution) => void;
     const delayed = new Promise<StreamResolution>((done) => { resolve = done; });
-    const old = player.openRemote('旧解析', async () => delayed);
+    const old = player.openRemote('netease', '旧解析', async () => delayed);
     const current = player.openFiles([file]); resolve(resource);
     await Promise.all([old, current]); await until(() => player.snapshot().status === 'playing');
     assert.equal(player.snapshot().queue[0]?.title, 'synthetic.wav');

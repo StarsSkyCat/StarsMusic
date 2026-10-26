@@ -43,7 +43,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease', 'kugou']);
       expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '0.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
       await expect(page.getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
@@ -56,6 +56,14 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       });
       expect(provider.status).toBe('signed-out'); expect(provider.loggedOut).toBe('signed-out');
       expect(provider.keys).not.toContain('resolveTrack'); expect(provider.keys).not.toContain('request');
+      const kugou = await page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { kugou: { getState(): Promise<{ status: string }>; logout(): Promise<{ status: string }> } } }).starsMusic.kugou;
+        return { initial: (await api.getState()).status, logout: (await api.logout()).status, keys: Object.keys(api).sort() };
+      });
+      expect(kugou.initial).toBe('signed-out'); expect(kugou.logout).toBe('signed-out');
+      expect(kugou.keys).toEqual(provider.keys);
+      await expect(page.getByRole('button', { name: '连接酷狗', exact: true })).toBeAttached();
+
     });
 
     await test.step('内存会话与 renderer 沙箱', async () => {

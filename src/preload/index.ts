@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
+import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/kugou';
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
 
 const invokePlayback = async (channel: string, ...args: unknown[]) => {
@@ -10,6 +11,11 @@ const invokePlayback = async (channel: string, ...args: unknown[]) => {
 const invokeNetease = async (channel: string, ...args: unknown[]) => {
   const value: unknown = await ipcRenderer.invoke(channel, ...args);
   return parseNeteaseSnapshot(value);
+};
+
+const invokeKugou = async (channel: string, ...args: unknown[]) => {
+  const value: unknown = await ipcRenderer.invoke(channel, ...args);
+  return parseKugouSnapshot(value);
 };
 
 const api: DesktopApi = Object.freeze({
@@ -46,6 +52,21 @@ const api: DesktopApi = Object.freeze({
       const receive = (_event: unknown, value: unknown) => listener(parseNeteaseSnapshot(value));
       ipcRenderer.on(neteaseChannels.stateChanged, receive);
       return () => { ipcRenderer.removeListener(neteaseChannels.stateChanged, receive); };
+    },
+  }),
+  kugou: Object.freeze({
+    getState: () => invokeKugou(kugouChannels.getState),
+    startLogin: () => invokeKugou(kugouChannels.startLogin),
+    cancelLogin: () => invokeKugou(kugouChannels.cancelLogin),
+    logout: () => invokeKugou(kugouChannels.logout),
+    loadPlaylists: () => invokeKugou(kugouChannels.loadPlaylists),
+    loadPlaylist: (id: string, offset: number) => invokeKugou(kugouChannels.loadPlaylist, id, offset),
+    async playTrack(id: string): Promise<void> { await ipcRenderer.invoke(kugouChannels.playTrack, id); },
+    onStateChanged(listener: (state: ReturnType<typeof parseKugouSnapshot>) => void) {
+      if (typeof listener !== 'function') throw new Error('监听器无效');
+      const receive = (_event: unknown, value: unknown) => listener(parseKugouSnapshot(value));
+      ipcRenderer.on(kugouChannels.stateChanged, receive);
+      return () => { ipcRenderer.removeListener(kugouChannels.stateChanged, receive); };
     },
   }),
 });

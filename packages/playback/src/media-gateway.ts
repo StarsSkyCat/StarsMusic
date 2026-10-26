@@ -4,13 +4,15 @@ import { lookup } from 'node:dns';
 import { randomBytes } from 'node:crypto';
 import { type Readable, pipeline } from 'node:stream';
 import { isIP, type Socket } from 'node:net';
+import type { OnlineProviderId } from '../../contracts/src/music.ts';
+import { allowedKugouMediaHost } from '../../contracts/src/media-policy.ts';
 import { DomainError } from '../../contracts/src/errors.ts';
 
-export function allowedMediaUrl(value: string): URL {
+export function allowedMediaUrl(value: string, provider: OnlineProviderId = 'netease'): URL {
   let url: URL;
   try { url = new URL(value); } catch { throw new DomainError('invalid-response'); }
   if (/[\u0000-\u0020\u007f]/.test(value) || url.protocol !== 'https:' || url.username || url.password
-    || url.port || url.hash || !url.hostname.endsWith('.music.126.net')) throw new DomainError('invalid-response');
+    || url.port || url.hash || !(provider === 'netease' ? url.hostname.endsWith('.music.126.net') : provider === 'kugou' && allowedKugouMediaHost(url.hostname))) throw new DomainError('invalid-response');
   return url;
 }
 export function publicIpv4(address: string): boolean {
@@ -73,8 +75,8 @@ export class MediaGateway {
   #removeAbort: (() => void) | undefined;
   address = '';
 
-  private constructor(url: string, fetcher: FetchMedia) {
-    this.#url = allowedMediaUrl(url).href; this.#fetch = fetcher;
+  private constructor(url: string, fetcher: FetchMedia, provider: OnlineProviderId) {
+    this.#url = allowedMediaUrl(url, provider).href; this.#fetch = fetcher;
     this.#server = createServer((request, response) => {
       void (async () => {
         if (request.url !== `/${this.#token}`) { response.writeHead(404).end(); return; }
@@ -87,13 +89,13 @@ export class MediaGateway {
         response.once('close', () => aborted.abort());
         request.once('aborted', () => aborted.abort());
         const signal = AbortSignal.any([aborted.signal, this.#abort.signal]);
-        let target = allowedMediaUrl(this.#url);
+        let target = allowedMediaUrl(this.#url, provider);
         for (let redirects = 0; redirects <= 3; redirects++) {
           const result = await this.#fetch(target, { Accept: 'audio/*', ...(range ? { Range: range } : {}) }, signal);
           if ([301, 302, 303, 307, 308].includes(result.status)) {
             result.stream.destroy();
             if (redirects === 3 || !result.headers.location) throw new DomainError('network');
-            target = allowedMediaUrl(new URL(result.headers.location, target).href);
+            target = allowedMediaUrl(new URL(result.headers.location, target).href, provider);
             continue;
           }
           if (![200, 206, 416].includes(result.status)) { result.stream.destroy(); throw new DomainError('unavailable'); }
@@ -113,9 +115,9 @@ export class MediaGateway {
     });
     this.#server.on('connection', (socket) => { this.#sockets.add(socket); socket.once('close', () => this.#sockets.delete(socket)); });
   }
-  static async open(url: string, signal: AbortSignal, fetcher: FetchMedia = fetchMedia): Promise<MediaGateway> {
+  static async open(url: string, signal: AbortSignal, fetcher: FetchMedia = fetchMedia, provider: OnlineProviderId = 'netease'): Promise<MediaGateway> {
     signal.throwIfAborted();
-    const gateway = new MediaGateway(url, fetcher);
+    const gateway = new MediaGateway(url, fetcher, provider);
     await new Promise<void>((resolve, reject) => {
       gateway.#server.once('error', reject);
       gateway.#server.listen(0, '127.0.0.1', () => resolve());

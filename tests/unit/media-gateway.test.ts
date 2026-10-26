@@ -54,3 +54,21 @@ test('每次重定向重新校验目标，过界跳转不请求，取消立即�
     await assert.rejects(fetch(gateway.address));
   } finally { await gateway.close(); }
 });
+
+test('酷狗 CDN 按平台隔离，连同跨平台重定向一起拒绝', async () => {
+  const url = 'https://fsandroid.kugou.com/synthetic';
+  assert.equal(allowedMediaUrl(url, 'kugou').hostname, 'fsandroid.kugou.com');
+  assert.throws(() => allowedMediaUrl(url, 'netease'));
+  assert.throws(() => allowedMediaUrl('https://m1.music.126.net/synthetic', 'kugou'));
+  for (const host of ['www.kugou.com', 'login-user.kugou.com', 'fsandroid.kugou.com.evil.invalid']) {
+    assert.throws(() => allowedMediaUrl(`https://${host}/synthetic`, 'kugou'));
+  }
+  const targets: string[] = [];
+  const fetcher: FetchMedia = async (target) => {
+    targets.push(target.hostname);
+    return { status: 302, headers: { location: 'https://m1.music.126.net/synthetic' }, stream: Readable.from([]) };
+  };
+  const gateway = await MediaGateway.open(url, new AbortController().signal, fetcher, 'kugou');
+  try { assert.equal((await fetch(gateway.address)).status, 502); assert.deepEqual(targets, ['fsandroid.kugou.com']); }
+  finally { await gateway.close(); }
+});

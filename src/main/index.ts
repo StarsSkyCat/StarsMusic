@@ -5,6 +5,8 @@ import { assertTrustedInvoke, assertTrustedSource, getDevelopmentUrl } from './i
 import { parsePlaybackArgument, playbackChannels } from '../../packages/contracts/src/playback';
 import { appError } from '../../packages/contracts/src/errors';
 import { audioExtensions, MusicPlayer } from '../../packages/playback/src/player';
+import { KugouClient } from './kugou-client';
+import { kugouChannels, parseKugouArguments } from '../../packages/contracts/src/kugou';
 import { NeteaseClient } from './netease-client';
 import { neteaseChannels, parseNeteaseArguments } from '../../packages/contracts/src/netease';
 
@@ -17,6 +19,7 @@ const documentUrl = developmentUrl ?? pathToFileURL(rendererFile).href;
 let mainWindow: BrowserWindow | null = null;
 const player = new MusicPlayer();
 const netease = new NeteaseClient(fileURLToPath(new URL('./netease-worker.js', import.meta.url)));
+const kugou = new KugouClient(fileURLToPath(new URL('./kugou-worker.js', import.meta.url)));
 let selectionGeneration = 0;
 let quitting = false;
 
@@ -78,7 +81,7 @@ void app.whenReady().then(() => {
     if (contents && !contents.isDestroyed()) contents.send(playbackChannels.stateChanged, snapshot);
   });
   netease.subscribe((snapshot) => {
-    if (snapshot.status !== 'connected') void player.clearRemote();
+    if (snapshot.status !== 'connected') void player.clearRemote('netease');
     const contents = mainWindow?.webContents;
     if (contents && !contents.isDestroyed()) contents.send(neteaseChannels.stateChanged, snapshot);
   });
@@ -90,22 +93,55 @@ void app.whenReady().then(() => {
       const argument = parseNeteaseArguments(channel, args);
       if (quitting) return netease.snapshot();
       if (channel === neteaseChannels.playTrack) {
+        selectionGeneration++;
         const state = netease.snapshot();
         const track = state.tracks.find((track) => track.id === argument.id);
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
-        await player.openRemote(`${track.name} / ${track.artists.join('、')}`, (signal) => netease.resolveTrack(track.id, state.generation, signal));
+        await player.openRemote('netease', `${track.name} / ${track.artists.join('、')}`, (signal) => netease.resolveTrack(track.id, state.generation, signal));
         return;
       }
       if (channel === neteaseChannels.startLogin) return netease.command('startLogin');
       if (channel === neteaseChannels.cancelLogin) return netease.command('cancelLogin');
       if (channel === neteaseChannels.logout) {
         const pending = netease.command('logout');
-        await player.clearRemote();
+        await player.clearRemote('netease');
         return pending;
       }
       if (channel === neteaseChannels.loadPlaylists) return netease.command('loadPlaylists');
       if (channel === neteaseChannels.loadPlaylist) return netease.command('loadPlaylist', { id: argument.id, offset: argument.offset });
       return netease.command('getState');
+    });
+  }
+  kugou.subscribe((snapshot) => {
+    if (snapshot.status !== 'connected') void player.clearRemote('kugou');
+    const contents = mainWindow?.webContents;
+    if (contents && !contents.isDestroyed()) contents.send(kugouChannels.stateChanged, snapshot);
+  });
+  for (const channel of Object.values(kugouChannels)) {
+    if (channel === kugouChannels.stateChanged) continue;
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      const contents = mainWindow?.webContents;
+      assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
+      const argument = parseKugouArguments(channel, args);
+      if (quitting) return kugou.snapshot();
+      if (channel === kugouChannels.playTrack) {
+        selectionGeneration++;
+        const state = kugou.snapshot();
+        const track = state.tracks.find((track) => track.id === argument.id);
+        if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
+        await player.openRemote('kugou', `${track.name} / ${track.artists.join('、')}`, (signal) => kugou.resolveTrack(track.id, state.generation, signal));
+        return;
+      }
+      if (channel === kugouChannels.startLogin) return kugou.command('startLogin');
+      if (channel === kugouChannels.cancelLogin) return kugou.command('cancelLogin');
+      if (channel === kugouChannels.logout) {
+        const pending = kugou.command('logout');
+        await player.clearRemote('kugou');
+        return pending;
+      }
+      if (channel === kugouChannels.loadPlaylists) return kugou.command('loadPlaylists');
+      if (channel === kugouChannels.loadPlaylist) return kugou.command('loadPlaylist', { id: argument.id, offset: argument.offset });
+      return kugou.command('getState');
     });
   }
   for (const channel of Object.values(playbackChannels)) {
@@ -153,10 +189,11 @@ app.on('before-quit', (event) => {
   event.preventDefault();
   quitting = true;
   selectionGeneration++;
-  void Promise.allSettled([netease.dispose(), player.dispose()]).then(() => app.quit());
+  void Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose()]).then(() => app.quit());
 });
 app.on('will-quit', () => {
   ipcMain.removeHandler(desktopChannels.getAppInfo);
   for (const channel of Object.values(playbackChannels)) ipcMain.removeHandler(channel);
   for (const channel of Object.values(neteaseChannels)) ipcMain.removeHandler(channel);
+  for (const channel of Object.values(kugouChannels)) ipcMain.removeHandler(channel);
 });

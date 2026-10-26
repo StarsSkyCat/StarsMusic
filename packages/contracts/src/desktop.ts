@@ -1,4 +1,5 @@
 import type { PlaybackApi } from './playback.ts';
+import type { KugouApi } from './kugou.ts';
 import type { NeteaseApi } from './netease.ts';
 
 export const desktopChannels = {
@@ -19,6 +20,7 @@ export interface DesktopApi {
   getAppInfo(): Promise<AppInfo>;
   readonly playback: PlaybackApi;
   readonly netease: NeteaseApi;
+  readonly kugou: KugouApi;
 }
 
 export function parseAppInfo(value: unknown): AppInfo {

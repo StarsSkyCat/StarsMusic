@@ -15,6 +15,8 @@
 | [本地播放验证](validation/2026-10-26-local-playback.md) | P0 第三步的实际 mpv 与 PipeWire 桌面验证 |
 | [网易云接入](netease.md) | 固定协议、临时扫码、歌单和 CDN 网关边界 |
 | [网易云验证](validation/2026-10-26-netease.md) | 用户真实闭环结果、Fake-IP 修复及剩余矩阵 |
+| [酷狗接入](kugou.md) | App 扫码、设备注册、歌单、流解析和渠道隔离 |
+| [酷狗验证](validation/2026-10-26-kugou.md) | 匿名/合成检查结果与待完成的真实账号闭环 |
 | [架构决策 ADR](adr/README.md) | 已选方向、备选方案和未验证的决策 |
 | [P0 验证记录模板](templates/p0-validation.md) | 记录真实环境、操作、证据与限制 |
 

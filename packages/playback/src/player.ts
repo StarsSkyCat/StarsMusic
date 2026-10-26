@@ -4,16 +4,16 @@ import path from 'node:path';
 import { appError, DomainError, normalizeError, type AppError } from '../../contracts/src/errors.ts';
 import { parsePlaybackSnapshot, playbackNumber, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import { MpvClient, type MpvOptions } from './mpv-client.ts';
-import { parseStreamResolution, type StreamResolution } from '../../contracts/src/music.ts';
+import { parseStreamResolution, type StreamResolution, type OnlineProviderId } from '../../contracts/src/music.ts';
 import { MediaGateway } from './media-gateway.ts';
 
 export const audioExtensions = ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'aif', 'aiff'];
 interface PlayerTrack {
-  id: string; title: string; path?: string;
+  id: string; title: string; path?: string; provider?: OnlineProviderId;
   resolve?: (signal: AbortSignal) => Promise<StreamResolution>;
 }
 interface PlayerOptions extends Pick<MpvOptions, 'executable' | 'audioOutput'> {
-  openGateway?: (url: string, signal: AbortSignal) => Promise<MediaGateway>;
+  openGateway?: (url: string, signal: AbortSignal, provider: OnlineProviderId) => Promise<MediaGateway>;
 }
 
 export class MusicPlayer {
@@ -71,15 +71,15 @@ export class MusicPlayer {
     return this.#switch(index);
   }
 
-  openRemote(title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>): Promise<PlaybackSnapshot> {
+  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
-    const track: PlayerTrack = { id: randomUUID(), title, resolve };
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider };
     this.#tracks = [track];
     this.#update({ queue: [{ id: track.id, title }], currentIndex: null, status: 'idle' });
     return this.#switch(0);
   }
-  async clearRemote(): Promise<void> {
-    if (!this.#tracks.some((track) => track.resolve)) return;
+  async clearRemote(provider: OnlineProviderId): Promise<void> {
+    if (!this.#tracks.some((track) => track.resolve && track.provider === provider)) return;
     this.#tracks = [];
     await this.stop();
     // 清理过程中可能已经选择本地文件，不覆盖更新的队列。
@@ -116,14 +116,14 @@ export class MusicPlayer {
         if (track.resolve) {
           const stream = parseStreamResolution(await track.resolve(signal));
           signal.throwIfAborted();
-          if (stream.source.kind !== 'remote' || Object.keys(stream.source.headers).length !== 0) throw new DomainError('invalid-response');
+          if (stream.track.provider !== track.provider || stream.source.kind !== 'remote' || Object.keys(stream.source.headers).length !== 0) throw new DomainError('invalid-response');
           if (stream.source.expiresAt !== undefined && stream.source.expiresAt <= Date.now()) throw new DomainError('unavailable');
-          this.#gateway = await (this.#options.openGateway?.(stream.source.url, signal) ?? MediaGateway.open(stream.source.url, signal));
+          this.#gateway = await (this.#options.openGateway?.(stream.source.url, signal, track.provider!) ?? MediaGateway.open(stream.source.url, signal, undefined, track.provider!));
           filename = this.#gateway.address;
           if (stream.access.kind === 'preview') previewSeconds = stream.access.durationMs / 1000;
           this.#previewSeconds = previewSeconds;
           const quality = { unknown: '音质未知', standard: '标准', high: '高音质', lossless: '无损', 'hi-res': 'Hi-Res' }[stream.quality.level];
-          this.#update({ queue: [{ id: track.id, title: `${track.title} · 网易云 · ${stream.access.kind === 'preview' ? '试听 · ' : ''}${quality}` }] });
+          this.#update({ queue: [{ id: track.id, title: `${track.title} · ${track.provider === 'kugou' ? '酷狗' : '网易云'} · ${stream.access.kind === 'preview' ? '试听 · ' : ''}${quality}` }] });
         } else {
           try {
             if (!track.path) throw new Error('no file');

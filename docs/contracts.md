@@ -1,6 +1,6 @@
 # 公共契约与会话 generation
 
-P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，后台守卫由 packages/providers/src/session-generation.ts 实现。第四步的网易云服务已实际使用这些基础；其白名单 DTO 与命令见 netease.ts，具体范围见 [网易云说明](netease.md)。不提供模拟成功的产品入口。
+P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，后台守卫由 packages/providers/src/session-generation.ts 实现。第四步的网易云服务和第五步的酷狗服务已实际使用这些基础；其白名单 DTO 与命令见 netease.ts、kugou.ts，具体范围见 [网易云说明](netease.md) 与 [酷狗说明](kugou.md)。不提供模拟成功的产品入口。
 
 ## 模型与校验
 
@@ -16,7 +16,7 @@ P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，�
 
 解析入口接受 unknown，输出仅含明确字段并冻结对象；不原样转发未知字段。时间戳为 Unix 毫秒，试听 startMs/durationMs 为毫秒；码率为 kbps，采样率为 Hz。时间戳只作结构/范围校验，消费资源时仍必须检查是否已经过期。
 
-当前渠道枚举是契约命名：netease-app、netease-web、kugou-app、kugou-web，不表示已经验证这些登录方式。酷狗两个渠道不能互换会话或缓存。
+当前渠道枚举是契约命名：netease-app、netease-web、kugou-app、kugou-web，不表示已经验证这些登录方式。酷狗两个渠道不能互换会话或缓存；当前只实现 kugou-app。
 
 登录已连接只表明身份验证通过，不包含歌曲权限承诺。曲目仍需解析实际资源；access 明确区分 full 与 preview，quality.level 可为 unknown，不能根据会员或请求音质猜测实际音质。当前这些结构不构成完整 Provider 方法接口，搜索、歌单分页、歌词等在实际接入时按使用需求补充。
 
@@ -24,7 +24,7 @@ P0 第二步建立的纯 TypeScript 基础由 packages/contracts/src 定义，�
 
 StreamResolution.source.remote 包含临时 URL、请求头和可选过期时间，仅在可信后台短时使用，不进入 renderer、日志、数据库或页面存储。远端 URL 必须为不含内嵌身份、片段和空白/控制字符的 HTTPS；请求头名称合法、值无非法控制字符，拒绝大小写重复头和 Host/Connection 等传输控制头。
 
-通用检查只验证结构，不授权任意 HTTPS 目标。网易云已增加严格 CDN/跳转传输策略、loopback 网关与无凭据转发；其他平台仍须独立核实。不能用通用契约校验代替实际平台验证。
+通用检查只验证结构，不授权任意 HTTPS 目标。网易云与酷狗已分别增加严格 CDN/跳转传输策略、平台隔离的 loopback 网关与无凭据转发；其他渠道仍须独立核实。不能用通用契约校验代替实际平台验证。
 
 适配器核实实际响应后才能抛出 DomainError 分类。normalizeError 不猜测未知上游对象中的 code 或 message；未知错误统一为 internal，契约校验失败为 invalid-response，AbortError/TimeoutError 映射取消/超时。权限拒绝、过期、网络、限流等分类有固定文案；retryable 仅为提示，不代表已实现自动重试。
 
@@ -40,6 +40,6 @@ SessionGeneration 每个平台只保留一个活动 SessionLease。租约包含�
 - 网络请求内只取数据，缓存/状态写入必须放在 apply。上游不响应 AbortSignal 时仍通过最终租约检查阻止旧结果覆盖。
 - 缓存键捕获自租约上下文，不在请求结束后读取可能已经切换的当前账号。缓存数据本身的账号清理、容量与持久化尚未实现。
 
-守卫自身不维护账号/凭据或自动清理资源。网易云服务已在 invalidate 后清理临时凭据与列表，后台状态变化通知播放器停止相关在线音频；其他平台接入时必须落实各自清理与超时规则。
+守卫自身不维护账号/凭据或自动清理资源。网易云与酷狗服务已在 invalidate 后清理临时凭据与列表，后台状态变化通知播放器停止相应在线音频；新渠道接入时必须落实各自清理与超时规则。
 
 会话 generation 只处理账号生命周期，不能替代未来快速切歌需要的独立 playbackGeneration；同一账号内不同播放请求仍需独立隔离。跨进程接入时必须由拥有会话的后台服务进行最终检查，不把 IPC 反序列化后的租约当作同一对象。

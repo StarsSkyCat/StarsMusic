@@ -12,6 +12,7 @@ const definitions = {
   'timeout': ['请求超时', true],
   'cancelled': ['操作已取消', false],
   'stale-operation': ['操作已过期', false],
+  'verification-required': ['平台要求安全验证，请先在官方 App 中处理后重试', false],
   'unsupported': ['暂不支持此操作', false],
   'internal': ['操作失败，请稍后重试', false],
   'engine-unavailable': ['无法启动 mpv，请确认已安装并可运行', false],
