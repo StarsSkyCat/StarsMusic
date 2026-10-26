@@ -59,7 +59,8 @@
 .player { background: var(--player-glass); border-color: var(--glass-edge); }
 .library-overview { background: radial-gradient(ellipse at 80% 0, #aecac712, transparent 65%), var(--glass); border-color: var(--glass-edge); }
 .library-current, .library-start-note { background: var(--glass); border-color: var(--glass-edge); color: var(--text); }
-.np-lyric-pane, .np-next { background: var(--glass); border-color: var(--glass-edge); }
+.np-next { background: var(--glass); border-color: var(--glass-edge); }
+.sidebar-note:hover:not(:disabled) { background: var(--active); border-color: var(--active-edge); }
 .main-navigation button.active, .settings-nav.active { color: var(--accent); background: var(--active); border-color: var(--active-edge); }
 .main-navigation button:hover:not(:disabled), .settings-nav:hover:not(:disabled), .song-list > li:hover, .queue-list > li:hover, .now-playing:hover:not(:disabled) { background: var(--hover); }
 .song-list > li.is-current, .song-list > li.is-selected, .queue-list > li.is-current { background: var(--active); }
@@ -117,6 +118,7 @@ dialog::backdrop { background: #10172045; }
 :root[data-theme='light'] .runtime-disclosure,
 :root[data-theme='light'] .playlist-card { border-color: var(--line); background: #ffffff42; }
 :root[data-theme='light'] .sidebar-note { border-color: var(--line); background: #ffffff50; }
+:root[data-theme='light'] .sidebar-note:hover { border-color: var(--active-edge); background: var(--active); }
 :root[data-theme='light'] .count-pill { border-color: var(--line); background: #ffffff66; }
 :root[data-theme='light'] .table-header,
 :root[data-theme='light'] .song-list > li,

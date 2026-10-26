@@ -45,7 +45,7 @@ pnpm test:e2e
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。
 - start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、两个平台的匿名后台状态、本地选择、默认系统音频输出和退出，需 Linux、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。
 
-当前 Linux 关闭窗口即退出；尚未实现托盘和后台播放。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用云瓷白 / 曜石黑 Liquid Glass 设计，包含悬浮侧栏、折射唱片主视觉、来源卡、平台扫码步骤、歌单详情、列表筛选、多选下一首、玻璃队列抽屉和独立播放页；底部播放舱持续可用。布局和视觉检查见 [液态玻璃记录](validation/2026-10-27-liquid-glass.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
+当前 Linux 关闭窗口即退出；尚未实现托盘和后台播放。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用云瓷白 / 曜石黑 Liquid Glass 设计，包含悬浮侧栏、折射唱片主视觉、来源卡、平台扫码步骤、歌单详情、列表筛选、多选下一首、玻璃队列抽屉和独立播放页；底部播放舱持续可用。布局和视觉检查见 [液态玻璃记录](validation/2026-10-27-liquid-glass.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词采用无框悬浮布局，居中显示并按区域大小放大字号/行距，远处歌词淡出；本地音乐归入来源分组第一项，左下队列卡整块可点击，见 [交互调整](validation/2026-10-27-floating-lyrics.md)。歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
 
 环境已提供 Corepack、但没有 pnpm 命令时，可直接执行以下命令，无需全局安装：
 

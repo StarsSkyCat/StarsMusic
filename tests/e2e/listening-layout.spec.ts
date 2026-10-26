@@ -15,6 +15,7 @@ test('双主题播放舞台填满高窗口，缩放后歌词居中且底栏与�
   const desktop = await _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true });
   try {
     const page = await desktop.firstWindow(); await page.setViewportSize({ width: 1280, height: 800 });
+    page.setDefaultTimeout(5000);
     const errors: string[] = []; page.on('pageerror', (error) => errors.push(error.message));
     await desktop.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, audio);
     await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
@@ -30,12 +31,20 @@ test('双主题播放舞台填满高窗口，缩放后歌词居中且底栏与�
     await desktop.evaluate(({ BrowserWindow }, value) => BrowserWindow.getAllWindows()[0]!.webContents.send('starsmusic:presentation:changed', value), metadata);
     await page.getByRole('slider', { name: '播放进度', exact: true }).fill('12');
     const playing = page.getByRole('region', { name: '正在播放', exact: true });
+    const sources = page.getByRole('navigation', { name: '音乐来源', exact: true });
+    await expect(sources.getByRole('button').nth(0)).toHaveText(/^本地音乐/);
+    await expect(sources.getByRole('button').nth(1)).toHaveText(/^网易云音乐/);
+    await expect(sources.getByRole('button').nth(2)).toHaveText(/^酷狗音乐/);
     for (const theme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: '账号与设置', exact: true }).click();
       const radio = page.getByRole('radio', { name: theme === 'light' ? '浅色' : '暗色', exact: true });
       await radio.check(); await expect(radio).toBeEnabled();
       await page.getByRole('button', { name: '正在播放', exact: true }).click();
       await expect(playing.locator('[aria-current="true"]')).toHaveText('合成歌词 · 第 13 行');
+      await expect(playing.locator('.np-lyric-pane')).toHaveCSS('border-top-width', '0px');
+      await expect(playing.locator('.np-lyric-pane')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      let minimumFont = 0;
+      let minimumSpacing = 0;
       for (const size of [{ width: 960, height: 640 }, { width: 1280, height: 800 }, { width: 1240, height: 1260 }, { width: 1440, height: 1000 }]) {
         await page.setViewportSize(size);
         await expect(playing.locator('.np-next')).toBeInViewport();
@@ -51,15 +60,45 @@ test('双主题播放舞台填满高窗口，缩放后歌词居中且底栏与�
           const pane = element.querySelector('.np-lyric-pane')!.getBoundingClientRect();
           const next = element.querySelector('.np-next')!.getBoundingClientRect();
           const main = element.closest('main')!;
+          const scroll = element.querySelector('.lyric-scroll')!.getBoundingClientRect();
+          const row = element.querySelector('.lyric-scroll [aria-current="true"]')!;
+          const text = getComputedStyle(row);
+          const visibleLines = Array.from(element.querySelectorAll('.lyric-scroll p')).filter(line => {
+            const bounds = line.getBoundingClientRect();
+            return bounds.bottom > scroll.top && bounds.top < scroll.bottom;
+          }).length;
           return { bottomGap: element.getBoundingClientRect().bottom - next.bottom,
             lyricGap: next.top - pane.bottom, overflow: main.scrollHeight - main.clientHeight,
-            horizontalOverflow: main.scrollWidth - main.clientWidth, height: pane.height };
+            horizontalOverflow: main.scrollWidth - main.clientWidth, height: pane.height,
+            font: parseFloat(text.fontSize), spacing: parseFloat(text.paddingTop), alignment: text.textAlign, visibleLines };
         });
         expect(geometry.bottomGap).toBeLessThan(2);
         expect(geometry.lyricGap).toBeLessThanOrEqual(24);
         expect(geometry.overflow).toBeLessThanOrEqual(1);
         expect(geometry.horizontalOverflow).toBeLessThanOrEqual(1);
-        if (size.height === 1260) expect(geometry.height).toBeGreaterThan(800);
+        expect(geometry.alignment).toBe('center');
+        expect(geometry.visibleLines).toBeLessThanOrEqual(8);
+        if (size.height === 640) { minimumFont = geometry.font; minimumSpacing = geometry.spacing; }
+        if (size.height === 1260) {
+          expect(geometry.height).toBeGreaterThan(800);
+          expect(geometry.font).toBeGreaterThan(minimumFont * 1.4);
+          expect(geometry.spacing).toBeGreaterThan(minimumSpacing * 1.5);
+        }
+        if (size.height === 640 || size.height === 1260) {
+          const card = page.getByRole('button', { name: /^打开本次播放队列/ });
+          const bounds = await card.boundingBox();
+          for (const position of [{ x: 10, y: 10 }, { x: bounds!.width - 10, y: bounds!.height - 10 }]) {
+            await card.click({ position });
+            await expect(page.getByRole('dialog', { name: /播放队列/ })).toBeVisible();
+            await page.keyboard.press('Escape');
+          }
+          for (const key of ['Enter', 'Space']) {
+            await card.press(key);
+            await expect(page.getByRole('dialog', { name: /播放队列/ })).toBeVisible();
+            await page.keyboard.press('Escape');
+            await expect(card).toBeFocused();
+          }
+        }
         if (size.height !== 1000)
           await page.screenshot({ path: `artifacts/listening-${theme}-${size.height === 1260 ? 'tall' : size.height === 640 ? 'minimum' : 'desktop'}.png`, animations: 'disabled' });
       }

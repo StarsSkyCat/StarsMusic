@@ -202,7 +202,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       const playing = page.getByRole('region', { name: '正在播放', exact: true });
       const controls = page.locator('footer.player');
       await expect(page.getByRole('dialog', { name: 'test-audio.wav', exact: true })).toHaveCount(0);
-      await expect(page.getByRole('navigation', { name: '音乐库', exact: true }).getByRole('button', { name: /^本地音乐/ })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^本地音乐/ })).toBeVisible();
       await expect(playing).toBeVisible();
       await expect(page.locator('.breadcrumb strong')).toHaveText('正在播放');
       await expect(playing.getByRole('img')).toBeVisible();

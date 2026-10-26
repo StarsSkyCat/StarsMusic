@@ -63,10 +63,6 @@ const next = computed(() => props.playback.queue[(props.playback.currentIndex ??
         </div>
       </div>
       <div class="np-lyric-pane">
-        <div class="np-lyric-heading">
-          <h2>歌词</h2>
-          <span>跟随音乐，慢慢听。</span>
-        </div>
         <TrackLyrics
           :presentation="presentation"
           :position-seconds="playback.positionSeconds"

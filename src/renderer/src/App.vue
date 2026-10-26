@@ -397,15 +397,6 @@ onUnmounted(() => {
           />
         </button>
         <button
-          :class="{ active: view === 'local' && !nowPlayingOpen }"
-          :aria-current="view === 'local' && !nowPlayingOpen ? 'page' : undefined"
-          @click="navigate('local')"
-        >
-          <FolderOpen :size="19" />本地音乐<span v-if="localTracks.length" class="nav-count">{{
-            localTracks.length
-          }}</span>
-        </button>
-        <button
           :class="{ active: nowPlayingOpen }"
           :aria-current="nowPlayingOpen ? 'page' : undefined"
           @click="openPlaying"
@@ -418,6 +409,15 @@ onUnmounted(() => {
       </nav>
       <p class="sidebar-label source-label">音乐来源 <span>02 / CONNECT</span></p>
       <nav class="main-navigation" aria-label="音乐来源">
+        <button
+          :class="{ active: view === 'local' && !nowPlayingOpen }"
+          :aria-current="view === 'local' && !nowPlayingOpen ? 'page' : undefined"
+          @click="navigate('local')"
+        >
+          <FolderOpen :size="19" />本地音乐<span v-if="localTracks.length" class="nav-count">{{
+            localTracks.length
+          }}</span>
+        </button>
         <button
           v-for="id in providerIds"
           :key="id"
@@ -435,14 +435,18 @@ onUnmounted(() => {
           ></span>
         </button>
       </nav>
-      <div class="sidebar-note">
+      <button
+        class="sidebar-note"
+        :aria-label="`打开本次播放队列，${playback.queue.length} 首音乐`"
+        @click="showQueue"
+      >
         <span class="session-symbol"><AudioLines :size="22" /></span>
-        <p>让音乐接着发生</p>
-        <button class="sidebar-queue" @click="showQueue">
+        <span class="sidebar-note-title">让音乐接着发生</span>
+        <span class="sidebar-queue">
           <ListMusic :size="18" /><strong>{{ playback.queue.length }} 首音乐</strong
-          ><ChevronRight :size="15" /></button
+          ><ChevronRight :size="15" /></span
         ><small>顺序播放 · 本次会话</small>
-      </div>
+      </button>
       <button
         class="settings-nav"
         :class="{ active: view === 'settings' && !nowPlayingOpen }"

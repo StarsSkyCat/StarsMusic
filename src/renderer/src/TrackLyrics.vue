@@ -39,6 +39,7 @@ watch(rows, (container) => {
   resizeObserver = new ResizeObserver(() => {
     // 监听外层可用高度，避免歌词留白 padding 反过来撑高被观测元素。
     container.style.setProperty('--lyric-height', `${viewport.clientHeight}px`);
+    container.style.setProperty('--lyric-width', `${viewport.clientWidth}px`);
     centerCurrent('instant');
   });
   resizeObserver.observe(viewport);
@@ -60,6 +61,10 @@ watch(
         v-for="(line, index) in lyrics"
         :key="`${line.timeMs}:${index}`"
         :aria-current="index === current ? 'true' : undefined"
+        :class="{
+          'lyric-near': current >= 0 && Math.abs(index - current) === 1,
+          'lyric-distant': current >= 0 && Math.abs(index - current) > 2,
+        }"
       >
         {{ line.text }}
       </p>
