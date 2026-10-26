@@ -35,6 +35,7 @@ import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
 import GlassScene from './GlassScene.vue';
+import AppearancePanel from './AppearancePanel.vue';
 import {
   parsePresentationSnapshot,
   type PresentationSnapshot,
@@ -845,6 +846,7 @@ onUnmounted(() => {
             </div>
             <span class="page-heading-symbol" aria-hidden="true"><Settings2 :size="42" :stroke-width="1.2" /></span>
           </div>
+          <AppearancePanel />
           <div class="accounts-grid">
             <ProviderAccount
               v-for="id in providerIds"

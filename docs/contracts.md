@@ -56,3 +56,7 @@ SessionGeneration 每个平台只保留一个活动 SessionLease。租约包含�
 ## 当前歌词与封面投影
 
 `presentation.ts` 定义独立的 `PresentationSnapshot`：revision、playback generation、队列曲目 ID、加载状态与可选内容。内容只包含已排序的行级毫秒时间戳/文本、专辑名、内存 PNG/JPEG/WebP 数据和分别归一化的错误；有行数、文本和图片大小上限，不接受远端图片 URL、SVG、accesskey 或凭据。preload 暴露无参数 getState/onChanged，不提供任意媒体读取。UI 按 revision 和当前 playback generation/ID 双重筛选；音频位置仍以唯一 PlaybackSnapshot 为准。
+
+## 外观偏好
+
+appearance.ts 定义 system / light / dark 三种 ThemePreference。appearance.getPreference 无参数，setPreference 只接受一个枚举；preload 与主进程双重校验，主进程仍验证可信主文档。公开选择以版本 1 保存到 userData/appearance.json，串行原子替换；renderer 不提供路径或任意键值。缺失、未知版本或损坏设置回退系统模式，保存失败保留旧选择。有效主题由 renderer 的 prefers-color-scheme 监听解析，显式浅色/暗色优先。

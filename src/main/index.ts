@@ -4,7 +4,7 @@ import { LocalKeyCipher } from './local-key-cipher';
 import { migrateLegacyCredentials } from './credential-migration';
 import { presentationChannels } from '../../packages/contracts/src/presentation';
 import { PresentationController } from '../../packages/playback/src/presentation';
-import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { desktopChannels, type AppInfo } from '../../packages/contracts/src/desktop';
@@ -19,6 +19,8 @@ import { KugouClient } from './kugou-client';
 import { kugouChannels, parseKugouArguments } from '../../packages/contracts/src/kugou';
 import { NeteaseClient } from './netease-client';
 import { neteaseChannels, parseNeteaseArguments } from '../../packages/contracts/src/netease';
+import { appearanceChannels, parseAppearanceArguments } from '../../packages/contracts/src/appearance';
+import { AppearanceStore } from './appearance-store';
 
 app.setName('StarsMusic');
 app.enableSandbox();
@@ -38,6 +40,13 @@ const presentation = new PresentationController(async (track, signal) => {
 let vault: CredentialVault;
 let selectionGeneration = 0;
 let quitting = false;
+let appearance: AppearanceStore;
+
+function windowBackground(): string {
+  const preference = appearance?.getPreference() ?? 'system';
+  return (preference === 'light' || (preference === 'system' && !nativeTheme.shouldUseDarkColors))
+    ? '#f3f5f8' : '#111219';
+}
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -47,7 +56,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#15161c',
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
       partition: 'starsmusic-ui',
@@ -125,6 +134,23 @@ void app.whenReady().then(async () => {
   uiSession.on('will-download', (event) => event.preventDefault());
   Menu.setApplicationMenu(null);
   const profile = app.getPath('userData');
+  appearance = new AppearanceStore(path.join(profile, 'appearance.json'));
+  await appearance.initialize();
+  nativeTheme.on('updated', () => mainWindow?.setBackgroundColor(windowBackground()));
+  for (const channel of Object.values(appearanceChannels)) {
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      const contents = mainWindow?.webContents;
+      assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
+      const preference = parseAppearanceArguments(channel, args);
+      if (!preference) return appearance.getPreference();
+      try {
+        const saved = await appearance.setPreference(preference);
+        mainWindow?.setBackgroundColor(windowBackground());
+        return saved;
+      }
+      catch { throw new Error('外观偏好保存失败，请重试。'); }
+    });
+  }
   const credentialStore = new CredentialStoreClient(fileURLToPath(new URL('./credential-store-worker.js', import.meta.url)), path.join(profile, 'credentials.sqlite'));
   const credentialCipher = new LocalKeyCipher(path.join(profile, 'keys', 'login.key'), async () => Object.keys((await credentialStore.read())?.entries ?? {}).length > 0);
   try { await migrateLegacyCredentials(credentialStore, credentialCipher, new SafeStorageCipher(), path.join(profile, 'credentials.json')); }

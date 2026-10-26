@@ -3,6 +3,7 @@ import type { PlaybackApi } from './playback.ts';
 import type { CredentialsApi } from './credentials.ts';
 import type { KugouApi } from './kugou.ts';
 import type { NeteaseApi } from './netease.ts';
+import type { AppearanceApi } from './appearance.ts';
 
 export const desktopChannels = {
   getAppInfo: 'starsmusic:app:get-info',
@@ -25,6 +26,7 @@ export interface DesktopApi {
   readonly netease: NeteaseApi;
   readonly kugou: KugouApi;
   readonly credentials: CredentialsApi;
+  readonly appearance: AppearanceApi;
 }
 
 export function parseAppInfo(value: unknown): AppInfo {

@@ -7,3 +7,5 @@ index.ts 暴露 window.starsMusic.getAppInfo() 和 playback 的具体方法：�
 netease 与 kugou 各自只暴露读状态、扫码/取消/本地退出、读取歌单/曲目、按已登记 ID 播放和订阅。没有通用 request、resolveTrack、凭据导入或媒体 URL 方法；公开投影不包含 Cookie/Token 或平台原始响应。
 
 credentials 只暴露 getStatus、setRemember、clear 和 onChanged；不暴露密文、账号 ID、昵称或文件路径。
+
+appearance 仅暴露 getPreference() / setPreference(system | light | dark)，请求和响应都校验枚举；不暴露任意设置、文件路径或文件读写。

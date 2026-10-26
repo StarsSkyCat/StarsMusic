@@ -2,7 +2,7 @@
 
 本文约束当前桌面、本地播放、网易云与酷狗接入，以及可选 SQLite 加密登录保存。默认仍是临时会话；只有用户启用“记住登录”且本地存储/密钥可用时才写入加密凭据。
 
-当前窗口启用 sandbox、contextIsolation，关闭 Node 与 webview，使用内存 session，拒绝权限、下载、导航和新窗口。CSP 限制资源与连接来源。preload 只暴露 getAppInfo、playback、netease、kugou、presentation、credentials 的具体方法；主进程验证窗口、主帧、文档 URL 与各命令参数，响应/事件执行白名单投影。扫码在官方 App 授权，尚无官方授权网页窗口。
+当前窗口启用 sandbox、contextIsolation，关闭 Node 与 webview，使用内存 session，拒绝权限、下载、导航和新窗口。CSP 限制资源与连接来源。preload 只暴露 getAppInfo、appearance、playback、netease、kugou、presentation、credentials 的具体方法；主进程验证窗口、主帧、文档 URL 与各命令参数，响应/事件执行白名单投影。扫码在官方 App 授权，尚无官方授权网页窗口。
 
 ## 凭据与账号
 

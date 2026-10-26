@@ -5,6 +5,7 @@ import { credentialChannels, credentialProviderIds, parseCredentialStatus, type 
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
 import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/kugou';
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
+import { appearanceChannels, parseThemePreference, type ThemePreference } from '../../packages/contracts/src/appearance';
 
 const invokePlayback = async (channel: string, ...args: unknown[]) => {
   const value: unknown = await ipcRenderer.invoke(channel, ...args);
@@ -30,6 +31,14 @@ const api: DesktopApi = Object.freeze({
     const response: unknown = await ipcRenderer.invoke(desktopChannels.getAppInfo);
     return parseAppInfo(response);
   },
+  appearance: Object.freeze({
+    async getPreference() {
+      return parseThemePreference(await ipcRenderer.invoke(appearanceChannels.getPreference));
+    },
+    async setPreference(value: ThemePreference) {
+      return parseThemePreference(await ipcRenderer.invoke(appearanceChannels.setPreference, parseThemePreference(value)));
+    },
+  }),
   playback: Object.freeze({
     getState: () => invokePlayback(playbackChannels.getState),
     openFiles: () => invokePlayback(playbackChannels.openFiles),

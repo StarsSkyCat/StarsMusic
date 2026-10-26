@@ -1,7 +1,7 @@
 /* Liquid Glass / 深海极光。装饰由 CSS 绘制，不依赖远程视觉资产。 */
 :root {
   font-family: Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
-  color: #edf7fa;
+  color: var(--text);
   background: #081419;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -118,7 +118,7 @@ input[type='checkbox'] {
 }
 
 ::selection {
-  color: #fff;
+  color: var(--muted);
   background: #377e7d;
 }
 
@@ -223,7 +223,7 @@ input[type='checkbox'] {
   width: 33px;
   height: 33px;
   border-radius: 11px;
-  color: #b6ffeb;
+  color: var(--accent);
   background: linear-gradient(140deg, #d0fff62e, #c0fff205);
   border: 1px solid #c7fff53d;
   box-shadow: inset 0 1px 6px #ffffff15, 0 0 25px #aaffdf0a;
@@ -236,14 +236,14 @@ input[type='checkbox'] {
 
 .sidebar-label {
   font-size: 10px;
-  color: #becdd3;
+  color: var(--muted);
   margin: 30px 12px 14px;
   letter-spacing: 1px;
 }
 
 .sidebar-label > span {
   display: block;
-  color: #758f9c;
+  color: var(--muted);
   font-size: 8px;
   letter-spacing: 1.2px;
   margin-top: 8px;
@@ -266,7 +266,7 @@ input[type='checkbox'] {
   background: transparent;
   border: 1px solid transparent;
   box-shadow: none;
-  color: #a4b9c2;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -277,7 +277,7 @@ input[type='checkbox'] {
 }
 
 .main-navigation button.active, .settings-nav.active {
-  color: #c9fff0;
+  color: var(--muted);
   background: linear-gradient(110deg, #c5fff520, #a5f3df09);
   border-color: #c9fff336;
   box-shadow: inset 0 1px 0 #eeffff16, 0 4px 18px #00000017;
@@ -312,11 +312,11 @@ input[type='checkbox'] {
 }
 
 .provider-netease {
-  color: #f5acac;
+  color: var(--rose);
 }
 
 .provider-kugou {
-  color: #9acafa;
+  color: var(--blue);
 }
 
 .sidebar-note {
@@ -330,12 +330,12 @@ input[type='checkbox'] {
 
 .session-symbol {
   display: block;
-  color: #a6ded5;
+  color: var(--accent);
   margin-bottom: 10px;
 }
 
 .sidebar-note p {
-  color: #b5c9ce;
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -349,7 +349,7 @@ input[type='checkbox'] {
   border: 0;
   box-shadow: none;
   gap: 6px;
-  color: #e0f5f3;
+  color: var(--text);
 }
 
 .sidebar-queue strong {
@@ -361,7 +361,7 @@ input[type='checkbox'] {
 
 .sidebar-note > small {
   font-size: 9px;
-  color: #92abb6;
+  color: var(--muted);
 }
 
 .settings-nav {
@@ -373,7 +373,7 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #7e99a5;
+  color: var(--muted);
   font-size: 8px;
   letter-spacing: 1.2px;
   margin-top: 18px;
@@ -410,14 +410,14 @@ main:focus {
   display: flex;
   align-items: center;
   gap: 11px;
-  color: #8ba6b2;
+  color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
 }
 
 .breadcrumb strong {
   font-weight: 500;
-  color: #d5e7ec;
+  color: var(--text);
 }
 
 .search-field {
@@ -431,7 +431,7 @@ main:focus {
   border-radius: 100px;
   background: #d7f4ff07;
   padding: 10px 16px;
-  color: #99b2bf;
+  color: var(--muted);
   box-shadow: inset 0 1px 0 #ffffff05;
 }
 
@@ -445,7 +445,7 @@ main:focus {
 }
 
 .search-field input::placeholder {
-  color: #93aab6;
+  color: var(--muted);
 }
 
 .search-field:focus-within {
@@ -462,7 +462,7 @@ main:focus {
   border: 1px solid #b6dcf12c;
   border-radius: 4px;
   padding: 0 5px;
-  color: #8da9b8;
+  color: var(--muted);
 }
 
 .account-shortcut {
@@ -475,7 +475,7 @@ main:focus {
   padding: 3px;
   min-height: 40px;
   font-size: 10px;
-  color: #b2c9d1;
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -495,7 +495,7 @@ main:focus {
   border-radius: 50%;
   background: linear-gradient(145deg, #c9fff82b, #b6b6ff15);
   border: 1px solid #cefff43b;
-  color: #c2f7e9;
+  color: var(--muted);
 }
 
 .content {
@@ -508,7 +508,7 @@ main:focus {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #9bd1c9;
+  color: var(--accent);
   font-size: 9px;
   letter-spacing: 2.1px;
   font-weight: 600;
@@ -542,7 +542,7 @@ main:focus {
 .subtle-button {
   font-size: 11px;
   background: linear-gradient(135deg, #d2f3ff16, #c0e7f007);
-  color: #d9f0f0;
+  color: var(--muted);
   border-radius: 100px;
 }
 
@@ -554,12 +554,12 @@ main:focus {
   background: transparent;
   box-shadow: none;
   font-size: 11px;
-  color: #b4cbd1;
+  color: var(--muted);
   white-space: nowrap;
 }
 
 .text-button:hover:not(:disabled) {
-  color: #d4fff0;
+  color: var(--accent);
   background: #ccfff309;
   border-color: transparent;
 }
@@ -579,11 +579,11 @@ main:focus {
   border-radius: 12px;
   background: transparent;
   box-shadow: none;
-  color: #a6c1cb;
+  color: var(--muted);
 }
 
 .icon-button:hover:not(:disabled) {
-  color: #dbfff5;
+  color: var(--accent);
   background: #d1fff012;
   border-color: #d1fff02a;
 }
@@ -619,7 +619,7 @@ main:focus {
 .library-intro h1 {
   font-size: 12px;
   font-weight: 500;
-  color: #aecacb;
+  color: var(--muted);
   letter-spacing: 2px;
   margin-top: 17px;
 }
@@ -641,7 +641,7 @@ main:focus {
 
 .library-intro > p {
   font-size: 12px;
-  color: #a2bfc5;
+  color: var(--muted);
   margin-top: 14px;
   line-height: 1.8;
 }
@@ -666,7 +666,7 @@ main:focus {
   position: absolute;
   top: 33px;
   right: 5px;
-  color: #a4c6c76b;
+  color: var(--muted);
   font-size: 7px;
   letter-spacing: 2px;
   writing-mode: vertical-rl;
@@ -786,7 +786,7 @@ main:focus {
 
 .scene-star {
   position: absolute;
-  color: #cdfff2;
+  color: var(--scene-ink);
   text-shadow: 0 0 14px #a5ffe7;
 }
 
@@ -819,19 +819,19 @@ main:focus {
 }
 
 .library-start-icon {
-  color: #b4f1dc;
+  color: var(--accent);
   display: flex;
 }
 
 .library-start-note strong {
   font-weight: 500;
   font-size: 11px;
-  color: #cfeae5;
+  color: var(--text);
 }
 
 .library-start-note p {
   font-size: 9px;
-  color: #a0b8c0;
+  color: var(--muted);
   margin-top: 6px;
 }
 
@@ -866,7 +866,7 @@ main:focus {
 }
 
 .library-current-copy small {
-  color: #b1f1dc;
+  color: var(--accent);
   font-size: 8px;
   letter-spacing: 1px;
 }
@@ -910,7 +910,7 @@ main:focus {
 
 .section-index {
   font-size: 10px;
-  color: #92b2b8;
+  color: var(--muted);
   margin-right: 3px;
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
@@ -974,7 +974,7 @@ main:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #a8c0c8;
+  color: var(--muted);
   font-size: 8px;
   letter-spacing: 1.5px;
 }
@@ -992,18 +992,18 @@ main:focus {
   flex-shrink: 0;
   border: 1px solid #cafff23b;
   background: linear-gradient(140deg, #bffff52c, #c6fff009);
-  color: #bdf2db;
+  color: var(--accent);
   box-shadow: inset 0 1px 3px #ffffff12;
 }
 
 .netease .source-icon {
-  color: #ffc3cf;
+  color: var(--rose);
   border-color: #ffc3cf40;
   background: linear-gradient(140deg, #ffc3cf2e, #ffc3cf07);
 }
 
 .kugou .source-icon {
-  color: #bdd8ff;
+  color: var(--blue);
   border-color: #bdd8ff40;
   background: linear-gradient(140deg, #bdd8ff2e, #bdd8ff07);
 }
@@ -1023,7 +1023,7 @@ main:focus {
   display: block;
   font-size: 10px;
   margin-top: 7px;
-  color: #b0c2cd;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1035,7 +1035,7 @@ main:focus {
   align-items: center;
   gap: 6px;
   font-size: 9px;
-  color: #a3b9c2;
+  color: var(--muted);
 }
 
 .source-card-state i {
@@ -1046,7 +1046,7 @@ main:focus {
 }
 
 .source-card-state.connected, .local .source-card-state {
-  color: #b5ebd8;
+  color: var(--accent);
 }
 
 .source-card-state.connected i, .local .source-card-state i {
@@ -1056,7 +1056,7 @@ main:focus {
 .count-pill {
   min-width: 25px;
   font-size: 10px;
-  color: #b3ccd3;
+  color: var(--muted);
   background: #d5f4ff0b;
   border: 1px solid #e1f5ff16;
   border-radius: 8px;
@@ -1075,7 +1075,7 @@ main:focus {
 }
 
 .empty-playlists > svg {
-  color: #a8cfc7;
+  color: var(--muted);
   width: 42px;
   height: 42px;
   padding: 8px;
@@ -1087,7 +1087,7 @@ main:focus {
 
 .empty-playlists h3 {
   font-size: 13px;
-  color: #d3e7e9;
+  color: var(--text);
 }
 
 .empty-playlists p {
@@ -1125,7 +1125,7 @@ main:focus {
 .page-heading-symbol {
   display: grid;
   place-items: center;
-  color: #c3f9ea;
+  color: var(--accent);
   width: 84px;
   height: 84px;
   flex-shrink: 0;
@@ -1163,7 +1163,7 @@ main:focus {
   justify-content: center;
   aspect-ratio: 1.25;
   overflow: hidden;
-  color: #ffcad0;
+  color: var(--rose);
   border: 1px solid #ffcdde36;
   border-radius: 15px;
   background: radial-gradient(ellipse at 20% 20%, #f1c8c42b, transparent 60%), linear-gradient(135deg, #55454f90, #24344280);
@@ -1182,7 +1182,7 @@ main:focus {
 }
 
 .playlist-card.kugou .playlist-art {
-  color: #b9ddff;
+  color: var(--blue);
   border-color: #b8e0ff40;
   background: radial-gradient(ellipse at 20% 20%, #99c8f52b, transparent 60%), linear-gradient(135deg, #36577690, #20374480);
 }
@@ -1206,7 +1206,7 @@ main:focus {
   border-radius: 50%;
   border: 1px solid #defff5;
   background: #b5f3df;
-  color: #153b35;
+  color: var(--accent-ink);
   opacity: 0;
   transform: translateY(5px);
   transition: .2s;
@@ -1249,7 +1249,7 @@ main:focus {
 }
 
 .playlist-detail-heading > .text-button {
-  color: #b1ccc9;
+  color: var(--muted);
 }
 
 .back-chevron {
@@ -1273,7 +1273,7 @@ main:focus {
   width: 112px;
   height: 112px;
   flex-shrink: 0;
-  color: #b7f7e0;
+  color: var(--accent);
   border-radius: 22px;
   border: 1px solid #c6ffef55;
   background: repeating-radial-gradient(ellipse at 0% 100%, transparent 0 14px, #d5fff00c 15px 16px), linear-gradient(135deg, #75c9b833, #6d89ac24);
@@ -1306,7 +1306,7 @@ main:focus {
   border-radius: 14px;
   background: #a5f3df0d;
   font-size: 12px;
-  color: #d0f5e9;
+  color: var(--muted);
   margin-bottom: 10px;
 }
 
@@ -1332,7 +1332,7 @@ main:focus {
 .table-header {
   min-height: 44px;
   font-size: 10px;
-  color: #94aeb9;
+  color: var(--muted);
   border-bottom: 1px solid #d9f4ff13;
 }
 
@@ -1348,7 +1348,7 @@ main:focus {
   flex-shrink: 0;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  color: #8ca7b4;
+  color: var(--muted);
 }
 
 .song-column {
@@ -1403,7 +1403,7 @@ main:focus {
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  color: #a8cfc7;
+  color: var(--muted);
   background: linear-gradient(135deg, #c7fff010, #95c9ff08);
   border: 1px solid #d2fff01c;
   border-radius: 11px;
@@ -1417,7 +1417,7 @@ main:focus {
 .source-badge {
   font-size: 9px;
   white-space: nowrap;
-  color: #abdccf;
+  color: var(--muted);
   border: 1px solid #bcebd12c;
   border-radius: 6px;
   padding: 4px 7px;
@@ -1425,13 +1425,13 @@ main:focus {
 }
 
 .source-badge.netease {
-  color: #f5b8c7;
+  color: var(--rose);
   border-color: #f5b8c72c;
   background: #f5b8c706;
 }
 
 .source-badge.kugou {
-  color: #b5d7f8;
+  color: var(--blue);
   border-color: #b5d7f82c;
   background: #b5d7f806;
 }
@@ -1440,7 +1440,7 @@ main:focus {
   width: 40px;
   flex-shrink: 0;
   font-size: 10px;
-  color: #a8bcc7;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -1482,11 +1482,11 @@ main:focus {
 }
 
 .is-current .song-name strong, .is-current .row-number {
-  color: #b9ffe5;
+  color: var(--accent);
 }
 
 .is-current .song-tile {
-  color: #c5ffe8;
+  color: var(--accent);
   background: #b8ffe71a;
   border-color: #c2ffe744;
 }
@@ -1502,7 +1502,7 @@ main:focus {
 .list-footnote {
   font-size: 10px;
   line-height: 1.8;
-  color: #8da6b2;
+  color: var(--muted);
   margin: 16px 3px;
 }
 
@@ -1512,12 +1512,12 @@ main:focus {
   border: 1px solid #c7f6ff20;
   border-radius: 24px;
   background: radial-gradient(ellipse at 50% 20%, #a5f3df09, transparent 75%);
-  color: #b5ded5;
+  color: var(--muted);
 }
 
 .empty-library h3 {
   margin-top: 18px;
-  color: #d3e8ec;
+  color: var(--text);
   font-size: 16px;
 }
 
@@ -1567,20 +1567,20 @@ main:focus {
 .account-overline {
   display: flex;
   justify-content: space-between;
-  color: #b1aeb6;
+  color: var(--muted);
   font-size: 8px;
   letter-spacing: 1.7px;
   margin-bottom: 22px;
 }
 
 .kugou .account-overline {
-  color: #a1b7cc;
+  color: var(--blue);
 }
 
 .account-overline > span:last-child {
   letter-spacing: 0;
   font-size: 11px;
-  color: #b0c2cb;
+  color: var(--muted);
 }
 
 .account-heading {
@@ -1607,7 +1607,7 @@ main:focus {
 
 .account-description {
   font-size: 12px;
-  color: #b1c3cc;
+  color: var(--muted);
   line-height: 2;
   min-height: 52px;
   margin: 22px 0;
@@ -1637,7 +1637,7 @@ main:focus {
 
 .provider-guide > svg {
   float: right;
-  color: #acdcca;
+  color: var(--accent);
 }
 
 .provider-guide .eyebrow {
@@ -1666,12 +1666,12 @@ main:focus {
   align-items: baseline;
   gap: 12px;
   font-size: 11px;
-  color: #c0d6da;
+  color: var(--muted);
   line-height: 1.8;
 }
 
 .provider-guide li > span {
-  color: #a3dbcb;
+  color: var(--accent);
   font-size: 9px;
   letter-spacing: 1px;
 }
@@ -1688,7 +1688,7 @@ main:focus {
   align-items: center;
   gap: 4px;
   padding: 5px 8px;
-  color: #b8f4d8;
+  color: var(--accent);
   background: #b8f4d80a;
   border: 1px solid #b8f4d82a;
   border-radius: 100px;
@@ -1722,7 +1722,7 @@ main:focus {
 
 .qr-login strong {
   font-size: 13px;
-  color: #d4f5eb;
+  color: var(--text);
 }
 
 .qr-login p {
@@ -1776,7 +1776,7 @@ main:focus {
   height: 54px;
   border: 1px solid #c9ffef33;
   border-radius: 16px;
-  color: #b6eddd;
+  color: var(--accent);
   background: #ccffef09;
   flex-shrink: 0;
 }
@@ -1786,7 +1786,7 @@ main:focus {
 }
 
 .credential-panel .provider-note {
-  color: #b5c9d1;
+  color: var(--muted);
   margin-top: 16px;
 }
 
@@ -1799,7 +1799,7 @@ main:focus {
 .credential-security summary, .runtime-disclosure > summary {
   min-height: 44px;
   cursor: pointer;
-  color: #b1cbd0;
+  color: var(--muted);
   font-size: 11px;
   border-radius: 8px;
 }
@@ -1828,7 +1828,7 @@ main:focus {
 }
 
 .runtime-disclosure > summary:hover {
-  color: #d6fff1;
+  color: var(--accent);
 }
 
 .runtime-disclosure .runtime {
@@ -1842,7 +1842,7 @@ main:focus {
   flex-wrap: wrap;
   gap: 12px 20px;
   font-size: 11px;
-  color: #a3bbc8;
+  color: var(--muted);
   border-top: 1px solid var(--line);
   padding-top: 17px;
 }
@@ -1851,18 +1851,18 @@ main:focus {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #b0eed3;
+  color: var(--accent);
 }
 
 .settings-footnote {
   margin-top: 24px;
-  color: #90a9b6;
+  color: var(--muted);
   font-size: 10px;
   line-height: 1.8;
 }
 
 .error-message, .playback-error {
-  color: #ffbdc7;
+  color: var(--danger);
   background: #ed718c0b;
   border: 1px solid #f89cac30;
   border-radius: 12px;
@@ -1917,7 +1917,7 @@ main:focus {
   border: 1px solid #c9fff03b;
   border-radius: 15px;
   overflow: hidden;
-  color: #bef5df;
+  color: var(--muted);
   background: radial-gradient(ellipse at 0 0, #c6fff033, transparent), linear-gradient(140deg, #5c8a9436, #33485e33);
   box-shadow: inset 0 1px 3px #ffffff1a;
 }
@@ -1945,7 +1945,7 @@ main:focus {
 .now-playing small {
   display: block;
   font-size: 10px;
-  color: #a0b8c4;
+  color: var(--muted);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1968,7 +1968,7 @@ main:focus {
 }
 
 .transport .icon-button {
-  color: #c7dfe5;
+  color: var(--muted);
   min-height: 36px;
 }
 
@@ -1978,7 +1978,7 @@ main:focus {
   min-width: 40px;
   min-height: 40px;
   border-radius: 50%;
-  color: #143d38;
+  color: var(--accent-ink);
   background: linear-gradient(135deg, #e5fff4, #a8ead4);
   border: 1px solid #e1fff7;
   box-shadow: inset 0 2px 3px #ffffffa3, 0 0 22px #a5f3df20;
@@ -1992,7 +1992,7 @@ main:focus {
 .transport .stop-button {
   position: absolute;
   left: calc(50% + 105px);
-  color: #93b1bb;
+  color: var(--muted);
 }
 
 .seek-control {
@@ -2000,7 +2000,7 @@ main:focus {
   align-items: center;
   gap: 12px;
   font-size: 9px;
-  color: #9ab3bf;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
   margin-top: 7px;
 }
@@ -2064,7 +2064,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #b1cdd4;
+  color: var(--muted);
 }
 
 .volume-control input {
@@ -2079,7 +2079,7 @@ input[type='range']:disabled {
   background: #c9fff00b;
   border-color: #d9fff01c;
   border-radius: 14px;
-  color: #c5e4df;
+  color: var(--muted);
   font-size: 10px;
 }
 
@@ -2089,7 +2089,7 @@ input[type='range']:disabled {
   border: 1px solid #bff5dc3b;
   border-radius: 6px;
   padding: 4px 7px;
-  color: #b2e7d5;
+  color: var(--muted);
   font-size: 9px;
   white-space: nowrap;
   overflow: hidden;
@@ -2110,7 +2110,7 @@ input[type='range']:disabled {
   border-radius: 100px;
   background: #173a3be8;
   backdrop-filter: blur(20px);
-  color: #dbfff1;
+  color: var(--text);
   box-shadow: 0 12px 35px #0004;
   font-size: 12px;
 }
@@ -2131,7 +2131,7 @@ input[type='range']:disabled {
 }
 
 .player-error .text-button {
-  color: #ffced7;
+  color: var(--danger);
 }
 
 /* 队列以独立的浮动玻璃面板出现。 */
@@ -2235,12 +2235,12 @@ dialog::backdrop {
   width: 23px;
   flex-shrink: 0;
   font-size: 10px;
-  color: #8ca9b6;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
 .is-current .queue-number {
-  color: #b3f9dc;
+  color: var(--accent);
 }
 
 .queue-song {
@@ -2257,7 +2257,7 @@ dialog::backdrop {
 
 .queue-song:hover:not(:disabled) {
   background: transparent;
-  color: #beffe8;
+  color: var(--accent);
 }
 
 .queue-song strong {
@@ -2272,7 +2272,7 @@ dialog::backdrop {
 .queue-song small {
   display: block;
   font-size: 10px;
-  color: #a0bac5;
+  color: var(--muted);
   margin-top: 7px;
   white-space: nowrap;
   overflow: hidden;
@@ -2288,7 +2288,7 @@ dialog::backdrop {
   padding: 20px 26px;
   border-top: 1px solid var(--line);
   font-size: 10px;
-  color: #97b2bd;
+  color: var(--muted);
 }
 
 .empty-queue {
@@ -2296,7 +2296,7 @@ dialog::backdrop {
   justify-items: center;
   text-align: center;
   padding: 70px 0;
-  color: #a6d2c9;
+  color: var(--muted);
 }
 
 .empty-queue > svg {
@@ -2309,7 +2309,7 @@ dialog::backdrop {
 }
 
 .empty-queue h3 {
-  color: #d3e8e8;
+  color: var(--text);
   margin-top: 26px;
   font-size: 16px;
 }
@@ -2364,7 +2364,7 @@ dialog::backdrop {
 }
 
 .np-back {
-  color: #b6d4cf;
+  color: var(--muted);
 }
 
 .np-page-header .eyebrow {
@@ -2374,7 +2374,7 @@ dialog::backdrop {
 
 .np-queue-count {
   font-size: 10px;
-  color: #b8f1db;
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2425,7 +2425,7 @@ dialog::backdrop {
   background: #163c3f8c;
   backdrop-filter: blur(15px);
   border: 1px solid #eefff357;
-  color: #d3fff1;
+  color: var(--text);
   border-radius: 10px;
 }
 
@@ -2441,7 +2441,7 @@ dialog::backdrop {
   justify-content: center;
   gap: 12px;
   font-size: 10px;
-  color: #afdccc;
+  color: var(--accent);
 }
 
 .np-status {
@@ -2449,7 +2449,7 @@ dialog::backdrop {
   align-items: center;
   gap: 5px;
   font-size: 10px;
-  color: #9ab6bd;
+  color: var(--muted);
 }
 
 .np-status i {
@@ -2460,7 +2460,7 @@ dialog::backdrop {
 }
 
 .np-status.live {
-  color: #b7f1d8;
+  color: var(--accent);
 }
 
 .np-track-meta h1 {
@@ -2477,13 +2477,13 @@ dialog::backdrop {
 
 .np-artist {
   margin-top: 10px;
-  color: #bfd2da;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
 }
 
 .np-album {
-  color: #97afbc;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.6;
   margin-top: 6px;
@@ -2516,12 +2516,12 @@ dialog::backdrop {
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 2px;
-  color: #c9e9df;
+  color: var(--text);
 }
 
 .np-lyric-heading > span {
   font-size: 10px;
-  color: #97b3bd;
+  color: var(--muted);
 }
 
 .track-lyrics {
@@ -2542,14 +2542,14 @@ dialog::backdrop {
   padding: 12px 8px;
   font-size: 17px;
   line-height: 1.8;
-  color: #a3b6c1;
+  color: var(--muted);
   transition: color .25s;
   overflow-wrap: anywhere;
 }
 
 .lyric-scroll p[aria-current='true'] {
   font-size: 19px;
-  color: #d2fff0;
+  color: var(--muted);
   font-weight: 600;
   text-shadow: 0 0 24px #a5f3df2b;
 }
@@ -2559,7 +2559,7 @@ dialog::backdrop {
   place-items: center;
   min-height: clamp(210px, calc(100dvh - 460px), 480px);
   font-size: 13px;
-  color: #9db8c0;
+  color: var(--muted);
 }
 
 .np-next {
@@ -2581,7 +2581,7 @@ dialog::backdrop {
   padding-right: 20px;
   border-right: 1px solid var(--line);
   font-size: 11px;
-  color: #b0d6cc;
+  color: var(--accent);
   flex-shrink: 0;
 }
 
@@ -2602,7 +2602,7 @@ dialog::backdrop {
 }
 
 .np-next-copy small {
-  color: #a0b5c1;
+  color: var(--muted);
   font-size: 10px;
   overflow: hidden;
   white-space: nowrap;
@@ -2610,7 +2610,7 @@ dialog::backdrop {
 }
 
 .np-next > svg {
-  color: #aed9d0;
+  color: var(--accent);
 }
 
 .np-empty {
@@ -2635,7 +2635,7 @@ dialog::backdrop {
 .np-empty p {
   font-size: 12px;
   line-height: 1.8;
-  color: #a2bdc8;
+  color: var(--muted);
   margin-top: 15px;
 }
 
