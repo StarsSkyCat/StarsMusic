@@ -18,8 +18,16 @@ function success(value: unknown): Record<string, unknown> {
 }
 interface BackendTrack { track: KugouTrack; hash: string; albumId: string; audioId: string }
 const trackPageSize = 300;
+let loggedTrackRow = false;
 function numericId(value: unknown): string {
   const id = apiId(value); if (!/^\d{1,30}$/.test(id)) throw new DomainError('invalid-response'); return id;
+}
+function firstNonZeroId(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (value === undefined || value === null || value === '' || value === 0 || value === '0') continue;
+    return value;
+  }
+  return 0;
 }
 // 平台不同端点可能把数量/时长作为数字或十进制字符串返回；只接受非负安全整数。
 function integerValue(value: unknown, field: string): number {
@@ -55,39 +63,79 @@ function parseTracks(value: unknown): { items: BackendTrack[]; received: number 
       const seconds = optionalInteger(raw.duration, 'kugou.duration');
       const durationMs = timelen ?? (seconds === undefined ? 0 : seconds * 1000);
       const album = raw.albuminfo === undefined ? {} : record(raw.albuminfo, 'kugou.album');
-      items.push({
-        track: { id: hash, name, artists, durationMs }, hash,
-        albumId: numericId(raw.album_id ?? album.id ?? 0),
-        audioId: numericId(raw.album_audio_id ?? raw.audio_id ?? raw.mixsongid ?? 0),
-      });
+      const albumId = numericId(firstNonZeroId(raw.album_id, album.id));
+      // 云歌单以 audio_id 标识曲目；album_audio_id 可能为 0，不能让它遮蔽有效值。
+      const audioId = numericId(firstNonZeroId(raw.audio_id, raw.album_audio_id, raw.mixsongid));
+      if (!loggedTrackRow) {
+        loggedTrackRow = true;
+        const nameSource = raw.name !== undefined ? 'name' : raw.filename !== undefined ? 'filename' : 'songname';
+        debugKugou(`track row keys=${Object.keys(raw).sort().join(',')} nameSource=${nameSource} hash=${hash.slice(0, 6)} album=${albumId === '0' ? 'zero' : 'set'} audio=${audioId === '0' ? 'zero' : 'set'} fileid=${raw.fileid === undefined ? 'none' : 'set'} duration=${durationMs}`);
+      }
+      items.push({ track: { id: hash, name, artists, durationMs }, hash, albumId, audioId });
     } catch { /* 跳过无法安全解析的单条记录 */ }
   }
   if (value.length > 0 && items.length === 0) throw new DomainError('invalid-response');
   return { items, received: value.length };
 }
-export function parseKugouStream(value: unknown, id: string): StreamResolution {
-  const raw = success(value);
+function debugKugou(message: string): void {
+  if (process.env.STARSMUSIC_DEBUG === '1') console.error(`[kugou-debug] ${message}`);
+}
+export function parseKugouStream(value: unknown, id: string, expected?: { durationMs: number }): StreamResolution {
+  let raw: Record<string, unknown>;
+  try { raw = success(value); } catch (error: unknown) {
+    const body = typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    debugKugou(`stream response rejected status=${String(body.status)} error=${String(body.error_code)} keys=${Object.keys(body).sort().join(',')}`);
+    throw error;
+  }
+  debugKugou(`stream keys=${Object.keys(raw).sort().join(',')}`);
   if (!Array.isArray(raw.url) || typeof raw.url[0] !== 'string' || !raw.url[0]) throw new DomainError('permission-denied');
   if (/[\u0000-\u0020\u007f]/.test(raw.url[0])) throw new DomainError('invalid-response');
-  const url = new URL(raw.url[0]); if (url.protocol === 'http:') url.protocol = 'https:';
-  if (!allowedKugouMediaHost(url.hostname) || url.protocol !== 'https:' || url.port || url.username || url.password || url.hash) {
-    if (process.env.STARSMUSIC_DEBUG === '1') {
-      console.error(`[kugou-debug] media-url rejected host=${url.hostname} protocol=${url.protocol} port=${url.port ? 'set' : 'none'} auth=${url.username || url.password ? 'set' : 'none'} fragment=${url.hash ? 'set' : 'none'}`);
-    }
+  let url: URL;
+  try { url = new URL(raw.url[0]); } catch {
+    debugKugou('stream url parse failed');
     throw new DomainError('invalid-response');
   }
+  if (url.protocol === 'http:') url.protocol = 'https:';
+  if (!allowedKugouMediaHost(url.hostname) || url.protocol !== 'https:' || url.port || url.username || url.password || url.hash) {
+    debugKugou(`media-url rejected host=${url.hostname} protocol=${url.protocol} port=${url.port ? 'set' : 'none'} auth=${url.username || url.password ? 'set' : 'none'} fragment=${url.hash ? 'set' : 'none'}`);
+    throw new DomainError('invalid-response');
+  }
+  const responseHash = typeof raw.hash === 'string' ? raw.hash.toLowerCase() : '';
+  const standardHash = typeof raw.std_hash === 'string' ? raw.std_hash.toLowerCase() : '';
+  const hashMatches = responseHash === id || standardHash === id;
+  const responseTimeLength = optionalInteger(raw.timeLength, 'kugou.timeLength');
+  const responseSeconds = responseTimeLength === undefined ? undefined : responseTimeLength > 10000 ? responseTimeLength / 1000 : responseTimeLength;
+  const expectedSeconds = expected !== undefined && expected.durationMs > 0 ? expected.durationMs / 1000 : undefined;
+  const durationMatches = expectedSeconds === undefined || responseSeconds === undefined || Math.abs(responseSeconds - expectedSeconds) <= 10;
+  const hasResponseHash = Boolean(responseHash || standardHash);
+  debugKugou(`media host accepted host=${url.hostname} request=${id.slice(0, 6)} response=${responseHash ? responseHash.slice(0, 6) : 'none'} std=${standardHash ? standardHash.slice(0, 6) : 'none'} match=${hashMatches} expected=${expectedSeconds === undefined ? 'none' : Math.round(expectedSeconds)} responseTime=${responseSeconds === undefined ? 'none' : Math.round(responseSeconds)} durationMatch=${durationMatches} priv=${String(raw.priv_status)} full=${String(raw.is_full_audio)} freeStart=${typeof raw.free_part_start} freeEnd=${typeof raw.free_part_end} ext=${typeof raw.extName} bitRate=${typeof raw.bitRate}`);
+  // 取链可能返回同曲目的另一编码/音质 hash；登记时长与返回时长一致时仍视为同一曲目。
+  // 不用其他字段推断曲目身份；hash 与时长都无法对应时拒绝，避免播放错误音频。
+  const identityConfirmed = hashMatches || !hasResponseHash || (durationMatches && expectedSeconds !== undefined && responseSeconds !== undefined);
+  if (!identityConfirmed) throw new DomainError('invalid-response');
   let access: StreamResolution['access'] = { kind: 'full' };
   // 付费片段必须由平台明确给出边界；不能从“已登录”或 URL 非空推断完整权限。
-  if (raw.priv_status !== 0) {
-    const start = nonNegativeInteger(raw.free_part_start, 'kugou.preview.start');
-    const end = nonNegativeInteger(raw.free_part_end, 'kugou.preview.end');
-    if (end <= start) throw new DomainError('permission-denied');
+  // 云歌单/取链接口可能把 priv_status、试听边界和码率作为十进制字符串返回。
+  // is_full_audio 明确为 1/true 时才视为完整音频；否则仍要求试听边界。
+  const privileged = optionalInteger(raw.priv_status, 'kugou.priv_status') ?? 0;
+  const fullAudio = raw.is_full_audio === true || raw.is_full_audio === 1 || raw.is_full_audio === '1';
+  if (privileged !== 0 && !fullAudio) {
+    const start = optionalInteger(raw.free_part_start, 'kugou.preview.start');
+    const end = optionalInteger(raw.free_part_end, 'kugou.preview.end');
+    if (start === undefined || end === undefined || end <= start) throw new DomainError('permission-denied');
     access = { kind: 'preview', startMs: 0, durationMs: end - start };
   }
-  const bitrate = typeof raw.bitRate === 'number' && raw.bitRate > 0 ? raw.bitRate / 1000 : undefined;
-  return parseStreamResolution({ track: { provider: 'kugou', id }, source: { kind: 'remote', url: url.href, headers: {} },
-    quality: { level: raw.extName === 'flac' ? 'lossless' : bitrate === undefined ? 'unknown' : bitrate > 128 ? 'high' : 'standard',
-      ...(bitrate ? { bitrateKbps: bitrate } : {}), ...(['mp3', 'flac', 'm4a', 'ogg', 'aac'].includes(String(raw.extName)) ? { codec: raw.extName } : {}) }, access });
+  const bitrateRaw = optionalInteger(raw.bitRate, 'kugou.bitRate');
+  const bitrate = bitrateRaw !== undefined && bitrateRaw > 0 ? bitrateRaw / 1000 : undefined;
+  const ext = typeof raw.extName === 'string' ? raw.extName.toLowerCase() : '';
+  try {
+    return parseStreamResolution({ track: { provider: 'kugou', id }, source: { kind: 'remote', url: url.href, headers: {} },
+      quality: { level: ext === 'flac' ? 'lossless' : bitrate === undefined ? 'unknown' : bitrate > 128 ? 'high' : 'standard',
+        ...(bitrate ? { bitrateKbps: bitrate } : {}), ...(['mp3', 'flac', 'm4a', 'ogg', 'aac'].includes(ext) ? { codec: ext } : {}) }, access });
+  } catch (error: unknown) {
+    debugKugou(`stream resolution rejected priv=${typeof raw.priv_status} freeStart=${typeof raw.free_part_start} freeEnd=${typeof raw.free_part_end} ext=${typeof raw.extName} bitRate=${typeof raw.bitRate}`);
+    throw error;
+  }
 }
 
 interface ServiceOptions {
@@ -296,7 +344,7 @@ export class KugouService {
       const item = this.#knownTracks.get(id)!;
       const value = await transport.call('stream', { hash: item.hash, albumId: item.albumId, audioId: item.audioId }, lease.signal);
       if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
-      return parseKugouStream(value, id);
+      return parseKugouStream(value, id, item.track);
     } catch (error: unknown) { this.#operationError(lease, error); throw error; }
   }
 }

@@ -9,7 +9,7 @@ import { DomainError } from '../../packages/contracts/src/errors.ts';
 const hash = 'a'.repeat(32);
 const png = 'data:image/png;base64,c3ludGhldGlj';
 const ok = (data: unknown) => ({ status: 1, error_code: 0, data });
-const stream = { status: 1, url: ['https://fsandroid.kugou.com/synthetic'], priv_status: 0, bitRate: 128000, extName: 'mp3' };
+const stream = { status: 1, hash, url: ['https://fsandroid.kugou.com/synthetic'], priv_status: 0, bitRate: 128000, extName: 'mp3' };
 class FakeTransport implements KugouTransport {
   cleared = false;
   pollStatus = 4;
@@ -25,7 +25,7 @@ class FakeTransport implements KugouTransport {
     if (endpoint === 'qrPoll') return ok({ status: this.pollStatus, userid: this.account, token: 'synthetic-private-marker' });
     if (endpoint === 'account') return ok({ userid: this.profileAccount, nickname: '合成账号' });
     if (endpoint === 'playlists') return ok({ info: [{ listid: 1, name: '合成歌单', count: 1 }] });
-    if (endpoint === 'playlist') return ok({ count: 1, info: [{ hash, name: '合成曲目', singerinfo: [{ name: '合成歌手' }], duration: 30 }] });
+    if (endpoint === 'playlist') return ok({ count: 1, info: [{ hash, name: '合成曲目', singerinfo: [{ name: '合成歌手' }], duration: 30, audio_id: 2, album_audio_id: 0 }] });
     return stream;
   }
 }
@@ -51,6 +51,7 @@ test('标准版扫码需账号验证一致后连接，歌单/曲目登记及退�
     await service.loadPlaylists(); await service.loadPlaylist('1', 0);
     assert.equal(service.snapshot().tracks[0]?.id, hash);
     assert.ok(!JSON.stringify(service.snapshot()).includes('synthetic-private-marker'));
+    transport.handlers.set('stream', async (data) => { assert.equal(data.audioId, '2'); return stream; });
     assert.equal((await service.resolveTrack(hash, service.snapshot().generation)).track.provider, 'kugou');
     await assert.rejects(service.resolveTrack('b'.repeat(32), service.snapshot().generation));
     await assert.rejects(service.resolveTrack(hash, service.snapshot().generation - 1));
@@ -137,6 +138,19 @@ test('酷狗歌单兼容缺总数、字符串时长、损坏单条和超过 50 �
 test('流只接受明确权限、HTTPS 官方媒体主机，响应缺少试听边界时拒绝', () => {
   assert.equal(parseKugouStream(stream, hash).quality.bitrateKbps, 128);
   assert.equal(parseKugouStream({ ...stream, priv_status: 1, free_part_start: 0, free_part_end: 30000 }, hash).access.kind, 'preview');
+  const stringPreview = parseKugouStream({ ...stream, priv_status: '1', free_part_start: '0', free_part_end: '30000', bitRate: '320000' }, hash);
+  assert.deepEqual(stringPreview.access, { kind: 'preview', startMs: 0, durationMs: 30000 });
+  assert.equal(stringPreview.quality.bitrateKbps, 320);
+  assert.equal(parseKugouStream({ ...stream, priv_status: '0' }, hash).access.kind, 'full');
+  assert.equal(parseKugouStream({ ...stream, priv_status: 1, is_full_audio: 1 }, hash).access.kind, 'full');
+  assert.equal(parseKugouStream({ ...stream, priv_status: '1', is_full_audio: '1' }, hash).access.kind, 'full');
+  assert.throws(() => parseKugouStream({ ...stream, priv_status: 1, is_full_audio: 0 }, hash));
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32) }, hash));
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: 'c'.repeat(32) }, hash));
+  assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), std_hash: hash }, hash).track.id, hash);
+  assert.equal(parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 30 }, hash, { durationMs: 30000 }).track.id, hash);
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), timeLength: 60 }, hash, { durationMs: 30000 }));
+  assert.equal(parseKugouStream({ ...stream, hash: hash.toUpperCase() }, hash).track.id, hash);
   assert.throws(() => parseKugouStream({ ...stream, priv_status: 1 }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://www.kugou.com/private'] }, hash));
   assert.throws(() => parseKugouStream({ ...stream, url: ['https://fsandroid.kugou.com.evil.invalid/audio'] }, hash));

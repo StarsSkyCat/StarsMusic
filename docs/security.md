@@ -14,7 +14,7 @@
 
 SessionGeneration 守卫只允许当前租约写回；网易云与酷狗服务都实际调用它取消旧请求，并清理内存凭据、二维码和私人列表。后台使用独立 utilityProcess，stdio 被丢弃；不写共享匿名 Token 文件、不加载环境凭据、不输出原始响应。主进程在进程重启后继续递增公开 generation，停止相关在线播放；不把不同账号/进程的同号结果当作有效新会话。utilityProcess 是生命周期与内存隔离边界，不是无权限安全沙箱。
 
-酷狗 App 扫码在后台生成随机的进程内 GUID/MID，注册载荷只包含应用自报的品牌、设备名和随机标识，不读取或采集硬件、传感器、IMEI 或系统设备信息。`dfid`、Token、`userid`、二维码 key 与歌单/曲目参数不进入页面；页面只拿公开 ID。SSA 安全验证只归类为 `verification-required` 提示用户在官方 App 处理，不自动生成绕过验证码的行为指纹。
+酷狗 App 扫码在后台生成随机的进程内 GUID/MID，注册载荷只包含应用自报的品牌、设备名和随机标识，不读取或采集硬件、传感器、IMEI 或系统设备信息。`dfid`、Token、`userid`、二维码 key 与歌单/曲目参数不进入页面；页面只拿公开 ID。SSA 安全验证只归类为 `verification-required` 提示用户在官方 App 处理，不自动生成绕过验证码的行为指纹。仅在 `STARSMUSIC_DEBUG=1` 时输出酷狗媒体主机、取链字段名、hash 前缀、时长和权限字段；不输出完整签名 URL、Token、账号标识或歌曲名。
 
 ## IPC、网络与媒体
 
