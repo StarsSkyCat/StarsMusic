@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import {
   activeLyricIndex,
   type PresentationSnapshot,
@@ -19,19 +19,36 @@ const valid = computed(() =>
 );
 const lyrics = computed(() => valid.value?.content?.lyrics ?? []);
 const current = computed(() => activeLyricIndex(lyrics.value, props.positionSeconds));
+let resizeObserver: ResizeObserver | undefined;
+
+function centerCurrent(behavior: ScrollBehavior): void {
+  const container = rows.value;
+  const row = container?.querySelector<HTMLElement>('[aria-current="true"]');
+  if (row && container)
+    container.scrollTo({
+      top: Math.max(0, container.scrollTop + row.getBoundingClientRect().top
+        - container.getBoundingClientRect().top - container.clientHeight / 2 + row.clientHeight / 2),
+      behavior,
+    });
+}
+
+watch(rows, (container) => {
+  resizeObserver?.disconnect();
+  const viewport = container?.parentElement;
+  if (!container || !viewport) return;
+  resizeObserver = new ResizeObserver(() => {
+    // 监听外层可用高度，避免歌词留白 padding 反过来撑高被观测元素。
+    container.style.setProperty('--lyric-height', `${viewport.clientHeight}px`);
+    centerCurrent('instant');
+  });
+  resizeObserver.observe(viewport);
+});
+onUnmounted(() => resizeObserver?.disconnect());
 watch(
   [current, lyrics],
   async () => {
     await nextTick();
-    const row = rows.value?.querySelector<HTMLElement>('[aria-current="true"]');
-    if (row && rows.value)
-      rows.value.scrollTo({
-        top: Math.max(
-          0,
-          row.offsetTop - rows.value.offsetTop - rows.value.clientHeight / 2 + row.clientHeight / 2,
-        ),
-        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      });
+    centerCurrent(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth');
   },
   { immediate: true },
 );

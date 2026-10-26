@@ -28,7 +28,7 @@ const cover = computed(() => (props.artwork && !failed.value ? props.artwork : d
 const next = computed(() => props.playback.queue[(props.playback.currentIndex ?? -1) + 1]);
 </script>
 <template>
-  <section class="now-playing-page" aria-label="正在播放">
+  <section class="now-playing-page" :class="{ 'has-track': !!track }" aria-label="正在播放">
     <div class="np-atmosphere" aria-hidden="true"><img :src="cover" alt="" /></div>
     <header class="np-page-header">
       <button class="text-button np-back" @click="$emit('back')">
