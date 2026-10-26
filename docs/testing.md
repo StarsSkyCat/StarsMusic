@@ -4,11 +4,20 @@
 
 ```bash
 pnpm check
+pnpm typecheck
+pnpm test
+pnpm test:e2e
 ```
 
-该命令检查脚本语法、仓库必需文件、JSON 配置、Markdown 内联相对链接、代码围栏及行尾格式。不校验链接锚点、引用式链接或 YAML 语法，不访问外部链接，不验证第三方接口、登录、音频或桌面兼容性。
+check 检查脚本语法、仓库必需文件、JSON 配置、Markdown 内联相对链接、代码围栏及行尾格式。不校验链接锚点、引用式链接或 YAML 语法，不访问外部链接，不验证第三方接口、登录、音频或桌面兼容性。
 
-当前没有应用单元测试、桌面 E2E 或安装包构建。开发这些能力时再接入 Vitest、Playwright Electron 和相应命令；不设置无实质内容的通过脚本。
+typecheck 使用 tsc 与 vue-tsc 检查全部应用及测试源码。test 使用 Node 内置测试器，覆盖其他窗口/子帧/变更文档/额外参数被拒绝、开发地址限制和后台响应校验。
+
+领域契约测试覆盖字符串 ID、平台渠道错配、账号缓存键、登录状态一致性、流资源/试听/音质字段、危险 URL/请求头与安全错误归一化。会话测试使用手动控制完成顺序的 Promise，覆盖忽略取消的旧成功/失败、退出重登、渠道切换、平台隔离和同步 abort 重入；不依赖定时等待或真实网络。当前共 14 项单元测试，见 [公共契约验证记录](validation/2026-10-26-contracts-session.md)。
+
+test:e2e 先构建，再启动实际 Electron，检查白名单桥接、页面无 Node/IPC 权限、内存 session、弹窗与导航被阻断、960×640 最小窗口和 Linux 关闭退出。Playwright 显式启用 chromiumSandbox；Linux 通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs 标志。E2E 使用临时应用数据目录并在结束时清理，截图留在被 Git 忽略的 artifacts/。不需要另行下载 Playwright 浏览器，需要先执行 pnpm setup:electron 和可用的桌面会话。
+
+CI 执行文档检查、冻结锁文件安装、类型检查、单元测试和应用构建；暂不在 CI 宣称图形、安装包或真实桌面兼容性验证。当前尚无安装包构建、平台接口和音频测试。
 
 ## 实现后的测试分层
 

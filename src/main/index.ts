@@ -1,0 +1,76 @@
+import { app, BrowserWindow, ipcMain, Menu, session } from 'electron';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { desktopChannels, type AppInfo } from '../../packages/contracts/src/desktop';
+import { assertTrustedInvoke, getDevelopmentUrl } from './ipc-policy';
+
+app.setName('StarsMusic');
+app.enableSandbox();
+
+const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
+const developmentUrl = app.isPackaged ? undefined : getDevelopmentUrl(process.env.ELECTRON_RENDERER_URL);
+const documentUrl = developmentUrl ?? pathToFileURL(rendererFile).href;
+let mainWindow: BrowserWindow | null = null;
+
+function createWindow(): void {
+  const window = new BrowserWindow({
+    title: 'StarsMusic',
+    width: 1280,
+    height: 800,
+    minWidth: 960,
+    minHeight: 640,
+    show: false,
+    backgroundColor: '#15161c',
+    webPreferences: {
+      preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
+      partition: 'starsmusic-ui',
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      nodeIntegrationInWorker: false,
+      nodeIntegrationInSubFrames: false,
+      webSecurity: true,
+      webviewTag: false,
+      allowRunningInsecureContent: false,
+    },
+  });
+  mainWindow = window;
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.on('will-navigate', (event) => event.preventDefault());
+  window.webContents.on('will-frame-navigate', (event) => event.preventDefault());
+  window.webContents.on('will-redirect', (event) => event.preventDefault());
+  window.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  window.once('ready-to-show', () => window.show());
+  window.once('closed', () => { if (mainWindow === window) mainWindow = null; });
+  const load = developmentUrl ? window.loadURL(developmentUrl) : window.loadFile(rendererFile);
+  void load.catch(() => {
+    console.error('StarsMusic 页面加载失败');
+    app.exit(1);
+  });
+}
+
+void app.whenReady().then(() => {
+  const uiSession = session.fromPartition('starsmusic-ui');
+  uiSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  uiSession.setPermissionCheckHandler(() => false);
+  uiSession.on('will-download', (event) => event.preventDefault());
+  Menu.setApplicationMenu(null);
+
+  ipcMain.handle(desktopChannels.getAppInfo, (event, ...args: unknown[]): AppInfo => {
+    const contents = mainWindow?.webContents;
+    assertTrustedInvoke(event, contents, contents?.mainFrame, documentUrl, args);
+    return {
+      name: app.getName(), version: app.getVersion(), platform: process.platform,
+      arch: process.arch, electron: process.versions.electron,
+      chromium: process.versions.chrome, node: process.versions.node,
+    };
+  });
+  createWindow();
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+}).catch(() => {
+  console.error('StarsMusic 初始化失败');
+  app.exit(1);
+});
+
+// 当前没有托盘与后台播放，关闭窗口直接退出，避免留下不可恢复的后台进程。
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('will-quit', () => ipcMain.removeHandler(desktopChannels.getAppInfo));

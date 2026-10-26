@@ -21,3 +21,22 @@ jobs:
         run: node --check scripts/check.mjs
       - name: Check repository files and documentation
         run: node scripts/check.mjs
+
+  application:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Enable configured pnpm
+        run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check TypeScript and Vue
+        run: pnpm typecheck
+      - name: Test IPC boundaries
+        run: pnpm test
+      - name: Build desktop application code
+        run: pnpm build

@@ -2,7 +2,7 @@
 
 Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、酷狗音乐与本地音乐。
 
-当前处于仓库基础与 P0 准备阶段：已建立开发文档、规则、模块目录与基础检查；尚无可启动的桌面应用，也未完成真实账号登录及播放验证。
+当前处于 P0 基础阶段：已有 Electron + Vue 3 + TypeScript 最小桌面窗口、安全 preload、应用信息 IPC，以及公共契约和会话 generation 守卫。登录、音乐导入、播放和安装包尚未实现。
 
 - [产品设计与技术选型](docs/design-and-architecture.md)
 - [开发文档索引](docs/README.md)
@@ -14,16 +14,28 @@ Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、�
 
 Windows、macOS 保留架构接口，安排在 Linux 版本稳定后实现。
 
-## 基础检查
+## 启动与检查
 
 需要 Node.js 24.x、pnpm 10.34.9：
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm check
+pnpm setup:electron
+pnpm dev
 ```
 
-仅有 Node 时可直接运行 `node scripts/check.mjs` 检查文档和配置。若环境提供 Corepack，可用 `corepack pnpm` 替代 `pnpm`。当前尚无 dev/build/test 应用命令。
+验证与运行构建产物：
+
+```bash
+pnpm check
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm start
+pnpm test:e2e
+```
+
+setup:electron 首次下载固定版本的 Electron 运行时，需要网络；dev/start/test:e2e 需要可用的图形会话。build 生成 out/ 下的应用代码，尚不生成安装包；类型检查单独执行。仅有 Node 时可直接运行 `node scripts/check.mjs` 检查文档和配置。若环境提供 Corepack，可用 `corepack pnpm` 替代 `pnpm`。依赖、缓存与验证细节见 [开发指南](docs/development.md)。
 
 ## 目录
 
@@ -33,4 +45,4 @@ pnpm check
 - scripts/：仓库工具。
 - docs/：设计、开发、验证与决策记录。
 
-项目许可证尚未确定，发布前补充 LICENSE 与第三方许可清单。
+项目许可证尚未确定，发布前补充 LICENSE 与完整的第三方许可清单；当前直接依赖见 [依赖记录](docs/dependencies.md)。

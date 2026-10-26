@@ -9,14 +9,14 @@
 - [x] Node/pnpm 基础配置、模块目录说明和离线文档检查。
 - [x] Git 初始化：main 分支；远程和提交状态以 git remote -v、git log 为准。
 - [x] 基础验证：pnpm 冻结锁文件安装与 check 通过；检查器已验证断链失败和代码块示例跳过行为。
-- [ ] Electron + Vue 3 + TypeScript 最小可运行窗口。
+- [x] Electron + Vue 3 + TypeScript 最小可运行窗口，实际运行范围见桌面基础验证记录。
 
 ## P0：接入和分发可行性
 
 按顺序实现，每项验证记录使用 [模板](templates/p0-validation.md)。
 
-1. **桌面基础**：安全 BrowserWindow、受限 preload、具体 IPC 命令和最小页面；加入真实 dev/build/typecheck 命令。
-2. **公共契约**：TrackRef、ProviderContext、登录状态、StreamResolution、错误分类、会话 generation。
+1. **桌面基础（已实现）**：安全 BrowserWindow、受限 preload、应用信息 IPC 和最小页面；已加入 dev/build/typecheck、边界测试与桌面 E2E。验证范围见 [记录](validation/2026-10-26-desktop-foundation.md)。
+2. **公共契约（已实现）**：TrackRef、ProviderContext、登录/会话状态、StreamResolution、错误分类及运行时校验；后台会话 generation 支持取消与旧结果丢弃。使用约定见 [公共契约](contracts.md)，验证见 [记录](validation/2026-10-26-contracts-session.md)。尚未接入真实平台服务。
 3. **音频闭环**：mpv 进程生命周期、本地文件播放、定位、快速切歌、退出清理和私有 IPC。
 4. **网易云验证**：固定 API 候选版本；扫码 → 账号 → 歌单 → 解析 → 实际播放；记录权限差异。
 5. **酷狗验证**：分别评估官方网页登录和 App 扫码；核实 Token 渠道、歌单与播放能力，选择首版默认路径。

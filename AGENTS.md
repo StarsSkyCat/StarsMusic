@@ -3,13 +3,14 @@
 ## 项目与当前阶段
 
 - Linux 优先的跨平台音乐播放器，网易云、酷狗分别接入，Windows/macOS 后续实现。
-- 技术方向：Electron、Vue 3、TypeScript、mpv、SQLite。当前仅有工程基础与文档，真实登录和播放尚未验证。
+- 技术方向：Electron、Vue 3、TypeScript、mpv、SQLite。当前已有最小桌面基础、公共契约和会话 generation 守卫，真实登录和播放尚未实现或验证。
 - 先读 README.md、docs/development.md 和 docs/roadmap.md；架构背景见 docs/design-and-architecture.md。
 - 使用标准文件名 AGENTS.md。不要创建 AGENDS.md 等重复规则文件。子目录规则只补充所在范围，避免复制根规则。
 
 ## 工作方式
 
 - 用户已授权的常规实现、文档修改和验证直接推进；明确区分已实现、已测试和规划能力。
+- 每完成一个开发步骤，验证通过后先提交该步骤，再开始下一步；不自动推送。
 - 先检查当前文件和 Git 状态，保留用户已有修改；不擅自 reset、清理工作区或覆盖历史。
 - 开发说明默认中文，代码标识符用英文。以小而完整的改动推进，行为变化同步更新文档。
 - 不使用占位成功响应冒充平台接入；Mock、假数据和开发开关必须明确标识。
@@ -40,7 +41,7 @@
 
 ## 验证与交付
 
-- 当前真实可用命令：pnpm check；无 pnpm 时可运行 node scripts/check.mjs。
+- 当前可用命令：pnpm check、typecheck、test、build、dev、start、test:e2e；桌面启动前运行 pnpm setup:electron。无 pnpm 时仍可运行 node scripts/check.mjs 检查文档。
 - 新增脚本或命令时先使其可运行，再写入文档；不创建输出“成功”但不做验证的 test/build 脚本。
 - 文档修改运行文档检查；逻辑变更增加或运行能验证行为的检查，避免只重复实现的测试。
 - 登录真实测试由用户在官方授权流程中完成；不要求在聊天或配置文件中粘贴真实凭据。

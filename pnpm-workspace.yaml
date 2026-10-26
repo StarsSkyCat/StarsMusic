@@ -3,5 +3,5 @@ packages:
   - 'packages/providers/*'
   - 'packages/desktop/*'
 
-# Enable dependency build scripts only after reviewing the actual dependency.
+# No lifecycle scripts needed. Electron runtime uses explicit setup:electron.
 onlyBuiltDependencies: []

@@ -2,4 +2,4 @@
 
 计划使用 Vue 3、TypeScript、Pinia 构建音乐库、搜索、账号、歌词与播放栏。界面只保存播放状态投影，不直接调用私有平台接口或读取凭据。
 
-当前无界面源码。布局草案见 [产品设计](../../docs/design-and-architecture.md)。
+当前已有 Vue 空音乐库页面、待接入说明、桌面信息读取与重试，深色 CSS 使用本地系统字体，无外部图片与字体请求。未安装尚未使用的 Pinia 或 Router。完整音乐库、登录与播放仍按 [产品设计](../../docs/design-and-architecture.md) 后续实现。

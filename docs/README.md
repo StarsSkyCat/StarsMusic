@@ -7,6 +7,10 @@
 | [测试与验收](testing.md) | 当前检查、后续测试分层和 Linux 验收 |
 | [开发路线图](roadmap.md) | 当前状态、P0 任务与完成标准 |
 | [安全约定](security.md) | 登录、凭据、IPC、音频与本地数据保护 |
+| [依赖记录](dependencies.md) | 当前直接依赖的固定版本、用途、许可和安装行为 |
+| [桌面基础验证](validation/2026-10-26-desktop-foundation.md) | P0 第一步的实际验证结果与环境限制 |
+| [公共契约](contracts.md) | 领域模型、后台流资源、错误分类和会话 generation 使用约定 |
+| [公共契约验证](validation/2026-10-26-contracts-session.md) | P0 第二步的契约边界与异步竞态验证 |
 | [架构决策 ADR](adr/README.md) | 已选方向、备选方案和未验证的决策 |
 | [P0 验证记录模板](templates/p0-validation.md) | 记录真实环境、操作、证据与限制 |
 
