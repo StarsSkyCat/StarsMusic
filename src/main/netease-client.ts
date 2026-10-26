@@ -2,13 +2,14 @@ import { utilityProcess, type UtilityProcess } from 'electron';
 import { DomainError, normalizeError, parseAppError } from '../../packages/contracts/src/errors';
 import { initialNeteaseSnapshot, parseNeteaseSnapshot, type NeteaseSnapshot } from '../../packages/contracts/src/netease';
 import { parseStreamResolution, type StreamResolution } from '../../packages/contracts/src/music';
+import { parseCredentialBundle, type NeteaseCredentialBundle } from '../../packages/contracts/src/credentials';
 
 interface Request {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'resolveTrack';
+type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;
@@ -20,12 +21,16 @@ export class NeteaseClient {
   #sequence = 0;
   #requests = new Map<number, Request>();
   #listeners = new Set<(state: NeteaseSnapshot) => void>();
+  #credentialListeners = new Set<(bundle: NeteaseCredentialBundle) => void>();
   #disposed = false;
 
   constructor(workerPath: string) { this.#path = workerPath; }
   snapshot(): NeteaseSnapshot { return this.#state; }
   subscribe(listener: (state: NeteaseSnapshot) => void): () => void {
     this.#listeners.add(listener); return () => { this.#listeners.delete(listener); };
+  }
+  subscribeCredentials(listener: (bundle: NeteaseCredentialBundle) => void): () => void {
+    this.#credentialListeners.add(listener); return () => { this.#credentialListeners.delete(listener); };
   }
   #publish(value: unknown): void {
     const state = parseNeteaseSnapshot(value);
@@ -47,6 +52,11 @@ export class NeteaseClient {
       const message = value as Record<string, unknown>;
       try {
         if (message.kind === 'state') this.#publish(message.state);
+        else if (message.kind === 'credentials') {
+          const bundle = parseCredentialBundle(message.credentials);
+          if (bundle.provider !== 'netease') throw new DomainError('invalid-response');
+          for (const listener of this.#credentialListeners) listener(bundle);
+        }
         else if (message.kind === 'reply' && typeof message.requestId === 'number') {
           const request = this.#requests.get(message.requestId);
           if (!request) return;
@@ -90,6 +100,17 @@ export class NeteaseClient {
     }
     return this.#state;
   }
+  restoreCredentials(bundle: NeteaseCredentialBundle): Promise<NeteaseSnapshot> {
+    return this.command('restoreCredentials', { credentials: bundle });
+  }
+  async exportCredentials(): Promise<NeteaseCredentialBundle | undefined> {
+    if (this.#state.status !== 'connected') return undefined;
+    const value = await this.#request('exportCredentials');
+    if (value === null || value === undefined) return undefined;
+    const bundle = parseCredentialBundle(value);
+    if (bundle.provider !== 'netease') throw new DomainError('invalid-response');
+    return bundle;
+  }
   async resolveTrack(id: string, generation: number, signal: AbortSignal): Promise<StreamResolution> {
     signal.throwIfAborted();
     if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
@@ -106,6 +127,6 @@ export class NeteaseClient {
     const exit = new Promise<void>((resolve) => worker.once('exit', () => resolve()));
     this.#fail(worker);
     await exit;
-    this.#listeners.clear();
+    this.#listeners.clear(); this.#credentialListeners.clear();
   }
 }

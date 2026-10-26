@@ -1,4 +1,5 @@
 import type { PlaybackApi } from './playback.ts';
+import type { CredentialsApi } from './credentials.ts';
 import type { KugouApi } from './kugou.ts';
 import type { NeteaseApi } from './netease.ts';
 
@@ -21,6 +22,7 @@ export interface DesktopApi {
   readonly playback: PlaybackApi;
   readonly netease: NeteaseApi;
   readonly kugou: KugouApi;
+  readonly credentials: CredentialsApi;
 }
 
 export function parseAppInfo(value: unknown): AppInfo {

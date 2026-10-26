@@ -11,9 +11,16 @@ export const endpoints = {
   stream: ['/api/song/enhance/player/url', 'eapi'],
 } as const;
 export type NeteaseEndpoint = keyof typeof endpoints;
+export interface NeteaseTransportSession {
+  readonly cookies: Readonly<Record<string, string>>;
+  readonly deviceId: string;
+  readonly nuid: string;
+}
 export interface NeteaseTransport {
   call(endpoint: NeteaseEndpoint, data: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
   hasIdentity(): boolean;
+  exportSession(): NeteaseTransportSession | undefined;
+  restoreSession(session: NeteaseTransportSession): void;
   clear(): void;
 }
 
@@ -22,9 +29,21 @@ import { parseApiJson } from '../api-json.ts';
 
 export class DirectNeteaseTransport implements NeteaseTransport {
   #cookies = new Map<string, string>();
-  #deviceId = randomUUID();
+  #deviceId: string = randomUUID();
   #nuid = randomBytes(16).toString('hex');
   hasIdentity(): boolean { return this.#cookies.has('MUSIC_U'); }
+  exportSession(): NeteaseTransportSession | undefined {
+    if (!this.hasIdentity()) return undefined;
+    return Object.freeze({ cookies: Object.freeze(Object.fromEntries(this.#cookies)), deviceId: this.#deviceId, nuid: this.#nuid });
+  }
+  restoreSession(session: NeteaseTransportSession): void {
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(session.deviceId) || !/^[a-f0-9]{32}$/.test(session.nuid)) throw new DomainError('invalid-response');
+    const cookies = Object.entries(session.cookies);
+    if (!cookies.some(([name, value]) => name === 'MUSIC_U' && value.length > 0)) throw new DomainError('invalid-response');
+    this.#cookies = new Map(cookies);
+    this.#deviceId = session.deviceId;
+    this.#nuid = session.nuid;
+  }
   clear(): void { this.#cookies.clear(); }
 
   async call(endpoint: NeteaseEndpoint, data: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {

@@ -2,13 +2,14 @@ import { utilityProcess, type UtilityProcess } from 'electron';
 import { DomainError, normalizeError, parseAppError } from '../../packages/contracts/src/errors';
 import { initialKugouSnapshot, parseKugouSnapshot, type KugouSnapshot } from '../../packages/contracts/src/kugou';
 import { parseStreamResolution, type StreamResolution } from '../../packages/contracts/src/music';
+import { parseCredentialBundle, type KugouCredentialBundle } from '../../packages/contracts/src/credentials';
 
 interface Request {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'resolveTrack';
+type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack';
 
 export class KugouClient {
   #worker: UtilityProcess | undefined;
@@ -20,12 +21,16 @@ export class KugouClient {
   #sequence = 0;
   #requests = new Map<number, Request>();
   #listeners = new Set<(state: KugouSnapshot) => void>();
+  #credentialListeners = new Set<(bundle: KugouCredentialBundle) => void>();
   #disposed = false;
 
   constructor(workerPath: string) { this.#path = workerPath; }
   snapshot(): KugouSnapshot { return this.#state; }
   subscribe(listener: (state: KugouSnapshot) => void): () => void {
     this.#listeners.add(listener); return () => { this.#listeners.delete(listener); };
+  }
+  subscribeCredentials(listener: (bundle: KugouCredentialBundle) => void): () => void {
+    this.#credentialListeners.add(listener); return () => { this.#credentialListeners.delete(listener); };
   }
   #publish(value: unknown): void {
     const state = parseKugouSnapshot(value);
@@ -49,6 +54,11 @@ export class KugouClient {
       const message = value as Record<string, unknown>;
       try {
         if (message.kind === 'state') this.#publish(message.state);
+        else if (message.kind === 'credentials') {
+          const bundle = parseCredentialBundle(message.credentials);
+          if (bundle.provider !== 'kugou') throw new DomainError('invalid-response');
+          for (const listener of this.#credentialListeners) listener(bundle);
+        }
         else if (message.kind === 'reply' && typeof message.requestId === 'number') {
           const request = this.#requests.get(message.requestId);
           if (!request) return;
@@ -92,6 +102,17 @@ export class KugouClient {
     }
     return this.#state;
   }
+  restoreCredentials(bundle: KugouCredentialBundle): Promise<KugouSnapshot> {
+    return this.command('restoreCredentials', { credentials: bundle });
+  }
+  async exportCredentials(): Promise<KugouCredentialBundle | undefined> {
+    if (this.#state.status !== 'connected') return undefined;
+    const value = await this.#request('exportCredentials');
+    if (value === null || value === undefined) return undefined;
+    const bundle = parseCredentialBundle(value);
+    if (bundle.provider !== 'kugou') throw new DomainError('invalid-response');
+    return bundle;
+  }
   async resolveTrack(id: string, generation: number, signal: AbortSignal): Promise<StreamResolution> {
     signal.throwIfAborted();
     if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
@@ -108,6 +129,6 @@ export class KugouClient {
     const exit = new Promise<void>((resolve) => worker.once('exit', () => resolve()));
     this.#fail(worker);
     await exit;
-    this.#listeners.clear();
+    this.#listeners.clear(); this.#credentialListeners.clear();
   }
 }

@@ -3,9 +3,9 @@ import { normalizeError } from '../../packages/contracts/src/errors';
 import { record, text, nonNegativeInteger } from '../../packages/contracts/src/validation';
 import { neteaseId } from '../../packages/contracts/src/netease';
 
-// 凭据只存在此 utilityProcess 的临时内存；不写文件，不输出原始响应。
-const service = new NeteaseService();
+// 凭据只在此 utilityProcess 内解密使用；主进程仅保存系统密钥加密后的密文。
 const port = process.parentPort;
+const service = new NeteaseService({ onCredentials: (credentials) => port.postMessage({ kind: 'credentials', credentials }) });
 service.subscribe((state) => port.postMessage({ kind: 'state', state }));
 port.on('message', (event) => {
   void (async () => {
@@ -21,6 +21,8 @@ port.on('message', (event) => {
       else if (operation === 'logout') result = service.logout();
       else if (operation === 'loadPlaylists') result = await service.loadPlaylists();
       else if (operation === 'loadPlaylist') result = await service.loadPlaylist(neteaseId(message.id), nonNegativeInteger(message.offset, 'provider.offset'));
+      else if (operation === 'restoreCredentials') result = await service.restoreCredentials(message.credentials);
+      else if (operation === 'exportCredentials') result = service.exportCredentials() ?? null;
       else if (operation === 'resolveTrack') result = await service.resolveTrack(neteaseId(message.id), nonNegativeInteger(message.generation, 'provider.generation'));
       else throw new Error('unknown operation');
       port.postMessage({ kind: 'reply', requestId, ok: true, result });

@@ -244,6 +244,8 @@ P0 仍需分别验证官方网页登录和 App 扫码的“登录 → 账号 →
 
 safeStorage 在 Linux 的安全语义取决于密钥后端，旧接口的 basic_text 并不提供有效保护；新异步接口也需要检查所选版本的实际后端行为。见 [官方 safeStorage 文档](https://www.electronjs.org/docs/latest/api/safe-storage)。
 
+当前实现采用异步接口，显式拒绝 `basic_text`，并提供可选的“记住登录”与临时会话回退；边界和未验证项见 [凭据持久化](credentials.md) 与 [ADR 0004](adr/0004-credential-vault.md)。
+
 ## 8. 播放引擎与数据流
 
 ### 8.1 为什么使用 mpv

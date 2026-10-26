@@ -9,3 +9,5 @@ index.ts 已实现安全 BrowserWindow、内存 session、权限/下载/导航/�
 netease-client.ts 只协调受限 utilityProcess 消息与公开投影；netease-worker.ts 承载实际平台请求与临时凭据。主进程验证网易云白名单参数、进程和会话 generation，实际资源仅交给播放器，不转发给页面；退出等候后台与 mpv 清理。
 
 kugou-client.ts 与 kugou-worker.ts 采用同一模式承载酷狗 App 扫码、设备标识、账号验证、歌单/曲目和流解析；主进程只接受已登记酷狗曲目 ID，退出时同时清理两个后台进程与播放器。
+
+credential-vault.ts 与 safe-storage-cipher.ts 负责可选的系统密钥登录保存：只在用户启用记住且 Linux 后端非 basic_text 时加密写入 userData，拒绝弱后端；启动恢复由对应 Provider 重新验证账号，退出平台删除保存项。渲染进程只接触不含账号 ID/昵称/密文的状态。实现边界见 [凭据持久化](../../docs/credentials.md)。

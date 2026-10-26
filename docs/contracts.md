@@ -28,6 +28,15 @@ StreamResolution.source.remote 包含临时 URL、请求头和可选过期时间
 
 适配器核实实际响应后才能抛出 DomainError 分类。normalizeError 不猜测未知上游对象中的 code 或 message；未知错误统一为 internal，契约校验失败为 invalid-response，AbortError/TimeoutError 映射取消/超时。权限拒绝、过期、网络、限流等分类有固定文案；retryable 仅为提示，不代表已实现自动重试。
 
+## 凭据 bundle 与状态
+
+`packages/contracts/src/credentials.ts` 定义主进程/后台进程之间使用的凭据 bundle、凭据状态和 IPC 通道。bundle 只允许 `netease` 与 `kugou` 两个白名单平台、对应客户端渠道和固定字段；解析入口接受 unknown，丢弃额外字段，并校验 Cookie/Token/设备标识/账号格式。
+
+- 网易云 bundle 只接受 `MUSIC_U`、`__csrf`、`NMTID`、`MUSIC_A` 白名单 Cookie，以及设备 ID、nuid、已验证账号和昵称。
+- 酷狗 bundle 只接受 userid/token/dfid/guid 及已验证账号和昵称；恢复时由 guid 重新计算 MID，网页与 App 渠道不混用。
+- `CredentialStatus` 只暴露可用性、后端名、是否记住、是否锁定、已保存平台和安全错误；不暴露账号 ID、昵称、密文或文件路径。
+- preload 只暴露 getStatus、setRemember、clear、onChanged。凭据 bundle 只在主进程与对应 Provider 之间流转，不能进入 renderer 或通用 IPC。
+
 ## 后台租约与写回
 
 SessionGeneration 每个平台只保留一个活动 SessionLease。租约包含冻结的上下文、递增 generation、AbortSignal，不含凭据。activate 必须在新登录开始、账号身份验证完成、切账号/渠道及同账号重登时调用；即便上下文完全相同也会取消旧租约。invalidate 用于退出、取消和会话过期。

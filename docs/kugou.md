@@ -39,7 +39,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 
 “已扫码”或“收到 token”都不是登录完成。后台先检查 `userid`/`token` 格式，保存到后台传输对象，再请求 `get_my_info`；若响应回显账号 ID，必须与扫码身份一致，昵称必须存在。任一校验失败都清理临时凭据并显示明确诊断，不把部分授权当作成功。SSA 安全验证响应头统一归类为 `verification-required`，提示用户先在官方 App 处理，不尝试绕过验证码。
 
-凭据、设备 `dfid`、二维码 key 和原始响应只存在于专用 Electron utilityProcess 内存；不写文件、不输出日志、不进入页面存储。退出应用即丢弃，重启后需要重新扫码。当前没有系统密钥持久化、记住登录或 Token 自动刷新；轮询与业务请求的取消、退出和后台崩溃均通过会话 generation 丢弃旧结果。
+凭据、设备 `dfid`、二维码 key 和原始响应只在专用 Electron utilityProcess 内解密使用；主进程只在用户启用“记住登录”且系统密钥后端安全可用时保存加密 bundle，不写明文、不输出日志、不进入页面存储。未启用或后端不可用时退出即丢弃，重启后需要重新扫码；启用后恢复也要重新请求账号接口验证。当前没有 Token 自动刷新；轮询与业务请求的取消、退出和后台崩溃均通过会话 generation 丢弃旧结果。
 
 ## 歌单与播放
 

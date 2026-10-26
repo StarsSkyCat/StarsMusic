@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { initialKugouSnapshot, kugouChannels, parseKugouArguments, parseKugouSnapshot } from '../../packages/contracts/src/kugou.ts';
 import { KugouService, parseKugouStream } from '../../packages/providers/src/kugou/service.ts';
-import { DirectKugouTransport, type KugouEndpoint, type KugouTransport } from '../../packages/providers/src/kugou/transport.ts';
+import { DirectKugouTransport, type KugouEndpoint, type KugouTransport, type KugouTransportSession } from '../../packages/providers/src/kugou/transport.ts';
 import { DomainError } from '../../packages/contracts/src/errors.ts';
+import type { KugouCredentialBundle } from '../../packages/contracts/src/credentials.ts';
 
 // 全部为合成数据，不连接平台，不使用真实凭据/登录二维码。
 const hash = 'a'.repeat(32);
@@ -12,12 +13,18 @@ const ok = (data: unknown) => ({ status: 1, error_code: 0, data });
 const stream = { status: 1, hash, url: ['https://fsandroid.kugou.com/synthetic'], priv_status: 0, bitRate: 128000, extName: 'mp3' };
 class FakeTransport implements KugouTransport {
   cleared = false;
+  authenticated = false;
+  session: KugouTransportSession | undefined;
   pollStatus = 4;
   account = '42';
   profileAccount = '42';
   handlers = new Map<KugouEndpoint, (data: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>>();
-  acceptIdentity(userid: string, token: string): void { assert.equal(userid, this.account); assert.equal(token, 'synthetic-private-marker'); }
-  clear(): void { this.cleared = true; }
+  acceptIdentity(userid: string, token: string): void { assert.equal(userid, this.account); assert.equal(token, 'synthetic-private-marker'); this.authenticated = true; }
+  exportSession(): KugouTransportSession | undefined {
+    return this.authenticated ? this.session ?? { userid: this.account, token: 'synthetic-private-marker', dfid: 'synthetic-dfid', guid: '00000000-0000-4000-8000-000000000000' } : undefined;
+  }
+  restoreSession(session: KugouTransportSession): void { this.session = session; this.authenticated = true; }
+  clear(): void { this.cleared = true; this.authenticated = false; this.session = undefined; }
   async call(endpoint: KugouEndpoint, data: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
     const handler = this.handlers.get(endpoint); if (handler) return handler(data, signal);
     if (endpoint === 'register') return ok({});
@@ -77,6 +84,27 @@ test('完整资源无权限时回退到试听，文件名不匹配则拒绝', as
     await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
     assert.equal(service.snapshot().error?.code, 'track-mismatch');
   } finally { service.dispose(); }
+});
+
+test('酷狗成功登录可导出凭据并从凭据恢复', async () => {
+  let emitted: KugouCredentialBundle | undefined;
+  const transport = new FakeTransport();
+  const instance = new KugouService({ transport: () => transport, encodeQr: async () => png, autoPoll: false, now: () => 1000, onCredentials: (bundle) => { emitted = bundle; } });
+  try {
+    await connect(instance);
+    assert.equal(emitted?.provider, 'kugou');
+    const bundle = instance.exportCredentials();
+    assert.ok(bundle);
+    assert.equal(bundle.dfid, 'synthetic-dfid');
+    const restoredTransport = new FakeTransport();
+    const restored = new KugouService({ transport: () => restoredTransport, encodeQr: async () => png, autoPoll: false, now: () => 1000 });
+    try {
+      const snapshot = await restored.restoreCredentials(bundle);
+      assert.equal(snapshot.status, 'connected');
+      assert.equal(snapshot.account?.id, '42');
+      assert.equal(restoredTransport.authenticated, true);
+    } finally { restored.dispose(); }
+  } finally { instance.dispose(); }
 });
 
 test('取消后的迟到二维码和账号响应不能覆盖新会话', async () => {

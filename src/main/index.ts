@@ -1,10 +1,14 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
+import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { desktopChannels, type AppInfo } from '../../packages/contracts/src/desktop';
 import { assertTrustedInvoke, assertTrustedSource, getDevelopmentUrl } from './ipc-policy';
 import { parsePlaybackArgument, playbackChannels } from '../../packages/contracts/src/playback';
 import { appError } from '../../packages/contracts/src/errors';
 import { audioExtensions, MusicPlayer } from '../../packages/playback/src/player';
+import { credentialChannels, parseCredentialArguments } from '../../packages/contracts/src/credentials';
+import { CredentialVault } from './credential-vault';
+import { SafeStorageCipher } from './safe-storage-cipher';
 import { KugouClient } from './kugou-client';
 import { kugouChannels, parseKugouArguments } from '../../packages/contracts/src/kugou';
 import { NeteaseClient } from './netease-client';
@@ -20,6 +24,7 @@ let mainWindow: BrowserWindow | null = null;
 const player = new MusicPlayer();
 const netease = new NeteaseClient(fileURLToPath(new URL('./netease-worker.js', import.meta.url)));
 const kugou = new KugouClient(fileURLToPath(new URL('./kugou-worker.js', import.meta.url)));
+let vault: CredentialVault;
 let selectionGeneration = 0;
 let quitting = false;
 
@@ -60,12 +65,60 @@ function createWindow(): void {
   });
 }
 
+function broadcastCredentials(): void {
+  if (!vault) return;
+  void vault.status().then((status) => {
+    const contents = mainWindow?.webContents;
+    if (contents && !contents.isDestroyed()) contents.send(credentialChannels.changed, status);
+  }).catch(() => undefined);
+}
+
+async function saveCurrentCredentials(): Promise<void> {
+  if (!vault) return;
+  const status = await vault.status();
+  if (!status.remembered || !status.available) return;
+  if (netease.snapshot().status === 'connected') {
+    try { const bundle = await netease.exportCredentials(); if (bundle) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
+  }
+  if (kugou.snapshot().status === 'connected') {
+    try { const bundle = await kugou.exportCredentials(); if (bundle) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
+  }
+}
+
+async function restoreSavedCredentials(): Promise<void> {
+  if (!vault) return;
+  const status = await vault.status();
+  if (!status.remembered || !status.available || status.locked) return;
+  try {
+    const bundle = await vault.load('netease');
+    if (bundle?.provider === 'netease') {
+      const snapshot = await netease.restoreCredentials(bundle);
+      if (snapshot.status === 'expired') await vault.remove('netease');
+    }
+  } catch { /* 保留密文，界面显示锁定/不可用 */ }
+  try {
+    const bundle = await vault.load('kugou');
+    if (bundle?.provider === 'kugou') {
+      const snapshot = await kugou.restoreCredentials(bundle);
+      if (snapshot.status === 'expired') await vault.remove('kugou');
+    }
+  } catch { /* 保留密文，界面显示锁定/不可用 */ }
+  broadcastCredentials();
+}
+
 void app.whenReady().then(() => {
   const uiSession = session.fromPartition('starsmusic-ui');
   uiSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   uiSession.setPermissionCheckHandler(() => false);
   uiSession.on('will-download', (event) => event.preventDefault());
   Menu.setApplicationMenu(null);
+  vault = new CredentialVault(path.join(app.getPath('userData'), 'credentials.json'), new SafeStorageCipher());
+  netease.subscribeCredentials((bundle) => {
+    void vault.save(bundle).then((saved) => { if (saved) broadcastCredentials(); }).catch(() => broadcastCredentials());
+  });
+  kugou.subscribeCredentials((bundle) => {
+    void vault.save(bundle).then((saved) => { if (saved) broadcastCredentials(); }).catch(() => broadcastCredentials());
+  });
 
   ipcMain.handle(desktopChannels.getAppInfo, (event, ...args: unknown[]): AppInfo => {
     const contents = mainWindow?.webContents;
@@ -105,7 +158,10 @@ void app.whenReady().then(() => {
       if (channel === neteaseChannels.logout) {
         const pending = netease.command('logout');
         await player.clearRemote('netease');
-        return pending;
+        const snapshot = await pending;
+        await vault.remove('netease').catch(() => undefined);
+        broadcastCredentials();
+        return snapshot;
       }
       if (channel === neteaseChannels.loadPlaylists) return netease.command('loadPlaylists');
       if (channel === neteaseChannels.loadPlaylist) return netease.command('loadPlaylist', { id: argument.id, offset: argument.offset });
@@ -137,11 +193,40 @@ void app.whenReady().then(() => {
       if (channel === kugouChannels.logout) {
         const pending = kugou.command('logout');
         await player.clearRemote('kugou');
-        return pending;
+        const snapshot = await pending;
+        await vault.remove('kugou').catch(() => undefined);
+        broadcastCredentials();
+        return snapshot;
       }
       if (channel === kugouChannels.loadPlaylists) return kugou.command('loadPlaylists');
       if (channel === kugouChannels.loadPlaylist) return kugou.command('loadPlaylist', { id: argument.id, offset: argument.offset });
       return kugou.command('getState');
+    });
+  }
+  for (const channel of Object.values(credentialChannels)) {
+    if (channel === credentialChannels.changed) continue;
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      const contents = mainWindow?.webContents;
+      assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
+      const remember = parseCredentialArguments(channel, args);
+      if (quitting) return vault.status();
+      if (channel === credentialChannels.getStatus) return vault.status();
+      if (channel === credentialChannels.clear) {
+        const status = await vault.clear();
+        broadcastCredentials();
+        return status;
+      }
+      try {
+        if (remember === true) {
+          await vault.setRemember(true);
+          await saveCurrentCredentials();
+        } else {
+          await vault.setRemember(false);
+        }
+      } catch { /* 状态里包含不可用/锁定/保存失败原因 */ }
+      const status = await vault.status();
+      broadcastCredentials();
+      return status;
     });
   }
   for (const channel of Object.values(playbackChannels)) {
@@ -176,6 +261,7 @@ void app.whenReady().then(() => {
     });
   }
   createWindow();
+  void restoreSavedCredentials();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }).catch(() => {
   console.error('StarsMusic 初始化失败');
@@ -193,6 +279,9 @@ app.on('before-quit', (event) => {
 });
 app.on('will-quit', () => {
   ipcMain.removeHandler(desktopChannels.getAppInfo);
+  for (const channel of Object.values(credentialChannels)) {
+    if (channel !== credentialChannels.changed) ipcMain.removeHandler(channel);
+  }
   for (const channel of Object.values(playbackChannels)) ipcMain.removeHandler(channel);
   for (const channel of Object.values(neteaseChannels)) ipcMain.removeHandler(channel);
   for (const channel of Object.values(kugouChannels)) ipcMain.removeHandler(channel);

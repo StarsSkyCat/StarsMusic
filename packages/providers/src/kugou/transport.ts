@@ -6,9 +6,17 @@ import { accountProof, md5, registerProof, signature } from './crypto.ts';
 
 export const kugouProtocolBaseline = 'kugoumusicapi@1.6.2/62730f900dc9fdc51396a663b3d33a6c4c704046';
 export type KugouEndpoint = 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'register';
+export interface KugouTransportSession {
+  readonly userid: string;
+  readonly token: string;
+  readonly dfid: string;
+  readonly guid: string;
+}
 export interface KugouTransport {
   call(endpoint: KugouEndpoint, data: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
   acceptIdentity(userid: string, token: string): void;
+  exportSession(): KugouTransportSession | undefined;
+  restoreSession(session: KugouTransportSession): void;
   clear(): void;
 }
 const endpoints: Record<KugouEndpoint, readonly [string, string | undefined]> = {
@@ -23,7 +31,7 @@ const endpoints: Record<KugouEndpoint, readonly [string, string | undefined]> = 
 
 export class DirectKugouTransport implements KugouTransport {
   // App 协议使用由 GUID 派生的十进制大整数 MID；全程按字符串处理，不转 Number。
-  #guid = randomUUID();
+  #guid: string = randomUUID();
   #mid = BigInt(`0x${md5(this.#guid)}`).toString();
   #userid = '';
   #token = '';
@@ -32,6 +40,19 @@ export class DirectKugouTransport implements KugouTransport {
   acceptIdentity(userid: string, token: string): void {
     if (!/^\d{1,30}$/.test(userid) || !/^[A-Za-z0-9_-]{1,96}$/.test(token)) throw new DomainError('invalid-response');
     this.#userid = userid; this.#token = token;
+  }
+  exportSession(): KugouTransportSession | undefined {
+    if (!this.#userid || !this.#token) return undefined;
+    return Object.freeze({ userid: this.#userid, token: this.#token, dfid: this.#dfid, guid: this.#guid });
+  }
+  restoreSession(session: KugouTransportSession): void {
+    if (!/^\d{1,30}$/.test(session.userid) || !/^[A-Za-z0-9_-]{1,96}$/.test(session.token)
+      || !/^[A-Za-z0-9_-]{1,128}$/.test(session.dfid) || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(session.guid)) {
+      throw new DomainError('invalid-response');
+    }
+    this.#epoch++;
+    this.#guid = session.guid; this.#mid = BigInt(`0x${md5(this.#guid)}`).toString();
+    this.#dfid = session.dfid; this.#userid = session.userid; this.#token = session.token;
   }
   clear(): void { this.#epoch++; this.#userid = ''; this.#token = ''; this.#dfid = '-'; }
   async call(endpoint: KugouEndpoint, data: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {

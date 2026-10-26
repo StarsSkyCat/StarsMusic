@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
+import { parseCredentialBundle, type NeteaseCredentialBundle } from '../../../contracts/src/credentials.ts';
 import { initialNeteaseSnapshot, neteaseId, parseNeteaseSnapshot, type NeteaseSnapshot, type NeteaseTrack } from '../../../contracts/src/netease.ts';
 import { parseStreamResolution, type StreamResolution } from '../../../contracts/src/music.ts';
 import { nonNegativeInteger, record, text } from '../../../contracts/src/validation.ts';
@@ -70,6 +71,7 @@ interface ServiceOptions {
   encodeQr?: (url: string) => Promise<string>;
   now?: () => number;
   autoPoll?: boolean;
+  onCredentials?: (bundle: NeteaseCredentialBundle) => void;
 }
 type StatePatch = { [K in keyof NeteaseSnapshot]?: NeteaseSnapshot[K] | undefined };
 
@@ -171,6 +173,7 @@ export class NeteaseService {
         const connected = this.#sessions.activate({ provider: 'netease', clientChannel: 'netease-app', accountId: id });
         this.#lease = connected; this.#key = ''; clearTimeout(this.#timer);
         this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, error: undefined });
+        this.#emitCredentials();
       } else throw new DomainError('invalid-response');
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
@@ -188,6 +191,54 @@ export class NeteaseService {
   #connected(): { lease: SessionLease; transport: NeteaseTransport } {
     if (this.#state.status !== 'connected' || !this.#lease || !this.#transport) throw new DomainError('unauthenticated');
     return { lease: this.#lease, transport: this.#transport };
+  }
+  #emitCredentials(): void {
+    try {
+      const bundle = this.exportCredentials();
+      if (bundle) this.#options.onCredentials?.(bundle);
+    } catch { /* 保存失败不影响当前登录 */ }
+  }
+  exportCredentials(): NeteaseCredentialBundle | undefined {
+    if (this.#state.status !== 'connected' || !this.#state.account || !this.#transport) return undefined;
+    const session = this.#transport.exportSession();
+    if (!session) return undefined;
+    const parsed = parseCredentialBundle({
+      provider: 'netease', version: 1, clientChannel: 'netease-app',
+      accountId: this.#state.account.id, nickname: this.#state.account.nickname,
+      cookies: session.cookies, deviceId: session.deviceId, nuid: session.nuid, savedAt: this.#now(),
+    });
+    return parsed.provider === 'netease' ? parsed : undefined;
+  }
+  async restoreCredentials(value: unknown): Promise<NeteaseSnapshot> {
+    const bundle = parseCredentialBundle(value);
+    if (bundle.provider !== 'netease') throw new DomainError('invalid-response');
+    this.#clear();
+    const lease = this.#sessions.activate({ provider: 'netease', clientChannel: 'netease-app', accountId: bundle.accountId });
+    this.#lease = lease;
+    const transport = this.#options.transport?.() ?? new DirectNeteaseTransport();
+    this.#transport = transport;
+    try {
+      transport.restoreSession({ cookies: bundle.cookies, deviceId: bundle.deviceId, nuid: bundle.nuid });
+      this.#update({ ...initialNeteaseSnapshot(), generation: lease.generation, status: 'verifying', busy: true });
+      const body = success(await transport.call('account', {}, lease.signal));
+      const account = record(body.account, 'netease.account');
+      const profile = record(body.profile, 'netease.profile');
+      const id = apiId(account.id);
+      if (id !== bundle.accountId || id !== apiId(profile.userId)) throw new DomainError('session-expired');
+      const nickname = text(profile.nickname, 'netease.nickname');
+      if (!this.#sessions.isCurrent(lease)) return this.#state;
+      const connected = this.#sessions.activate({ provider: 'netease', clientChannel: 'netease-app', accountId: id });
+      this.#lease = connected;
+      this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, error: undefined });
+      this.#emitCredentials();
+    } catch (error: unknown) {
+      if (this.#sessions.isCurrent(lease)) {
+        const safe = normalizeError(error);
+        const invalid = ['session-expired', 'unauthenticated', 'permission-denied', 'invalid-response'].includes(safe.code);
+        this.#end(invalid ? 'expired' : 'failed', safe);
+      }
+    }
+    return this.#state;
   }
   #operationError(lease: SessionLease, error: unknown): void {
     if (!this.#sessions.isCurrent(lease)) return;

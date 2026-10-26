@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { parseAppInfo, type AppInfo } from '../../../packages/contracts/src/desktop';
 import { parsePlaybackSnapshot, type PlaybackApi, type PlaybackSnapshot } from '../../../packages/contracts/src/playback';
 import KugouPanel from './KugouPanel.vue';
+import CredentialPanel from './CredentialPanel.vue';
 import NeteasePanel from './NeteasePanel.vue';
 
 const info = ref<AppInfo>();
@@ -115,6 +116,7 @@ onUnmounted(() => unsubscribe?.());
         <p v-if="playbackError || playback.error" class="playback-error" role="alert">{{ playbackError || playback.error?.message }}</p>
         <NeteasePanel />
         <KugouPanel />
+        <CredentialPanel />
 
         <section class="runtime" aria-labelledby="runtime-title">
           <div class="runtime-heading">

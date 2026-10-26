@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
+import { credentialChannels, parseCredentialStatus } from '../../packages/contracts/src/credentials';
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
 import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/kugou';
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
@@ -16,6 +17,11 @@ const invokeNetease = async (channel: string, ...args: unknown[]) => {
 const invokeKugou = async (channel: string, ...args: unknown[]) => {
   const value: unknown = await ipcRenderer.invoke(channel, ...args);
   return parseKugouSnapshot(value);
+};
+
+const invokeCredentials = async (channel: string, ...args: unknown[]) => {
+  const value: unknown = await ipcRenderer.invoke(channel, ...args);
+  return parseCredentialStatus(value);
 };
 
 const api: DesktopApi = Object.freeze({
@@ -67,6 +73,20 @@ const api: DesktopApi = Object.freeze({
       const receive = (_event: unknown, value: unknown) => listener(parseKugouSnapshot(value));
       ipcRenderer.on(kugouChannels.stateChanged, receive);
       return () => { ipcRenderer.removeListener(kugouChannels.stateChanged, receive); };
+    },
+  }),
+  credentials: Object.freeze({
+    getStatus: () => invokeCredentials(credentialChannels.getStatus),
+    setRemember(value: boolean) {
+      if (typeof value !== 'boolean') throw new Error('记住登录参数无效');
+      return invokeCredentials(credentialChannels.setRemember, value);
+    },
+    clear: () => invokeCredentials(credentialChannels.clear),
+    onChanged(listener: (status: ReturnType<typeof parseCredentialStatus>) => void) {
+      if (typeof listener !== 'function') throw new Error('监听器无效');
+      const receive = (_event: unknown, value: unknown) => listener(parseCredentialStatus(value));
+      ipcRenderer.on(credentialChannels.changed, receive);
+      return () => { ipcRenderer.removeListener(credentialChannels.changed, receive); };
     },
   }),
 });

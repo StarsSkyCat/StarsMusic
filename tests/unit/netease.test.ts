@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DomainError } from '../../packages/contracts/src/errors.ts';
+import type { NeteaseCredentialBundle } from '../../packages/contracts/src/credentials.ts';
 import { initialNeteaseSnapshot, neteaseChannels, parseNeteaseArguments, parseNeteaseSnapshot } from '../../packages/contracts/src/netease.ts';
 import { apiId, NeteaseService, parseNeteaseStream } from '../../packages/providers/src/netease/service.ts';
-import { parseApiJson, type NeteaseEndpoint, type NeteaseTransport } from '../../packages/providers/src/netease/transport.ts';
+import { parseApiJson, type NeteaseEndpoint, type NeteaseTransport, type NeteaseTransportSession } from '../../packages/providers/src/netease/transport.ts';
 
 // 明确标识的合成响应；不连接平台，不含真实二维码、凭据或账号。
 const fakePng = 'data:image/png;base64,c3ludGhldGlj';
 class FakeTransport implements NeteaseTransport {
   identity = false;
   cleared = false;
+  session: NeteaseTransportSession | undefined;
   pollCode = 803;
   account = 42;
   handlers = new Map<NeteaseEndpoint, (data: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>>();
@@ -25,7 +27,11 @@ class FakeTransport implements NeteaseTransport {
     throw new Error('synthetic upstream failure');
   }
   hasIdentity(): boolean { return this.identity; }
-  clear(): void { this.identity = false; this.cleared = true; }
+  exportSession(): NeteaseTransportSession | undefined {
+    return this.identity ? this.session ?? { cookies: { MUSIC_U: 'synthetic-music-u' }, deviceId: 'synthetic-device', nuid: 'a'.repeat(32) } : undefined;
+  }
+  restoreSession(session: NeteaseTransportSession): void { this.session = session; this.identity = true; }
+  clear(): void { this.identity = false; this.session = undefined; this.cleared = true; }
 }
 function service(factory: () => FakeTransport, now = () => 1000): NeteaseService {
   return new NeteaseService({ transport: factory, encodeQr: async () => fakePng, autoPoll: false, now });
@@ -135,4 +141,25 @@ test('流解析严格绑定曲目 ID，保留试听/实际音质，不接受其�
   assert.throws(() => parseNeteaseStream({ ...result, data: [{ ...result.data[0], url: 'https://music.126.net.evil.invalid/audio' }] }, '7', 1000));
   assert.throws(() => parseNeteaseStream({ ...result, data: [{ ...result.data[0], freeTrialInfo: { start: 30, end: 0 } }] }, '7', 1000));
   assert.throws(() => parseNeteaseStream({ code: 200, data: [{ id: 7, code: 403, url: null }] }, '7', 1000), DomainError);
+});
+
+test('网易云成功登录可导出凭据并从凭据恢复', async () => {
+  let emitted: NeteaseCredentialBundle | undefined;
+  const transport = new FakeTransport();
+  const instance = new NeteaseService({ transport: () => transport, encodeQr: async () => fakePng, autoPoll: false, now: () => 1000, onCredentials: (bundle) => { emitted = bundle; } });
+  try {
+    await connect(instance);
+    assert.equal(emitted?.provider, 'netease');
+    const bundle = instance.exportCredentials();
+    assert.ok(bundle);
+    assert.equal(bundle.cookies.MUSIC_U, 'synthetic-music-u');
+    const restoredTransport = new FakeTransport();
+    const restored = new NeteaseService({ transport: () => restoredTransport, encodeQr: async () => fakePng, autoPoll: false, now: () => 1000 });
+    try {
+      const snapshot = await restored.restoreCredentials(bundle);
+      assert.equal(snapshot.status, 'connected');
+      assert.equal(snapshot.account?.id, '42');
+      assert.equal(restoredTransport.identity, true);
+    } finally { restored.dispose(); }
+  } finally { instance.dispose(); }
 });

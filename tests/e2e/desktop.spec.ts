@@ -43,7 +43,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease', 'kugou']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'playback', 'netease', 'kugou', 'credentials']);
       expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '0.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
       await expect(page.getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
@@ -63,6 +63,23 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       expect(kugou.initial).toBe('signed-out'); expect(kugou.logout).toBe('signed-out');
       expect(kugou.keys).toEqual(provider.keys);
       await expect(page.getByRole('button', { name: '连接酷狗', exact: true })).toBeAttached();
+      const credentials = await page.evaluate(async () => {
+        const api = (window as unknown as { starsMusic: { credentials: {
+          getStatus(): Promise<{ available: boolean; backend: string; remembered: boolean; locked: boolean; savedProviders: string[]; error?: { code: string } }>;
+          setRemember(value: boolean): Promise<{ available: boolean; remembered: boolean; error?: { code: string } }>;
+          clear(): Promise<{ remembered: boolean; savedProviders: string[] }>;
+        } } }).starsMusic.credentials;
+        return { keys: Object.keys(api).sort(), initial: await api.getStatus(), enabled: await api.setRemember(true), cleared: await api.clear() };
+      });
+      expect(credentials.keys).toEqual(['clear', 'getStatus', 'onChanged', 'setRemember']);
+      expect(credentials.initial).toMatchObject({ remembered: false, locked: false });
+      expect(typeof credentials.initial.backend).toBe('string');
+      if (!credentials.initial.available) {
+        expect(credentials.enabled.available).toBe(false);
+        expect(credentials.enabled.remembered).toBe(false);
+        expect(credentials.enabled.error?.code).toBe('credential-unavailable');
+      }
+      expect(credentials.cleared.remembered).toBe(false); expect(credentials.cleared.savedProviders).toEqual([]);
 
     });
 

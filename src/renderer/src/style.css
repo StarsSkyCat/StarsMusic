@@ -37,8 +37,11 @@ h2 { font-size: 16px; font-weight: 550; margin: 0; }
 .empty-library p { color: var(--muted); font-size: 13px; line-height: 1.8; margin: 10px 0 22px; }
 .sources { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 .open-files { margin-bottom: 22px; }
-.netease-panel, .kugou-panel { margin-top: 24px; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
-.netease-panel p, .kugou-panel p { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.netease-panel, .kugou-panel, .credential-panel { margin-top: 24px; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.netease-panel p, .kugou-panel p, .credential-panel p { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.remember-toggle { display: flex; align-items: center; gap: 10px; margin-top: 18px; font-size: 13px; }
+.remember-toggle input { accent-color: var(--accent); }
+.remember-toggle input:disabled + span { color: var(--muted); }
 .qr-login { display: flex; align-items: center; gap: 24px; margin-top: 24px; }
 .qr-login img { border: 8px solid white; border-radius: 8px; flex-shrink: 0; }
 .load-playlists { margin-top: 20px; }

@@ -2,9 +2,9 @@
 
 ## 当前能运行什么
 
-已实现安全窗口、本地播放、网易云 App 临时扫码/歌单/播放，以及酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放。preload 暴露 getAppInfo、playback、netease、kugou 的具体白名单方法；酷狗真实账号与出声、目录扫描、SQLite、MPRIS 和安装包尚未验证或实现。
+已实现安全窗口、本地播放、网易云 App 临时扫码/歌单/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的系统密钥“记住登录”。preload 暴露 getAppInfo、playback、netease、kugou、credentials 的具体白名单方法；真实安全密钥持久化/跨重启恢复、目录扫描、SQLite、MPRIS 和安装包尚未验证或实现。
 
-领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)。应用关闭后不保留网易云或酷狗登录，需要重新扫码。
+领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)，登录保存见 [凭据持久化](credentials.md)。默认关闭“记住登录”时，应用关闭后不保留网易云或酷狗登录，需要重新扫码。
 
 架构背景见 [设计方案](design-and-architecture.md)，任务顺序见 [路线图](roadmap.md)。
 
@@ -76,6 +76,16 @@ corepack pnpm setup:electron
 corepack pnpm dev
 ```
 
+## 凭据持久化
+
+“登录保存”面板默认关闭。勾选后需要成功登录才会保存；关闭勾选或点击“清除已保存登录”会删除保存项，退出单个平台会删除该平台保存项。
+
+- 使用 Electron `safeStorage` 异步接口，凭据加密后写到 `userData/credentials.json`，目录 0700、文件 0600。
+- Linux 只接受 `gnome_libsecret`、`kwallet`、`kwallet5`、`kwallet6`；`basic_text` 视为不可用，界面显示临时会话提示，不写入磁盘。
+- 启动时只有记住已启用且后端可用才解密并发送给后台；后台重新调用账号接口验证后才进入 connected。
+- 解密失败进入 locked，不覆盖原文件；清除保存后重新登录。
+- 本机当前 `safeStorage` 为 `basic_text`，真实 GNOME Keyring/KWallet 保存和跨重启恢复未验证。范围与测试见 [凭据持久化](credentials.md) 与 [验证记录](validation/2026-10-26-credentials.md)。
+
 ## 目录边界
 
 | 目录 | 责任 |
@@ -92,7 +102,7 @@ corepack pnpm dev
 | scripts | 可直接执行的仓库工具 |
 | docs | 设计、开发、决策及验证记录 |
 
-main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider 和通用播放器已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js 与 kugou-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
+main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器和主进程 CredentialVault 已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js 与 kugou-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程解密/加密；业务请求仍由后台进程使用解密后的临时凭据。存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
 
 公共 contracts 不导入 Electron/Vue/Provider SDK；renderer 只能使用 preload API。平台请求在 Provider 后台处理。重型扫描和数据库工作与窗口主进程分离。
 

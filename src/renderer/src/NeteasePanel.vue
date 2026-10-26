@@ -30,7 +30,7 @@ onUnmounted(() => { unsubscribe?.(); state.value = initialNeteaseSnapshot(); });
 <template>
   <section class="netease-panel" aria-labelledby="netease-title">
     <div class="runtime-heading">
-      <div><h2 id="netease-title">网易云音乐</h2><p>{{ state.account?.nickname ?? labels[state.status] }} · 临时会话，退出应用后需重新登录</p></div>
+      <div><h2 id="netease-title">网易云音乐</h2><p>{{ state.account?.nickname ?? labels[state.status] }} · 默认临时会话；可在“登录保存”启用记住登录</p></div>
       <button v-if="state.status === 'connected'" @click="action((api) => api.logout())">退出网易云</button>
       <button v-else-if="['loading-qr', 'waiting-scan', 'awaiting-confirmation', 'verifying'].includes(state.status)" @click="action((api) => api.cancelLogin())">取消授权</button>
       <button v-else @click="action((api) => api.startLogin())">连接网易云</button>

@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
+import { parseCredentialBundle, type KugouCredentialBundle } from '../../../contracts/src/credentials.ts';
 import { initialKugouSnapshot, kugouId, parseKugouSnapshot, type KugouSnapshot, type KugouTrack, type KugouLoginDiagnostic } from '../../../contracts/src/kugou.ts';
 import { parseStreamResolution, type StreamResolution } from '../../../contracts/src/music.ts';
 import { allowedKugouMediaHost } from '../../../contracts/src/media-policy.ts';
@@ -176,6 +177,7 @@ interface ServiceOptions {
   encodeQr?: (url: string) => Promise<string>;
   now?: () => number;
   autoPoll?: boolean;
+  onCredentials?: (bundle: KugouCredentialBundle) => void;
 }
 type StatePatch = { [K in keyof KugouSnapshot]?: KugouSnapshot[K] | undefined };
 
@@ -290,6 +292,7 @@ export class KugouService {
         this.#diagnostic = undefined;
         this.#lease = connected; this.#key = ''; clearTimeout(this.#timer);
         this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, error: undefined });
+        this.#emitCredentials();
       } else throw new DomainError('invalid-response');
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
@@ -307,6 +310,52 @@ export class KugouService {
   #connected(): { lease: SessionLease; transport: KugouTransport } {
     if (this.#state.status !== 'connected' || !this.#lease || !this.#transport) throw new DomainError('unauthenticated');
     return { lease: this.#lease, transport: this.#transport };
+  }
+  #emitCredentials(): void {
+    try {
+      const bundle = this.exportCredentials();
+      if (bundle) this.#options.onCredentials?.(bundle);
+    } catch { /* 保存失败不影响当前登录 */ }
+  }
+  exportCredentials(): KugouCredentialBundle | undefined {
+    if (this.#state.status !== 'connected' || !this.#state.account || !this.#transport) return undefined;
+    const session = this.#transport.exportSession();
+    if (!session) return undefined;
+    const parsed = parseCredentialBundle({
+      provider: 'kugou', version: 1, clientChannel: 'kugou-app',
+      accountId: this.#state.account.id, nickname: this.#state.account.nickname,
+      userid: session.userid, token: session.token, dfid: session.dfid, guid: session.guid, savedAt: this.#now(),
+    });
+    return parsed.provider === 'kugou' ? parsed : undefined;
+  }
+  async restoreCredentials(value: unknown): Promise<KugouSnapshot> {
+    const bundle = parseCredentialBundle(value);
+    if (bundle.provider !== 'kugou') throw new DomainError('invalid-response');
+    this.#clear(); this.#diagnostic = undefined;
+    const lease = this.#sessions.activate({ provider: 'kugou', clientChannel: 'kugou-app', accountId: bundle.accountId });
+    this.#lease = lease;
+    const transport = this.#options.transport?.() ?? new DirectKugouTransport();
+    this.#transport = transport;
+    try {
+      transport.restoreSession({ userid: bundle.userid, token: bundle.token, dfid: bundle.dfid, guid: bundle.guid });
+      this.#update({ ...initialKugouSnapshot(), generation: lease.generation, status: 'verifying', busy: true });
+      const profile = record(success(await transport.call('account', {}, lease.signal)).data, 'kugou.profile');
+      const echoedId = profile.userid ?? profile.user_id ?? profile.uid;
+      if (echoedId !== undefined && numericId(echoedId) !== bundle.accountId) throw new DomainError('session-expired');
+      const nickname = text(profile.nickname ?? profile.username ?? profile.user_name, 'kugou.nickname');
+      if (!this.#sessions.isCurrent(lease)) return this.#state;
+      const connected = this.#sessions.activate({ provider: 'kugou', clientChannel: 'kugou-app', accountId: bundle.accountId });
+      this.#lease = connected;
+      this.#update({ status: 'connected', generation: connected.generation, account: { id: bundle.accountId, nickname }, error: undefined });
+      this.#emitCredentials();
+    } catch (error: unknown) {
+      if (this.#sessions.isCurrent(lease)) {
+        const safe = normalizeError(error);
+        const invalid = ['session-expired', 'unauthenticated', 'permission-denied', 'invalid-response'].includes(safe.code);
+        this.#end(invalid ? 'expired' : 'failed', safe);
+      }
+    }
+    return this.#state;
   }
   #operationError(lease: SessionLease, error: unknown): void {
     if (!this.#sessions.isCurrent(lease)) return;
