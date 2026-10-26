@@ -76,10 +76,10 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       const credentials = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { credentials: {
           getStatus(): Promise<{ available: boolean; backend: string; remembered: boolean; locked: boolean; savedProviders: string[]; error?: { code: string } }>;
-          setRemember(value: boolean): Promise<{ available: boolean; remembered: boolean; error?: { code: string } }>;
+          setRemember(provider: 'netease' | 'kugou', value: boolean): Promise<{ available: boolean; remembered: boolean; error?: { code: string } }>;
           clear(): Promise<{ remembered: boolean; savedProviders: string[] }>;
         } } }).starsMusic.credentials;
-        return { keys: Object.keys(api).sort(), initial: await api.getStatus(), enabled: await api.setRemember(true), cleared: await api.clear() };
+        return { keys: Object.keys(api).sort(), initial: await api.getStatus(), enabled: await api.setRemember('kugou', true), cleared: await api.clear() };
       });
       expect(credentials.keys).toEqual(['clear', 'getStatus', 'onChanged', 'setRemember']);
       expect(credentials.initial).toMatchObject({ remembered: false, locked: false });
@@ -252,7 +252,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
   }
 });
 
-test('SQLite 登录设置在禁用系统密码库时仍能随实际 Electron 重启保留', async () => {
+test('扫码保存选择按平台隔离，未成功登录的选择不跨应用重启保留', async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-vault-e2e-'));
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
@@ -262,16 +262,34 @@ test('SQLite 登录设置在禁用系统密码库时仍能随实际 Electron 重
   let desktop: Awaited<ReturnType<typeof launch>> | undefined;
   try {
     desktop = await launch(); let page = await desktop.firstWindow();
-    const enabled = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { setRemember(value: boolean): Promise<{ available: boolean; remembered: boolean; backend: string }> } } }).starsMusic.credentials.setRemember(true));
+    const enabled = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { setRemember(provider: 'netease' | 'kugou', value: boolean): Promise<{ available: boolean; remembered: boolean; backend: string }> } } }).starsMusic.credentials.setRemember('kugou', true));
     expect(enabled).toMatchObject({ available: true, remembered: true, backend: 'local-key-aes-256-gcm' });
+    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    // 仅为登录选项布局注入合成等待状态和 1px 图片，不获取/保存真实二维码，不模拟认证成功。
+    const waiting = await page.evaluate(async () => {
+      const api = (window as unknown as { starsMusic: { kugou: { getState(): Promise<Record<string, unknown>> } } }).starsMusic.kugou;
+      return { ...await api.getState(), revision: 100, status: 'waiting-scan', qrImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', expiresAt: 9999999999999 };
+    });
+    await desktop.evaluate(({ BrowserWindow }, snapshot) => BrowserWindow.getAllWindows()[0]!.webContents.send('starsmusic:kugou:state-changed', snapshot), waiting);
+    const remember = page.getByRole('checkbox', { name: '记住酷狗音乐登录', exact: true });
+    await expect(remember).toBeChecked();
+    await remember.uncheck(); await expect(remember).not.toBeChecked();
+    await remember.check(); await expect(remember).toBeChecked();
+    const loggedOut = await page.evaluate(async () => {
+      const api = (window as unknown as { starsMusic: { kugou: { logout(): Promise<unknown> }; credentials: { getStatus(): Promise<{ rememberedProviders: string[]; savedProviders: string[] }>; setRemember(provider: 'netease', value: boolean): Promise<unknown> } } }).starsMusic;
+      await api.credentials.setRemember('netease', true);
+      await api.kugou.logout();
+      return api.credentials.getStatus();
+    });
+    expect(loggedOut).toMatchObject({ rememberedProviders: ['netease'], savedProviders: [] });
     await desktop.close(); desktop = undefined;
     desktop = await launch(); page = await desktop.firstWindow();
     const restored = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { getStatus(): Promise<{ available: boolean; remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.getStatus());
-    expect(restored).toMatchObject({ available: true, remembered: true, savedProviders: [] });
+    expect(restored).toMatchObject({ available: true, remembered: false, savedProviders: [] });
     // 不注入账号、不调用真实登录；平台凭据的加密往返由实际 SQLite/AES 单元测试验证。
     await page.getByRole('button', { name: '账号与设置', exact: true }).click();
-    await expect(page.getByRole('checkbox', { name: '记住登录（应用重启后自动验证）' })).toBeChecked();
-    await expect(page.getByText('在本机加密记住登录，无需额外的系统密钥服务；不保存密码或二维码。', { exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await expect(page.getByText('在各平台扫码区域选择「记住登录」。退出账号会自动删除该平台凭据。', { exact: true })).toBeVisible();
     const cleared = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { clear(): Promise<{ remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.clear());
     expect(cleared).toMatchObject({ remembered: false, savedProviders: [] });
   } finally { await desktop?.close(); await rm(profile, { recursive: true, force: true }); }

@@ -21,6 +21,9 @@ export class CredentialVault {
   #error: AppError | undefined;
   #queue: Promise<void> = Promise.resolve();
   #epoch = 0;
+  #revision = 0;
+  #remembered = new Set<CredentialProvider>();
+  #initializing: Promise<void> | undefined;
   #providerEpoch: Record<CredentialProvider, number> = { netease: 0, kugou: 0 };
 
   constructor(store: CredentialStore, cipher: VaultCipher, now: () => number = Date.now) {
@@ -30,14 +33,18 @@ export class CredentialVault {
   async #ready(): Promise<StoredCredentials> {
     if (this.#locked) throw new DomainError('credential-locked');
     if (this.#state) return this.#state;
-    try {
-      const stored = await this.#store.read();
-      this.#state = stored === undefined ? emptyCredentials() : parseStoredCredentials(stored);
-    } catch {
-      this.#locked = true; this.#error = appError('credential-locked');
-      throw new DomainError('credential-locked');
-    }
-    return this.#state;
+    this.#initializing ??= (async () => {
+      try {
+        const stored = await this.#store.read();
+        this.#state = stored === undefined ? emptyCredentials() : parseStoredCredentials(stored);
+        this.#remembered = new Set(credentialProviderIds.filter(provider => this.#state?.entries[provider]));
+      } catch {
+        this.#locked = true; this.#error = appError('credential-locked');
+        throw new DomainError('credential-locked');
+      }
+    })();
+    await this.#initializing;
+    return this.#state!;
   }
 
   async #available(): Promise<boolean> {
@@ -66,25 +73,38 @@ export class CredentialVault {
     try { ready = await this.#ready(); } catch { ready = undefined; }
     const available = !this.#locked && await this.#available();
     if (!available && !this.#error && !this.#locked) this.#error = appError('credential-unavailable');
-    const entries = ready?.entries ?? {};
+    const entries = this.#state?.entries ?? ready?.entries ?? {};
+    const rememberedProviders = credentialProviderIds.filter(provider => this.#remembered.has(provider));
     return Object.freeze({
-      available, backend: this.#cipher.backend, remembered: ready?.remember === true,
+      revision: ++this.#revision, rememberedProviders: Object.freeze(rememberedProviders),
+      available, backend: this.#cipher.backend, remembered: rememberedProviders.length > 0,
       locked: this.#locked, savedProviders: Object.freeze(credentialProviderIds.filter((provider) => entries[provider] !== undefined)),
       ...(this.#error === undefined ? {} : { error: this.#error }),
     });
   }
 
-  async setRemember(value: boolean): Promise<CredentialStatus> {
-    if (!value) this.#epoch++;
+  async setRemember(provider: CredentialProvider, value: boolean): Promise<CredentialStatus> {
+    const epoch = ++this.#providerEpoch[provider];
+    const vaultEpoch = this.#epoch;
     await this.#ready();
-    if (value) {
-      if (!await this.#available()) {
-        this.#error = appError('credential-unavailable');
-        throw new DomainError('credential-unavailable');
+    if (value && !await this.#available()) {
+      this.#error = appError('credential-unavailable');
+      throw new DomainError('credential-unavailable');
+    }
+    if (epoch !== this.#providerEpoch[provider] || vaultEpoch !== this.#epoch) return this.status();
+    const previous = this.#remembered.has(provider);
+    if (value) this.#remembered.add(provider);
+    else this.#remembered.delete(provider);
+    try { await this.#mutate(state => {
+      if (epoch !== this.#providerEpoch[provider] || vaultEpoch !== this.#epoch) return undefined;
+      const entries = { ...state.entries };
+      if (!value) delete entries[provider];
+      return { ...state, remember: this.#remembered.size > 0 || Object.keys(entries).length > 0, entries };
+    }); } catch (error) {
+      if (epoch === this.#providerEpoch[provider] && vaultEpoch === this.#epoch) {
+        if (previous) this.#remembered.add(provider); else this.#remembered.delete(provider);
       }
-      await this.#mutate((state) => state.remember ? undefined : { ...state, remember: true });
-    } else {
-      await this.#mutate((state) => state.remember || Object.keys(state.entries).length > 0 ? { ...state, remember: false, entries: {} } : undefined);
+      throw error;
     }
     return this.status();
   }
@@ -92,7 +112,7 @@ export class CredentialVault {
   async save(bundle: CredentialBundle): Promise<boolean> {
     const epoch = this.#epoch; const providerEpoch = this.#providerEpoch[bundle.provider];
     const state = await this.#ready();
-    if (!state.remember) return false;
+    if (!state.remember || !this.#remembered.has(bundle.provider)) return false;
     if (!await this.#available()) {
       this.#error = appError('credential-unavailable');
       throw new DomainError('credential-unavailable');
@@ -104,7 +124,7 @@ export class CredentialVault {
       throw new DomainError('credential-save-failed');
     }
     if (!ciphertext || ciphertext.length > 500_000) throw new DomainError('credential-save-failed');
-    return this.#mutate((current) => current.remember && epoch === this.#epoch && providerEpoch === this.#providerEpoch[bundle.provider] ? {
+    return this.#mutate((current) => current.remember && this.#remembered.has(bundle.provider) && epoch === this.#epoch && providerEpoch === this.#providerEpoch[bundle.provider] ? {
       ...current, entries: { ...current.entries, [bundle.provider]: { ciphertext, updatedAt: this.#now() } },
     } : undefined);
   }
@@ -136,12 +156,13 @@ export class CredentialVault {
 
   async remove(provider: CredentialProvider): Promise<void> {
     this.#providerEpoch[provider]++;
+    this.#remembered.delete(provider);
     await this.#ready();
+    this.#remembered.delete(provider);
     await this.#mutate((state) => {
-      if (!state.entries[provider]) return undefined;
       const entries = { ...state.entries };
       delete entries[provider];
-      return { ...state, entries };
+      return { ...state, remember: this.#remembered.size > 0 || Object.keys(entries).length > 0, entries };
     });
   }
 
@@ -156,7 +177,7 @@ export class CredentialVault {
     const operation = this.#queue.then(async () => {
       await this.#store.reset();
       await this.#cipher.reset?.();
-      this.#state = emptyCredentials(); this.#locked = false; this.#error = undefined;
+      this.#state = emptyCredentials(); this.#remembered.clear(); this.#initializing = undefined; this.#locked = false; this.#error = undefined;
     });
     this.#queue = operation.then(() => undefined).catch(() => undefined);
     try { await operation; }

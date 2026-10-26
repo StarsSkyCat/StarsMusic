@@ -12,10 +12,10 @@
 
 ## 用户流程
 
-1. 在“登录保存”启用“记住登录”。本地目录、数据库或密钥不可用时明确报告，不伪装启用成功。
-2. 正常通过官方 App 扫码；账号验证后，后台把白名单凭据交给主进程。已连接时启用也会导出当前凭据并保存；只有实际需要保存时生成随机密钥。
+1. 在网易云或酷狗的二维码区域勾选“记住登录”，两个平台分别选择，默认不勾选。本地目录、数据库或密钥不可用时明确报告，不伪装启用成功。
+2. 正常通过官方 App 扫码；账号验证后，后台把白名单凭据交给主进程。本次扫码未勾选时不保存，下次登录重新选择；只有实际需要保存时生成随机密钥。
 3. 关闭应用保留密文和本地密钥，下次启动解密后由对应 Provider **重新请求账号接口**。不能仅凭数据库中有记录就进入 connected。
-4. 退出单个平台删除该平台记录；关闭记住删除全部凭据记录；“清除已保存登录”重建空凭据库并删除本地密钥。删除不撤销平台侧会话，也不保证清除系统备份或外部副本。
+4. 退出单个平台删除该平台记录并撤销该平台选择；取消扫码/重新获取二维码也重置本次选择。取消勾选只删除对应平台保存，另一个平台不受影响；“清除已保存登录”重建空凭据库并删除本地密钥。删除不撤销平台侧会话，也不保证清除系统备份或外部副本。
 
 ## 模型、事务与竞态
 
@@ -23,7 +23,7 @@
 - 凭据仍严格绑定平台、账号和客户端渠道：网易云为 netease-app 的白名单 Cookie/设备数据；酷狗为 kugou-app 的 Token/设备数据，不与网页 Cookie 混用。
 - 退出、关闭记住、清除和关闭应用推进撤销代次；较晚完成的加密不能重新写回。异步导出后再次检查平台 generation 与账号。
 - 主进程内 CredentialVault 管理序列与加密，CredentialStoreClient 通过 Node worker 调用 packages/storage 的 SQLite 实现；应用退出等待队列和存储线程清理。
-- preload 仍只暴露 credentials.getStatus/setRemember/clear/onChanged，状态不含账号 ID、昵称、密文、密钥或文件路径。
+- preload 仍只暴露 credentials.getStatus/setRemember(provider, boolean)/clear/onChanged，状态有递增 revision、各平台 rememberedProviders 和 savedProviders，不含账号 ID、昵称、密文、密钥或文件路径。未完成登录的勾选只属于当前应用会话，重启不会沿用；已有密文记录按对应平台恢复。
 
 ## 失效、损坏与旧版迁移
 
@@ -39,3 +39,5 @@
 - 用户真实账号的跨重启恢复、平台会话有效期、安装包、Windows/macOS 尚待验收。详见 [SQLite 验证记录](validation/2026-10-26-sqlite-credentials.md)；原系统密钥方案的历史结果见 [旧记录](validation/2026-10-26-credentials.md)。
 
 SQLite 的普通存储与加密扩展区别见 [SQLite 官方说明](https://sqlite.org/see/doc/trunk/www/readme.wiki)，本项目采用写入前的字段加密；算法接口见 [Node crypto 文档](https://nodejs.org/docs/latest-v24.x/api/crypto.html)。
+
+2026-10-27 登录交互调整及验证见 [扫码保存记录](validation/2026-10-27-login-flow.md)。

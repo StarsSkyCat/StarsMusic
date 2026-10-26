@@ -1700,3 +1700,10 @@ dialog::backdrop {
     min-height: 30px;
   }
 }
+
+.login-preference { margin: 20px 0; padding-top: 18px; border-top: 1px solid #ffffff12; }
+.login-preference p, .login-saved-note { color: #a999b8; font-size: 12px; line-height: 1.8; margin: 8px 0; }
+.login-preference .remember-toggle { cursor: pointer; display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.credential-security { margin-top: 15px; color: #9689a3; font-size: 12px; line-height: 1.8; }
+.credential-security summary { cursor: pointer; }
+.credential-security p { margin-top: 8px; max-width: 650px; }

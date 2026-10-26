@@ -29,6 +29,7 @@ import {
   type PlaybackApi,
   type PlaybackSnapshot,
 } from '../../../packages/contracts/src/playback';
+import { useCredentials } from './useCredentials';
 import CredentialPanel from './CredentialPanel.vue';
 import ProviderAccount from './ProviderAccount.vue';
 import PlaybackControls from './PlaybackControls.vue';
@@ -41,6 +42,7 @@ import {
 import { useProvider, providerNames, type Provider } from './useProvider';
 import type { DisplayTrack } from './music-ui';
 
+const credentials = useCredentials();
 const providers = {
   netease: useProvider('netease'),
   kugou: useProvider('kugou'),
@@ -474,6 +476,9 @@ onUnmounted(() => {
             v-if="activeProvider && providerState && providerState.status !== 'connected'"
             :provider="activeProvider"
             :state="providerState"
+            :credentials="credentials.status.value"
+            :saving="credentials.busy[activeProvider]"
+            @remember="value => credentials.setRemember(activeProvider!, value)"
             :error="providers[activeProvider].error.value"
             @login="providers[activeProvider].run((api) => api.startLogin())"
             @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
@@ -679,13 +684,16 @@ onUnmounted(() => {
               :key="id"
               :provider="id"
               :state="providers[id].state.value"
+              :credentials="credentials.status.value"
+              :saving="credentials.busy[id]"
+              @remember="value => credentials.setRemember(id, value)"
               :error="providers[id].error.value"
               @login="providers[id].run((api) => api.startLogin())"
               @cancel="providers[id].run((api) => api.cancelLogin())"
               @logout="providers[id].run((api) => api.logout())"
             />
           </div>
-          <CredentialPanel />
+          <CredentialPanel :status="credentials.status.value" :error="credentials.error.value" @clear="credentials.clear" />
           <section class="runtime" aria-labelledby="runtime-title">
             <div class="section-heading">
               <div class="account-heading">

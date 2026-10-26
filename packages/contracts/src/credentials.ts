@@ -12,6 +12,8 @@ export const credentialChannels = {
 } as const;
 
 export interface CredentialStatus {
+  readonly revision: number;
+  readonly rememberedProviders: readonly CredentialProvider[];
   readonly available: boolean;
   readonly backend: string;
   readonly remembered: boolean;
@@ -21,14 +23,14 @@ export interface CredentialStatus {
 }
 export interface CredentialsApi {
   getStatus(): Promise<CredentialStatus>;
-  setRemember(value: boolean): Promise<CredentialStatus>;
+  setRemember(provider: CredentialProvider, value: boolean): Promise<CredentialStatus>;
   clear(): Promise<CredentialStatus>;
   onChanged(listener: (status: CredentialStatus) => void): () => void;
 }
-export function parseCredentialArguments(channel: string, args: readonly unknown[]): boolean | undefined {
+export function parseCredentialArguments(channel: string, args: readonly unknown[]): { provider: CredentialProvider; remember: boolean } | undefined {
   if (channel === credentialChannels.setRemember) {
-    if (args.length !== 1 || typeof args[0] !== 'boolean') throw new ContractValidationError('credential.remember');
-    return args[0];
+    if (args.length !== 2 || typeof args[1] !== 'boolean') throw new ContractValidationError('credential.remember');
+    return { provider: choice(args[0], credentialProviderIds, 'credential.provider'), remember: args[1] };
   }
   const empty: readonly string[] = [credentialChannels.getStatus, credentialChannels.clear];
   if (empty.includes(channel) && args.length === 0) return undefined;
@@ -125,9 +127,13 @@ export function parseCredentialStatus(value: unknown): CredentialStatus {
     throw new ContractValidationError('credential.status.flags');
   }
   const backend = boundedText(input.backend, 'credential.status.backend', 64);
+  if (!Array.isArray(input.rememberedProviders)) throw new ContractValidationError('credential.status.rememberedProviders');
+  const rememberedProviders = [...new Set(input.rememberedProviders.map((provider: unknown) => choice(provider, credentialProviderIds, 'credential.provider')))];
+  if (input.remembered !== (rememberedProviders.length > 0)) throw new ContractValidationError('credential.status.remembered');
   if (!Array.isArray(input.savedProviders)) throw new ContractValidationError('credential.status.savedProviders');
   const savedProviders = [...new Set(input.savedProviders.map((provider: unknown) => choice(provider, credentialProviderIds, 'credential.provider')))];
   return Object.freeze({
+    revision: nonNegativeInteger(input.revision, 'credential.status.revision'), rememberedProviders: Object.freeze(rememberedProviders),
     available: input.available, backend, remembered: input.remembered, locked: input.locked,
     savedProviders: Object.freeze(savedProviders),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),

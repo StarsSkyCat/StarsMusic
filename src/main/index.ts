@@ -1,3 +1,4 @@
+import type { CredentialProvider } from '../../packages/contracts/src/credentials';
 import { CredentialStoreClient } from './credential-store-client';
 import { LocalKeyCipher } from './local-key-cipher';
 import { migrateLegacyCredentials } from './credential-migration';
@@ -83,22 +84,17 @@ function broadcastCredentials(): void {
   }).catch(() => undefined);
 }
 
-async function saveCurrentCredentials(): Promise<void> {
-  if (!vault) return;
+async function saveCurrentCredentials(provider: CredentialProvider): Promise<void> {
   const status = await vault.status();
-  if (!status.remembered || !status.available) return;
-  const neteaseState = netease.snapshot();
-  if (neteaseState.status === 'connected') {
-    try { const bundle = await netease.exportCredentials();
-      const current = netease.snapshot();
-      if (bundle && current.status === 'connected' && current.generation === neteaseState.generation && current.account?.id === bundle.accountId) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
-  }
-  const kugouState = kugou.snapshot();
-  if (kugouState.status === 'connected') {
-    try { const bundle = await kugou.exportCredentials();
-      const current = kugou.snapshot();
-      if (bundle && current.status === 'connected' && current.generation === kugouState.generation && current.account?.id === bundle.accountId) await vault.save(bundle); } catch { /* 状态面板会显示保存错误 */ }
-  }
+  if (!status.available || !status.rememberedProviders.includes(provider)) return;
+  const client = provider === 'netease' ? netease : kugou;
+  const state = client.snapshot();
+  if (state.status !== 'connected') return;
+  try {
+    const bundle = await client.exportCredentials();
+    const current = client.snapshot();
+    if (bundle && current.status === 'connected' && current.generation === state.generation && current.account?.id === bundle.accountId) await vault.save(bundle);
+  } catch { /* 状态面板显示保存错误。 */ }
 }
 
 async function restoreSavedCredentials(): Promise<void> {
@@ -193,13 +189,21 @@ void app.whenReady().then(async () => {
         }
         return;
       }
-      if (channel === neteaseChannels.startLogin) return netease.command('startLogin');
-      if (channel === neteaseChannels.cancelLogin) return netease.command('cancelLogin');
+      if (channel === neteaseChannels.startLogin) {
+        await vault.remove('netease').catch(() => undefined); broadcastCredentials();
+        return netease.command('startLogin');
+      }
+      if (channel === neteaseChannels.cancelLogin) {
+        const pending = netease.command('cancelLogin');
+        await vault.remove('netease').catch(() => undefined); broadcastCredentials();
+        return pending;
+      }
       if (channel === neteaseChannels.logout) {
+        const removal = vault.remove('netease');
         const pending = netease.command('logout');
         await player.clearRemote('netease');
         const snapshot = await pending;
-        await vault.remove('netease').catch(() => undefined);
+        await removal.catch(() => undefined);
         broadcastCredentials();
         return snapshot;
       }
@@ -233,13 +237,21 @@ void app.whenReady().then(async () => {
         }
         return;
       }
-      if (channel === kugouChannels.startLogin) return kugou.command('startLogin');
-      if (channel === kugouChannels.cancelLogin) return kugou.command('cancelLogin');
+      if (channel === kugouChannels.startLogin) {
+        await vault.remove('kugou').catch(() => undefined); broadcastCredentials();
+        return kugou.command('startLogin');
+      }
+      if (channel === kugouChannels.cancelLogin) {
+        const pending = kugou.command('cancelLogin');
+        await vault.remove('kugou').catch(() => undefined); broadcastCredentials();
+        return pending;
+      }
       if (channel === kugouChannels.logout) {
+        const removal = vault.remove('kugou');
         const pending = kugou.command('logout');
         await player.clearRemote('kugou');
         const snapshot = await pending;
-        await vault.remove('kugou').catch(() => undefined);
+        await removal.catch(() => undefined);
         broadcastCredentials();
         return snapshot;
       }
@@ -253,7 +265,7 @@ void app.whenReady().then(async () => {
     ipcMain.handle(channel, async (event, ...args: unknown[]) => {
       const contents = mainWindow?.webContents;
       assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
-      const remember = parseCredentialArguments(channel, args);
+      const choice = parseCredentialArguments(channel, args);
       if (quitting) return vault.status();
       if (channel === credentialChannels.getStatus) return vault.status();
       if (channel === credentialChannels.clear) {
@@ -262,13 +274,10 @@ void app.whenReady().then(async () => {
         return status;
       }
       try {
-        if (remember === true) {
-          await vault.setRemember(true);
-          await saveCurrentCredentials();
-        } else {
-          await vault.setRemember(false);
-        }
-      } catch { /* 状态里包含不可用/锁定/保存失败原因 */ }
+        if (!choice) throw new Error('记住登录参数无效');
+        await vault.setRemember(choice.provider, choice.remember);
+        if (choice.remember) await saveCurrentCredentials(choice.provider);
+      } catch { /* 状态里包含不可用/锁定/保存失败原因。 */ }
       const status = await vault.status();
       broadcastCredentials();
       return status;

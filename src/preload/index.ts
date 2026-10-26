@@ -1,7 +1,7 @@
 import { parsePresentationSnapshot, presentationChannels } from '../../packages/contracts/src/presentation';
 import { contextBridge, ipcRenderer } from 'electron';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
-import { credentialChannels, parseCredentialStatus } from '../../packages/contracts/src/credentials';
+import { credentialChannels, credentialProviderIds, parseCredentialStatus, type CredentialProvider } from '../../packages/contracts/src/credentials';
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
 import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/kugou';
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
@@ -92,9 +92,9 @@ const api: DesktopApi = Object.freeze({
   }),
   credentials: Object.freeze({
     getStatus: () => invokeCredentials(credentialChannels.getStatus),
-    setRemember(value: boolean) {
-      if (typeof value !== 'boolean') throw new Error('记住登录参数无效');
-      return invokeCredentials(credentialChannels.setRemember, value);
+    setRemember(provider: CredentialProvider, value: boolean) {
+      if (!credentialProviderIds.includes(provider) || typeof value !== 'boolean') throw new Error('记住登录参数无效');
+      return invokeCredentials(credentialChannels.setRemember, provider, value);
     },
     clear: () => invokeCredentials(credentialChannels.clear),
     onChanged(listener: (status: ReturnType<typeof parseCredentialStatus>) => void) {

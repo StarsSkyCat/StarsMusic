@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import type { CredentialStatus } from '../../../packages/contracts/src/credentials';
 import { Check, Cloud, Link2, LogOut, X } from '@lucide/vue';
 import { loginLabels, providerNames, type Provider, type ProviderSnapshot } from './useProvider';
 
-defineProps<{ provider: Provider; state: ProviderSnapshot; error: string }>();
-defineEmits<{ login: []; cancel: []; logout: [] }>();
+defineProps<{ provider: Provider; state: ProviderSnapshot; error: string; credentials: CredentialStatus | undefined; saving: boolean }>();
+defineEmits<{ login: []; cancel: []; logout: []; remember: [value: boolean] }>();
 const pending = ['loading-qr', 'waiting-scan', 'awaiting-confirmation', 'verifying'];
 const diagnostics = {
   'authorization-userid': '授权响应缺少有效账号 ID',
@@ -53,9 +54,18 @@ const diagnostics = {
       {{
         state.status === 'connected'
           ? '歌单已连接到你的音乐空间。播放权限以平台实际返回为准。'
-          : '连接你的账号，把熟悉的歌单带到这里。默认使用临时会话。'
+          : '连接你的账号，把熟悉的歌单带到这里。扫码时可选择记住登录。'
       }}
     </p>
+    <div v-if="pending.includes(state.status)" class="login-preference">
+      <label class="remember-toggle">
+        <input type="checkbox" :aria-label="`记住${providerNames[provider]}登录`" :checked="credentials?.rememberedProviders.includes(provider) ?? false" :disabled="saving || !credentials?.available || credentials.locked" @change="$emit('remember', ($event.target as HTMLInputElement).checked)" />
+        <span>记住登录</span>
+      </label>
+      <p>勾选后在本机保存，下次打开自动验证。退出账号会删除保存。</p>
+      <p v-if="credentials && !credentials.available" role="alert">本地保存暂不可用，可继续临时登录。</p>
+    </div>
+    <p v-if="state.status === 'connected'" class="login-saved-note">{{ credentials?.savedProviders.includes(provider) ? '已记住登录 · 退出账号会删除保存' : '仅本次登录 · 下次需重新扫码' }}</p>
     <p v-if="error || state.error" class="error-message" role="alert">
       {{ error || state.error?.message
       }}<span v-if="'loginDiagnostic' in state && state.loginDiagnostic"
