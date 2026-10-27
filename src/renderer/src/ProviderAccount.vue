@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import KugouMembership from './KugouMembership.vue';
+import type { KugouSnapshot } from '../../../packages/contracts/src/kugou';
 import NeteaseMembership from './NeteaseMembership.vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import type { CredentialStatus } from '../../../packages/contracts/src/credentials';
@@ -61,6 +63,7 @@ const diagnostics = {
       }}
     </p>
     <NeteaseMembership v-if="provider === 'netease' && state.status === 'connected' && 'membership' in state" :membership="(state as NeteaseSnapshot).membership" @refresh="$emit('refreshMembership')" />
+    <KugouMembership v-if="provider === 'kugou' && state.status === 'connected'" :membership="(state as KugouSnapshot).membership" @refresh="$emit('refreshMembership')" />
     <div v-if="pending.includes(state.status)" class="login-preference">
       <label class="remember-toggle">
         <input type="checkbox" :aria-label="`记住${providerNames[provider]}登录`" :checked="credentials?.rememberedProviders.includes(provider) ?? false" :disabled="saving || !credentials?.available || credentials.locked" @change="$emit('remember', ($event.target as HTMLInputElement).checked)" />

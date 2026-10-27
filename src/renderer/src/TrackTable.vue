@@ -65,7 +65,7 @@ defineEmits<{
           <span class="song-copy"><strong>{{ track.title }}</strong
           ><small>{{
             track.artist || (track.provider === 'local' ? '本地音频' : '未知歌手')
-          }}</small><TrackRights v-if="track.provider === 'netease'" :rights="track.rights" /></span>
+          }}</small><TrackRights v-if="track.provider === 'netease' || track.provider === 'kugou'" :rights="track.rights" /></span>
         </button>
         <span class="source-column"
           ><span class="source-badge" :class="track.provider">{{

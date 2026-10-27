@@ -43,6 +43,8 @@ test('合成收藏流程：喜欢切换、自建歌单添加/移除、喜欢列�
     const calls = () => app.evaluate(() => Reflect.get(globalThis, '__libraryCalls') as NeteaseMutation[]);
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
     const explore = page.getByRole('region', { name: '网易云音乐发现', exact: true });
+    await explore.getByRole('button', { name: '搜索', exact: true }).click();
+    await explore.getByRole('searchbox').fill('合成'); await explore.getByRole('searchbox').press('Enter');
     const more = () => page.getByRole('button', { name: '更多操作 合成歌曲 7', exact: true });
     await more().click(); await page.getByRole('menuitem', { name: '添加喜欢', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ kind: 'like', id: '7', liked: true });
@@ -76,7 +78,8 @@ test('合成收藏流程：喜欢切换、自建歌单添加/移除、喜欢列�
     await more().click(); await expect(page.getByRole('menuitem', { name: '从歌单移除', exact: true })).toHaveCount(0); await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '账号与设置', exact: true }).click(); await page.getByRole('radio', { name: '暗色', exact: true }).check();
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
-    await explore.getByRole('button', { name: '热歌榜', exact: true }).click();
+    await explore.getByRole('button', { name: '搜索', exact: true }).click();
+    await explore.getByRole('searchbox').fill('合成'); await explore.getByRole('searchbox').press('Enter');
     await page.setViewportSize({ width: 960, height: 640 }); await more().click();
     await expect(page.getByRole('menu', { name: '合成歌曲 7的操作', exact: true })).toBeVisible();
     expect(await page.locator('main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);

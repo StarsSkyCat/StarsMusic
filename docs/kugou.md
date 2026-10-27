@@ -68,7 +68,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 
 新增固定端点为 gateway.kugou.com 的 `/v2/search/song`、`/v1/search/special`、`/v2/special_recommend` 和 `/pubsongs/v2/get_other_list_file_nofilt`，路由及实测依据见 [搜索接入记录](validation/2026-10-27-kugou-discovery.md)。图片白名单另加入实测的 c1.kgimg.com，仅允许 HTTPS、公网 DNS、受限栅格格式与大小，不放行其他 kgimg 子域、不转发凭据、不跟随图片跳转。
 
-收藏歌单、喜欢歌曲、创建/编辑歌单、酷狗会员权益面板、榜单和更细的分类筛选尚未实现。本次未增加跨平台聚合搜索，也不改变原资源权限与编码身份约束。
+收藏歌单、喜欢歌曲、创建/编辑歌单、榜单和更细的分类筛选尚未实现。本次未增加跨平台聚合搜索，也不改变原资源权限与编码身份约束。
 
 ## 媒体网关
 
@@ -99,10 +99,12 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 - 歌单数量、字段类型和分页上限的真实响应矩阵；当前合成用例不替代平台实测。
 - 发行包、X11/Wayland 与桌面音频矩阵。
 
-## 会员与歌曲收费字段（后台接入）
+## 会员与歌曲收费字段
 
-后台已增加登录/恢复后的权益同步，以及无参数 `refreshMembership` 白名单命令。标准版会员读取已验证账号的 `get_my_info.vip_type`，并独立读取 `get_union_vip` 的所有 `busi_vip` 套餐，包含 `dvip,qvip`，按各自开始/结束时间过滤；无时区业务日期统一按中国标准时间解释。返回账号时必须匹配；未知响应与部分失败显示同步错误，不将未知当作无会员，也不把概念版权益等同于标准版全部音质权限。界面展示将在下一步骤接入。
+后台已增加登录/恢复后的权益同步，以及无参数 `refreshMembership` 白名单命令。标准版会员读取已验证账号的 `get_my_info.vip_type`，并独立读取 `get_union_vip` 的所有 `busi_vip` 套餐，包含 `dvip,qvip`，按各自开始/结束时间过滤；无时区业务日期统一按中国标准时间解释。返回账号时必须匹配；未知响应与部分失败显示同步错误，不将未知当作无会员，也不把概念版权益等同于标准版全部音质权限。音乐空间与账号设置已展示已确认套餐、有效期、未知/部分失败及手动重试；UI 每 30 秒过滤已到期套餐，缺少有效期时明确显示平台未返回。
 
 歌曲会员标记使用 `trans_param.musicpack_advance`，限免覆盖 VIP 标记；标准音质免费但高音质收费可单独标为 VIP 音质。下载价格、`PayType` 或试听片段本身不能推断歌曲需要会员。实际完整/试听/不可用状态由原取链流程回写，不改变 hash-only 与资源身份检查。真实会员套餐矩阵仍待用户通过官方扫码验收。
 
 字段核对来源：[固定基线会员端点](https://github.com/MakcRe/KuGouMusicApi/blob/62730f900dc9fdc51396a663b3d33a6c4c704046/module/youth_union_vip.js)、[会员响应实测说明](https://github.com/DreamAlone666/kg2lx/blob/91a5e3ddd5be44dbb77854a7a9a87e0706f77b68/skills/kugou-music-api/references/song-url-and-entitlements.md) 与 [播放收费标记回归证据](https://github.com/xiaomingky/MingYunTime/blob/7daf07d4ad792a970ef7d158da7aba2ab96fd6eb/scripts/check-song-vip.mjs)。仅参考接口字段和观测结果，自行实现解析，没有复制其他播放器代码或图标。
+
+酷狗与网易云共用搜索栏，搜索结果、公开详情和私人列表均显示归一化的会员/音质与实际播放标记。真实匿名搜索及合成账号权益流程验证见 [搜索与权益记录](validation/2026-10-27-platform-search-rights.md)。

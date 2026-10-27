@@ -1,25 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, Flame, Headphones, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
+import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, UserRound, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
 import TrackTable from './TrackTable.vue';
 import NeteaseTrackActions from './NeteaseTrackActions.vue';
 import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
 import NeteaseMembership from './NeteaseMembership.vue';
-import TrackRights from './TrackRights.vue';
+import PlatformSearch from './PlatformSearch.vue';
 import GlassSelect from './GlassSelect.vue';
 import NeteaseArtwork from './NeteaseArtwork.vue';
 import './netease.css';
 import type { DisplayTrack } from './music-ui';
 
 const props = defineProps<{ state: NeteaseSnapshot; currentId: string | undefined; error: string; starting?: boolean }>();
-const tab = defineModel<'hot' | 'playlists' | 'search' | 'owned'>('tab', { default: 'hot' });
+const tab = defineModel<'playlists' | 'search' | 'owned'>('tab', { default: 'playlists' });
 const emit = defineEmits<{
   browse: [request: CatalogRequest]; play: [id: string]; next: [id: string]; enqueue: [ids: string[]];
   like: [id: string, liked: boolean]; addToPlaylist: [id: string]; subscribe: [id: string, subscribed: boolean]; refreshLibrary: []; playPlaylist: [id: string]; refreshMembership: []; openOwned: [id: string]; loadOwned: []; manage: [];
 }>();
-const tabs = [{ id: 'hot', label: '热歌榜', icon: Flame }, { id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const;
+const tabs = [{ id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const;
 const catalog = computed(() => props.state.catalog);
 const keyword = ref(catalog.value.query);
 const searchType = ref(catalog.value.searchType);
@@ -32,11 +32,10 @@ const detail = ref(catalog.value.kind === 'playlist');
 const relevant = computed(() => catalog.value.kind === (detail.value ? 'playlist' : tab.value));
 const loading = computed(() => catalog.value.status === 'loading');
 const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'netease', durationSeconds: track.durationMs / 1000, ...(track.rights ? { rights: track.rights } : {}) })));
-const featured = computed(() => catalog.value.kind === 'hot' && catalog.value.offset === 0 ? catalog.value.tracks.slice(0, 3) : []);
-const title = computed(() => tab.value === 'hot' ? '此刻，正流行。' : tab.value === 'playlists' ? '给心情，换张封面。' : tab.value === 'search' ? '下一次心动，从这里开始。' : '你的收藏，自成宇宙。');
-const subtitle = computed(() => tab.value === 'hot' ? '听见正在被喜欢的声音。' : tab.value === 'playlists' ? '一张封面，一段新的音乐旅程。' : tab.value === 'search' ? '歌曲、歌手、歌单。让好音乐与你相遇。' : '熟悉的歌单，随时回到喜欢的声音。');
+const title = computed(() => tab.value === 'playlists' ? '给心情，换张封面。' : tab.value === 'search' ? '下一次心动，从这里开始。' : '你的收藏，自成宇宙。');
+const subtitle = computed(() => tab.value === 'playlists' ? '一张封面，一段新的音乐旅程。' : tab.value === 'search' ? '歌曲、歌手、歌单。让好音乐与你相遇。' : '熟悉的歌单，随时回到喜欢的声音。');
 function suggest(value: string): void { keyword.value = value; request(); }
-const heading = computed(() => detail.value ? catalog.value.playlist?.name ?? '公开歌单' : tab.value === 'hot' ? '云音乐热歌榜' : tab.value === 'playlists' ? '发现新的音乐收藏' : '搜索结果');
+const heading = computed(() => detail.value ? catalog.value.playlist?.name ?? '公开歌单' : tab.value === 'playlists' ? '发现新的音乐收藏' : '搜索结果');
 
 function request(offset = 0, target = tab.value): void {
   actionError.value = '';
@@ -83,7 +82,7 @@ onMounted(() => {
   <section class="netease-explore" aria-label="网易云音乐发现">
     <header class="ne-masthead">
       <div><span class="ne-kicker"><span><AudioLines :size="13" /></span> NETEASE / MUSIC SPACE</span><h1>{{ title }}</h1><p>{{ subtitle }}</p></div>
-      <button class="ne-account" @click="$emit('manage')"><Headphones :size="17" /><span>{{ state.status === 'connected' ? '账号已连接' : '连接网易云' }}</span><ArrowUpRight :size="15" /></button>
+      <button class="ne-account" @click="$emit('manage')"><UserRound :size="17" /><span>{{ state.account?.nickname ?? '连接网易云' }}</span><ArrowUpRight :size="15" /></button>
     </header>
     <nav class="catalog-tabs" aria-label="网易云浏览">
       <button v-for="(item, index) in tabs" :key="item.id" :aria-pressed="tab === item.id" :class="{ active: tab === item.id }" @click="switchTab(item.id)"><component :is="item.icon" :size="17" /><span>{{ item.label }}</span><small aria-hidden="true">0{{ index + 1 }}</small></button>
@@ -102,10 +101,7 @@ onMounted(() => {
       <p v-if="error || state.error" class="error-message" role="alert">{{ error || state.error?.message }}</p>
     </template>
     <template v-else>
-      <form v-if="tab === 'search' && !detail" class="catalog-search" @submit.prevent="request()">
-        <div class="ne-search-field"><Search :size="23" :stroke-width="1.5" /><label class="sr-only" for="netease-search">搜索网易云歌曲或歌单</label><input id="netease-search" v-model="keyword" placeholder="你想听见什么？" maxlength="100" type="search" /><kbd aria-hidden="true">↵</kbd><button class="ne-primary" type="submit" :disabled="!keyword.trim()" :aria-busy="loading">{{ loading ? '搜索中…' : '搜索网易云' }}<ArrowUpRight :size="17" /></button></div>
-        <div class="ne-search-bottom"><div class="catalog-search-types" aria-label="搜索内容"><button type="button" :aria-pressed="searchType === 'songs'" @click="searchType = 'songs'; request()">歌曲</button><button type="button" :aria-pressed="searchType === 'playlists'" @click="searchType = 'playlists'; request()">歌单</button></div><span>按 Enter，遇见下一首喜欢</span></div>
-      </form>
+      <PlatformSearch v-if="tab === 'search' && !detail" v-model:keyword="keyword" v-model:search-type="searchType" provider="网易云" :loading="loading" @search="request()" />
       <div v-if="tab === 'playlists' && !detail" class="catalog-filters">
         <div class="ne-genres" aria-label="快速选择歌单分类"><button v-for="genre in (['全部', '华语', '欧美', '日语', '韩语', '流行', '摇滚', '民谣', '电子', '轻音乐', '古风', 'ACG'] as const)" :key="genre" :aria-pressed="category === genre" @click="category = genre; request()">{{ genre }}</button></div>
         <GlassSelect v-model="order" label="歌单排序" :options="[{ value: 'hot', label: '热门' }, { value: 'new', label: '最新' }]" @change="request()" />
@@ -115,18 +111,11 @@ onMounted(() => {
         <span class="ne-detail-cover"><NeteaseArtwork :id="catalog.playlist.id" kind="playlist" :generation="state.generation" :name="catalog.playlist.name" /></span>
         <div><span class="ne-kicker">PLAYLIST / NETEASE</span><h2>{{ heading }}</h2><p>{{ catalog.total || catalog.playlist.trackCount }} 首歌曲 · 网易云音乐</p><button v-if="tracks[0]" class="ne-primary" :disabled="starting" title="将整张歌单替换为本次播放队列" @click="playPlaylist()"><Play :size="15" fill="currentColor" />{{ starting ? '读取完整歌单…' : '从第一首听起' }}</button><button v-if="state.status === 'connected' && !state.playlists.some(item => item.id === catalog.playlist?.id && item.editable)" class="subtle-button ne-subscribe" :disabled="state.library.busy" @click="$emit('subscribe', catalog.playlist.id, !state.playlists.some(item => item.id === catalog.playlist?.id && item.subscribed))">{{ state.playlists.some(item => item.id === catalog.playlist?.id && item.subscribed) ? '取消收藏歌单' : '收藏歌单' }}</button></div>
       </div>
-      <div v-if="tab === 'hot' && !detail && relevant && catalog.status === 'ready' && featured.length" class="ne-chart-stage" aria-label="热歌前三名">
-        <button v-for="(track, index) in featured" :key="track.id" class="ne-chart-feature" :class="{ 'ne-chart-lead': index === 0 }" :aria-label="`播放热榜第${index + 1}名 ${track.name}`" @click="play(track.id)">
-          <span class="ne-chart-cover"><NeteaseArtwork :id="track.id" kind="track" :generation="state.generation" :name="track.name" /><span class="ne-cover-play"><Play :size="18" fill="currentColor" /></span></span>
-          <span class="ne-chart-copy"><span class="ne-kicker">{{ index === 0 ? 'ON REPEAT / 热榜首位' : 'IN THE SPOTLIGHT' }}</span><strong>{{ track.name }}</strong><small>{{ track.artists.join(' / ') || '未知歌手' }}</small><TrackRights :rights="track.rights" /><span v-if="index === 0" class="ne-chart-listen"><Headphones :size="15" />听听这首<ArrowUpRight :size="15" /></span></span>
-          <span class="ne-chart-number" aria-hidden="true">0{{ index + 1 }}</span>
-        </button>
-      </div>
-      <div v-if="!detail && (tab !== 'search' || (catalog.kind === 'search' && relevant))" class="ne-section-heading"><div><span class="ne-kicker">{{ tab === 'hot' ? 'THE CHART / MOST LOVED' : tab === 'playlists' ? 'PICK A MOOD / PRESS PLAY' : 'FOUND FOR YOU' }}</span><h2>{{ heading }}<span v-if="catalog.total && relevant">{{ catalog.total }}</span></h2></div><p>{{ tab === 'hot' ? '热度流动，好音乐常在。' : tab === 'playlists' ? `${category} · ${order === 'hot' ? '热门收藏' : '新鲜上架'}` : `“${catalog.query}” · ${catalog.searchType === 'songs' ? '歌曲' : '歌单'}` }}</p></div>
+      <div v-if="!detail && (tab !== 'search' || (catalog.kind === 'search' && relevant))" class="ne-section-heading"><div><span class="ne-kicker">{{ tab === 'playlists' ? 'PICK A MOOD / PRESS PLAY' : 'FOUND FOR YOU' }}</span><h2>{{ heading }}<span v-if="catalog.total && relevant">{{ catalog.total }}</span></h2></div><p>{{ tab === 'playlists' ? `${category} · ${order === 'hot' ? '热门收藏' : '新鲜上架'}` : `“${catalog.query}” · ${catalog.searchType === 'songs' ? '歌曲' : '歌单'}` }}</p></div>
       <div v-if="!relevant && tab === 'search' && !detail" class="ne-search-idle">
         <span class="ne-empty-orbit"><Search :size="39" :stroke-width="1" /><i></i></span><span class="ne-kicker">A NAME. A MELODY. A NEW WORLD.</span><h3>下一首喜欢的，搜搜看</h3><p>从一个名字，走进一段旋律。</p><div class="ne-search-hints"><span>试试这些关键词</span><button v-for="word in ['华语', '轻音乐', 'Live']" :key="word" @click="suggest(word)">{{ word }}<ArrowUpRight :size="13" /></button></div>
       </div>
-      <div v-else-if="!relevant || loading" class="ne-loading" role="status"><span class="ne-loading-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>正在读取网易云{{ detail ? '歌单曲目' : tab === 'search' ? '搜索结果' : tab === 'hot' ? '热歌榜' : '歌单' }}…</div>
+      <div v-else-if="!relevant || loading" class="ne-loading" role="status"><span class="ne-loading-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>正在读取网易云{{ detail ? '歌单曲目' : tab === 'search' ? '搜索结果' : '歌单' }}…</div>
       <div v-else-if="catalog.status === 'error'" class="ne-empty"><Cloud :size="30" /><h3>音乐暂时没有抵达</h3><p class="error-message" role="alert">{{ catalog.error?.message || '暂时无法读取，请稍后重试。' }}</p><button class="subtle-button" @click="turnPage(catalog.offset)">重试</button></div>
       <template v-else>
         <div v-if="catalog.playlists.length && !tracks.length" class="ne-cover-grid">

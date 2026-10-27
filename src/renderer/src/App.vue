@@ -79,7 +79,7 @@ async function playWholePlaylist(id: string, provider: Provider = 'netease', sou
 }
 const kugouTab = ref<'playlists' | 'search' | 'owned'>('playlists');
 const kugouState = computed(() => providers.kugou.state.value as KugouSnapshot);
-const neteaseTab = ref<'hot' | 'playlists' | 'search' | 'owned'>('hot');
+const neteaseTab = ref<'playlists' | 'search' | 'owned'>('playlists');
 const neteaseState = computed(() => providers.netease.state.value as NeteaseSnapshot);
 const addDialog = ref<HTMLDialogElement>();
 const addingTrackId = ref<string>();
@@ -736,6 +736,7 @@ onUnmounted(() => {
             :current-id="currentTrack?.provider === 'kugou' ? currentTrack.sourceId : undefined"
             :error="providers.kugou.error.value"
             :starting="playlistStarting"
+            @refresh-membership="providers.kugou.run(api => api.refreshMembership())"
             @browse="browseKugou"
             @play="play"
             @next="addNext"
@@ -944,7 +945,7 @@ onUnmounted(() => {
           <DesktopPanel />
           <div class="accounts-grid">
             <ProviderAccount
-              @refresh-membership="refreshNeteaseMembership()"
+              @refresh-membership="providers[id].run(api => api.refreshMembership())"
               v-for="id in providerIds"
               :key="id"
               :provider="id"

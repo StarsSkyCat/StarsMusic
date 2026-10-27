@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, ListMusic, List
 import type { KugouSnapshot } from '../../../packages/contracts/src/kugou';
 import { kugouCatalogPageSize as pageSize, type KugouCatalogRequest } from '../../../packages/contracts/src/kugou-catalog';
 import TrackTable from './TrackTable.vue';
+import PlatformSearch from './PlatformSearch.vue';
+import KugouMembership from './KugouMembership.vue';
 import KugouArtwork from './KugouArtwork.vue';
 import type { DisplayTrack } from './music-ui';
 import './netease.css';
@@ -12,13 +14,13 @@ const props = defineProps<{ state: KugouSnapshot; currentId: string | undefined;
 const tab = defineModel<'playlists' | 'search' | 'owned'>('tab', { default: 'playlists' });
 const emit = defineEmits<{
   browse: [request: KugouCatalogRequest]; play: [id: string]; next: [id: string]; enqueue: [ids: string[]];
-  playPlaylist: [id: string]; openOwned: [id: string]; loadOwned: []; manage: [];
+  playPlaylist: [id: string]; openOwned: [id: string]; loadOwned: []; refreshMembership: []; manage: [];
 }>();
 const catalog = computed(() => props.state.catalog);
 const keyword = ref(catalog.value.query); const searchType = ref(catalog.value.searchType);
 const detail = ref(catalog.value.kind === 'playlist'); const selected = ref<string[]>([]); const actionError = ref('');
 const relevant = computed(() => catalog.value.kind === (detail.value ? 'playlist' : tab.value));
-const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'kugou', durationSeconds: track.durationMs / 1000 })));
+const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'kugou', durationSeconds: track.durationMs / 1000, ...(track.rights ? { rights: track.rights } : {}) })));
 const title = computed(() => tab.value === 'search' ? '想听的，就在这里。' : tab.value === 'owned' ? '把喜欢，留在身边。' : '让好音乐，与你相遇。');
 function request(offset = 0): void {
   if (tab.value === 'owned') { emit('loadOwned'); return; }
@@ -52,9 +54,10 @@ onMounted(() => { if (tab.value !== 'owned' && (catalog.value.status === 'idle' 
 
 <template>
   <section class="netease-explore kugou-explore" aria-label="酷狗音乐发现">
-    <header class="ne-masthead"><div><span class="ne-kicker"><span><AudioLines :size="13" /></span> KUGOU / MUSIC SPACE</span><h1>{{ title }}</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><button class="ne-account" @click="$emit('manage')"><UserRound :size="16" />{{ state.account?.nickname ?? '连接酷狗账号' }}<ArrowUpRight :size="14" /></button></header>
+    <header class="ne-masthead"><div><span class="ne-kicker"><span><AudioLines :size="13" /></span> KUGOU / MUSIC SPACE</span><h1>{{ title }}</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><button class="ne-account" @click="$emit('manage')"><UserRound :size="16" /><span>{{ state.account?.nickname ?? '连接酷狗账号' }}</span><ArrowUpRight :size="14" /></button></header>
     <nav class="catalog-tabs" aria-label="酷狗内容导航"><button v-for="item in [{ id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const" :key="item.id" :class="{ active: tab === item.id }" :aria-current="tab === item.id ? 'page' : undefined" @click="switchTab(item.id)"><component :is="item.icon" :size="17" />{{ item.label }}</button></nav>
 
+    <KugouMembership v-if="state.status === 'connected'" :membership="state.membership" @refresh="$emit('refreshMembership')" />
     <template v-if="tab === 'owned'">
       <div class="ne-section-heading"><div><span class="ne-kicker">YOUR COLLECTION</span><h2>我的酷狗歌单<span>{{ state.playlists.length }}</span></h2></div><button v-if="state.status === 'connected' && (state.playlistsMore || !state.playlists.length)" class="subtle-button" :disabled="state.busy" @click="$emit('loadOwned')">{{ state.busy ? '读取中…' : state.playlistsMore ? '加载更多歌单' : '读取歌单' }}</button></div>
       <div v-if="state.playlists.length" class="ne-cover-grid"><button v-for="playlist in state.playlists" :key="playlist.id" class="ne-cover-card" @click="$emit('openOwned', playlist.id)"><span class="ne-cover-image"><KugouArtwork :id="playlist.id" kind="playlist" :generation="state.generation" :name="playlist.name" /><span class="ne-cover-count"><ListMusic :size="12" />{{ playlist.trackCount }} 首</span><span class="ne-cover-play"><ArrowUpRight :size="21" /></span></span><span class="ne-cover-copy"><small>KUGOU / YOUR PLAYLIST</small><strong>{{ playlist.name }}</strong></span></button></div>
@@ -62,7 +65,7 @@ onMounted(() => { if (tab.value !== 'owned' && (catalog.value.status === 'idle' 
     </template>
     <template v-else>
       <button v-if="detail" class="text-button catalog-back" @click="back"><ArrowLeft :size="16" />{{ tab === 'search' ? '返回搜索结果' : '返回歌单发现' }}</button>
-      <form v-if="tab === 'search' && !detail" class="catalog-search" @submit.prevent="request()"><span class="ne-kicker">FIND YOUR NEXT FAVORITE</span><div class="ne-search-field"><Search :size="24" /><input v-model="keyword" type="search" maxlength="100" aria-label="搜索酷狗歌曲或歌单" placeholder="歌曲、歌手、歌单…" /><button class="ne-primary" :disabled="!keyword.trim()" type="submit">搜索酷狗<ArrowRight :size="16" /></button></div><div class="ne-search-bottom"><div class="catalog-search-types" aria-label="酷狗搜索内容"><button type="button" :aria-pressed="searchType === 'songs'" @click="searchType = 'songs'; request()">歌曲</button><button type="button" :aria-pressed="searchType === 'playlists'" @click="searchType = 'playlists'; request()">歌单</button></div><span>按 Enter，找到想听的声音</span></div></form>
+      <PlatformSearch v-if="tab === 'search' && !detail" v-model:keyword="keyword" v-model:search-type="searchType" provider="酷狗" :loading="catalog.status === 'loading'" @search="request()" />
       <div v-if="detail && catalog.playlist" class="ne-detail-hero"><span class="ne-detail-cover"><KugouArtwork :id="catalog.playlist.id" kind="playlist" :generation="state.generation" :name="catalog.playlist.name" /></span><div><span class="ne-kicker">PLAYLIST / KUGOU</span><h2>{{ catalog.playlist.name }}</h2><p>{{ catalog.total }} 首歌曲 · 酷狗音乐</p><button v-if="tracks.length" class="ne-primary" :disabled="starting" @click="playPlaylist"><Play :size="15" fill="currentColor" />{{ starting ? '读取完整歌单…' : '播放全部' }}</button></div></div>
       <div v-if="!detail" class="ne-section-heading"><div><span class="ne-kicker">{{ tab === 'search' ? 'FOUND FOR YOU' : 'PICK A PLAYLIST' }}</span><h2>{{ tab === 'search' ? '搜索结果' : '发现新的音乐收藏' }}<span v-if="relevant && catalog.total">{{ catalog.total }}</span></h2></div><p v-if="tab === 'search' && relevant">“{{ catalog.query }}” · {{ catalog.searchType === 'songs' ? '歌曲' : '歌单' }}</p></div>
       <div v-if="tab === 'search' && !detail && !relevant" class="ne-search-idle"><span class="ne-empty-orbit"><Search :size="39" :stroke-width="1" /><i></i></span><h3>下一首喜欢的，搜搜看</h3><p>输入歌曲、歌手或歌单关键词。</p></div>

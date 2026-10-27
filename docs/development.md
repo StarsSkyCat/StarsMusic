@@ -4,7 +4,7 @@
 
 酷狗已补充独立音乐空间：发现歌单、歌曲/歌单搜索、公开详情分页、私人歌单与曲目封面、整单播放及多选下一首。匿名浏览和封面已用真实接口/桌面验证，真实账号搜索播放仍待验收；收藏/歌单编辑与跨平台聚合搜索未实现，见 [接入记录](validation/2026-10-27-kugou-discovery.md)。
 
-已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/热歌榜/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、system、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加整单播放、喜欢、自建歌单编辑、公开歌单收藏，以及官方会员套餐同步与单曲收费/取链权限标记，收藏写入及会员响应兼容的真实账号矩阵仍待验收；真实会员账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库、安装包尚未验证或实现；Linux MPRIS、服务探测、通知、托盘和快捷键已实现，见 [桌面集成验证](validation/2026-10-27-linux-desktop.md)。
+已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、system、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加整单播放、喜欢、自建歌单编辑、公开歌单收藏，以及官方会员套餐同步与单曲收费/取链权限标记，收藏写入及会员响应兼容的真实账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库、安装包尚未验证或实现；Linux MPRIS、服务探测、通知、托盘和快捷键已实现，见 [桌面集成验证](validation/2026-10-27-linux-desktop.md)。
 
 领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)，登录保存见 [凭据持久化](credentials.md)。默认关闭“记住登录”时，应用关闭后不保留网易云或酷狗登录，需要重新扫码。
 
@@ -51,7 +51,7 @@ pnpm test:e2e
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。
 - start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、两个平台的匿名后台状态、本地选择、默认系统音频输出和退出，需 Linux、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。
 
-Linux 默认关闭窗口退出；已提供托盘菜单、可选关闭到托盘、后台切歌通知、MPRIS 和窗口/全局快捷键。关闭到托盘要求实际宿主和本进程图标注册仍成立；宿主丢失恢复窗口。设置与实测边界见 [Linux 桌面集成](linux-desktop.md)。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用云瓷白 / 曜石黑 Liquid Glass 设计，包含悬浮侧栏、折射唱片主视觉、来源卡、平台扫码步骤、歌单详情、列表筛选、多选下一首、玻璃队列抽屉和独立播放页；底部播放舱持续可用。布局和视觉检查见 [液态玻璃记录](validation/2026-10-27-liquid-glass.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。网易云发现页新增真实封面、前三名舞台与搜索空间，见 [重设计与封面验证](validation/2026-10-27-netease-redesign.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词采用无框悬浮布局，居中显示并按区域大小放大字号/行距，远处歌词淡出；本地音乐归入来源分组第一项，左下队列卡整块可点击，见 [交互调整](validation/2026-10-27-floating-lyrics.md)。歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
+Linux 默认关闭窗口退出；已提供托盘菜单、可选关闭到托盘、后台切歌通知、MPRIS 和窗口/全局快捷键。关闭到托盘要求实际宿主和本进程图标注册仍成立；宿主丢失恢复窗口。设置与实测边界见 [Linux 桌面集成](linux-desktop.md)。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用云瓷白 / 曜石黑 Liquid Glass 设计，包含悬浮侧栏、折射唱片主视觉、来源卡、平台扫码步骤、歌单详情、列表筛选、多选下一首、玻璃队列抽屉和独立播放页；底部播放舱持续可用。布局和视觉检查见 [液态玻璃记录](validation/2026-10-27-liquid-glass.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。网易云发现页提供真实封面网格与搜索空间，见 [重设计与封面验证](validation/2026-10-27-netease-redesign.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词采用无框悬浮布局，居中显示并按区域大小放大字号/行距，远处歌词淡出；本地音乐归入来源分组第一项，左下队列卡整块可点击，见 [交互调整](validation/2026-10-27-floating-lyrics.md)。歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
 
 环境已提供 Corepack、但没有 pnpm 命令时，可直接执行以下命令，无需全局安装：
 
@@ -112,6 +112,8 @@ corepack pnpm dev
 main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器、主进程 CredentialVault 和凭据 SQLite 后台已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js、kugou-worker.js、credential-store-worker.js 与 playback-session-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程协调本地密钥加密/解密和异步存储；业务请求仍由后台进程使用解密后的临时凭据。队列存储已由独立 SQLite worker 实现，保存队列顺序、当前项、进度、音量与静音；重启暂停恢复、在线取链需原账号连接，详见 [播放说明](playback.md)。Linux MPRIS、通知、托盘、窗口/全局快捷键已通过平台适配层接入；Wayland 依 portal 实际授权结果声明能力，音乐库索引仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
 
 公共 contracts 不导入 Electron/Vue/Provider SDK；renderer 只能使用 preload API。平台请求在 Provider 后台处理。重型扫描和数据库工作与窗口主进程分离。
+
+网易云页面已移除热歌榜入口，默认发现歌单；两平台共用搜索框并显示账号昵称。酷狗后台在登录/恢复后同步标准版与独立套餐权益，音乐空间和账号设置展示同步结果；歌曲收费与实际取链权限分开投影，真实会员矩阵仍待验收。见 [搜索与权益记录](validation/2026-10-27-platform-search-rights.md)。
 
 ## 日常开发
 

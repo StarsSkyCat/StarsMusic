@@ -69,8 +69,8 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
           ...(request.query === '空结果' ? {} : request.searchType === 'songs' ? { tracks: [{ id: '501', name: '合成搜索歌曲', artists: ['合成歌手'], durationMs: 30000 }] } : { playlists: [{ id: '902', name: '合成搜索歌单', trackCount: 2 }] }),
           ...(request.query === '失败' ? { status: 'error', tracks: [], playlists: [], error: { code: 'network', message: '网络连接失败', retryable: true } } : {}) };
         if (request.kind === 'playlist') catalog = { ...catalog, query: state.catalog.query, searchType: state.catalog.searchType,
-          playlist: { id: request.id, name: '合成公开歌单详情', trackCount: 2 }, total: 2,
-          tracks: [{ id: '601', name: '合成歌单歌曲', artists: ['合成歌手'], durationMs: 30000 }] };
+          playlist: { id: request.id, name: '合成公开歌单详情', trackCount: 32 }, total: 32, more: request.offset === 0,
+          tracks: Array.from({ length: request.offset ? 2 : 30 }, (_, i) => ({ id: String(601 + request.offset + i), name: i === 0 && request.offset === 0 ? '合成歌单歌曲' : `合成歌单歌曲 ${request.offset + i + 1}`, artists: ['合成歌手'], durationMs: 30000, rights: { fee: (i === 0 ? 'vip' : i === 1 ? 'album' : i === 2 ? 'vip-quality' : 'none') as 'vip' | 'album' | 'vip-quality' | 'none', playback: 'unknown' } })) };
         state = { ...state, revision: state.revision + 1, catalog } as typeof state;
         return publish();
       });
@@ -79,27 +79,14 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     const calls = () => desktop.evaluate(() => Reflect.get(globalThis, '__starsMusicCatalogCalls') as Record<string, unknown>[]);
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
     const explore = page.getByRole('region', { name: '网易云音乐发现', exact: true });
-    await expect(explore.getByRole('heading', { name: /^云音乐热歌榜/ })).toBeVisible();
-    await expect(explore.locator('.song-list li')).toHaveCount(30);
-    await expect(explore.locator('.ne-chart-lead img')).toBeVisible();
+    await expect(explore.getByRole('button', { name: '热歌榜', exact: true })).toHaveCount(0);
+    await expect(explore.getByRole('button', { name: '合成展示账号', exact: true })).toBeVisible();
     await expect(explore.getByLabel('网易云官方会员权益')).toContainText('黑胶 VIP');
     await explore.getByRole('button', { name: '同步权益', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'membership' });
-    await expect(explore.locator('.song-list li').nth(0).locator('.track-fee')).toHaveText('VIP');
-    await expect(explore.locator('.song-list li').nth(1).locator('.track-fee')).toHaveText('付费专辑');
-    await expect(explore.locator('.song-list li').nth(2).locator('.track-fee')).toHaveText('VIP 音质');
-    await expect(explore.locator('.ne-chart-feature .netease-artwork.artwork-missing')).toHaveCount(2);
-    const initialArtworkCalls = await desktop.evaluate(() => Reflect.get(globalThis, '__starsMusicArtworkCalls') as { id: string; generation: number }[]);
-    expect(initialArtworkCalls.some(request => request.id === '30')).toBe(false);
-    expect(initialArtworkCalls.every(request => request.generation === 50)).toBe(true);
-    await explore.getByRole('button', { name: '下一页', exact: true }).click();
-    await expect(explore.getByRole('button', { name: '播放 合成热歌 31', exact: true })).toBeVisible();
-    await expect(explore.getByRole('button', { name: '下一页', exact: true })).toBeDisabled();
-    await explore.getByRole('button', { name: '上一页', exact: true }).click();
-    await explore.getByRole('button', { name: '发现歌单', exact: true }).click();
     await expect(explore.getByRole('button', { name: /合成全部歌单/ })).toBeVisible();
     await expect(explore.locator('.ne-cover-card img')).toBeVisible();
-    expect((await calls()).at(-1)).toMatchObject({ kind: 'playlists' });
+    expect((await calls()).filter(call => call.kind).at(-1)).toMatchObject({ kind: 'playlists' });
     await expect(explore.getByRole('combobox')).toHaveCount(0);
     await explore.getByRole('button', { name: '华语', exact: true }).click();
     const sort = explore.getByRole('button', { name: '歌单排序', exact: true });
@@ -118,6 +105,15 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     expect((await calls()).at(-1)).toMatchObject({ kind: 'playlists', category: '华语', order: 'new', offset: 0 });
     await explore.getByRole('button', { name: /合成华语歌单/ }).click();
     await expect(explore.getByRole('heading', { name: '合成公开歌单详情', exact: true })).toBeVisible();
+    for (const [index, fee] of ['VIP', '付费专辑', 'VIP 音质'].entries()) await expect(explore.locator('.song-list li').nth(index).locator('.track-fee')).toHaveText(fee);
+    await expect(explore.locator('.song-list li').first().locator('img')).toBeVisible();
+    const initialArtworkCalls = await desktop.evaluate(() => Reflect.get(globalThis, '__starsMusicArtworkCalls') as { id: string; generation: number }[]);
+    expect(initialArtworkCalls.some(request => request.id === '630')).toBe(false);
+    expect(initialArtworkCalls.every(request => request.generation === 50)).toBe(true);
+    await explore.getByRole('button', { name: '下一页', exact: true }).click();
+    await expect(explore.getByRole('button', { name: '播放 合成歌单歌曲 31', exact: true })).toBeVisible();
+    await expect(explore.getByRole('button', { name: '下一页', exact: true })).toBeDisabled();
+    await explore.getByRole('button', { name: '上一页', exact: true }).click();
     await explore.getByRole('button', { name: '从第一首听起', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'playlist', id: '901' });
     await explore.getByRole('button', { name: '返回歌单发现', exact: true }).click();
@@ -126,6 +122,7 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     const search = page.getByRole('searchbox', { name: '搜索网易云歌曲或歌单', exact: true });
     await search.fill('合成关键词'); await search.press('Enter');
     await expect(explore.getByRole('button', { name: '播放 合成搜索歌曲', exact: true })).toBeVisible();
+    await explore.locator('.song-list li').first().scrollIntoViewIfNeeded();
     await expect(explore.locator('.song-list img')).toBeVisible();
     await explore.getByRole('button', { name: '播放 合成搜索歌曲', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'play', id: '501' });
@@ -144,8 +141,8 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await expect(explore.getByRole('heading', { name: '没有找到匹配的内容', exact: true })).toBeVisible();
     await search.fill('失败'); await search.press('Enter');
     await expect(explore.getByRole('alert')).toContainText('网络连接失败');
-    await explore.getByRole('button', { name: '热歌榜', exact: true }).click();
-    await expect(explore.locator('.song-list li')).toHaveCount(30);
+    await explore.getByRole('button', { name: '发现歌单', exact: true }).click();
+    await expect(explore.locator('.ne-cover-card')).toHaveCount(1);
     await explore.getByRole('button', { name: '我的歌单', exact: true }).click();
     await explore.getByRole('button', { name: /合成私人歌单/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: '合成私人歌单', exact: true })).toBeVisible();
@@ -167,9 +164,23 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await page.getByRole('button', { name: '账号与设置', exact: true }).click();
     const dark = page.getByRole('radio', { name: '暗色', exact: true }); await dark.check(); await expect(dark).toBeEnabled();
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
-    await explore.getByRole('button', { name: '热歌榜', exact: true }).click();
-    await expect(explore.locator('.song-list li')).toHaveCount(30);
-    await page.screenshot({ path: 'artifacts/netease-synthetic-dark-hot-minimum.png', animations: 'disabled' });
+    await explore.getByRole('button', { name: '搜索', exact: true }).click();
+    await search.fill('合成关键词'); await search.press('Enter');
+    await expect(explore.locator('.song-list li')).toHaveCount(1);
+    for (const theme of ['浅色', '暗色']) {
+      await page.getByRole('button', { name: '账号与设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
+      await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
+      for (const width of [960, 1280]) {
+        await page.setViewportSize({ width, height: 800 }); await search.focus();
+        expect(await search.evaluate(node => getComputedStyle(node).outlineStyle)).toBe('none');
+        expect(await page.locator('main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+        expect((await search.boundingBox())!.width).toBeGreaterThan(200);
+        await page.screenshot({ path: `artifacts/netease-search-refined-${theme === '浅色' ? 'light' : 'dark'}-${width}.png`, animations: 'disabled' });
+      }
+    }
+    await explore.getByRole('button', { name: '清空关键词', exact: true }).click();
+    await expect(search).toHaveValue(''); await expect(search).toBeFocused(); await expect(explore.getByRole('button', { name: '搜索网易云', exact: true })).toBeDisabled();
+    expect((await calls()).some(call => call.kind === 'hot')).toBe(false);
     expect(errors).toEqual([]);
   } finally { await desktop.close(); await rm(profile, { recursive: true, force: true }); }
 });
