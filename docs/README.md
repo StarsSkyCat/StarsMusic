@@ -51,3 +51,5 @@
 - [音乐库全来源搜索与酷狗收藏排序](validation/2026-10-27-library-search-order.md)
 
 - [main 合并前的数据检查](validation/2026-10-27-main-merge-audit.md)
+
+- [Arch 原生安装包验证](validation/2026-10-27-arch-package.md)

@@ -34,6 +34,8 @@ import { AppearanceStore } from './appearance-store';
 app.setName('StarsMusic');
 if (process.platform === 'linux') app.setDesktopName(`${desktopId}.desktop`);
 app.enableSandbox();
+const ownsInstance = !app.isPackaged || app.requestSingleInstanceLock();
+if (!ownsInstance) app.quit();
 
 const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
 const developmentUrl = app.isPackaged ? undefined : getDevelopmentUrl(process.env.ELECTRON_RENDERER_URL);
@@ -79,6 +81,7 @@ function windowBackground(): string {
 function createWindow(): void {
   const window = new BrowserWindow({
     title: 'StarsMusic',
+    ...(app.isPackaged && process.platform === 'linux' ? { icon: path.join(process.resourcesPath, 'app/icon.png') } : {}),
     width: 1280,
     height: 800,
     minWidth: 960,
@@ -160,6 +163,7 @@ async function restoreSavedCredentials(): Promise<void> {
 }
 
 void app.whenReady().then(async () => {
+  if (!ownsInstance) return;
   const uiSession = session.fromPartition('starsmusic-ui');
   uiSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   uiSession.setPermissionCheckHandler(() => false);
@@ -446,6 +450,7 @@ void app.whenReady().then(async () => {
 
 // 默认关闭窗口退出；用户明确启用且托盘宿主仍可用时，由窗口 close 钩子隐藏。
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('second-instance', () => showMainWindow());
 app.on('before-quit', (event) => {
   if (quitting) return;
   event.preventDefault();
