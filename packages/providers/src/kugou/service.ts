@@ -32,6 +32,9 @@ function normalizeName(value: string): string {
 function withoutExplicitAlias(value: string): string {
   return value.normalize('NFKC').replace(/\s*\((?:又名|别名|原名)\s*:[^()]+\)\s*$/u, '').trim();
 }
+function withoutVersionSuffix(value: string): string {
+  return value.normalize('NFKC').replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape)$/i, '').replace(/(?:\s*\([^()]*\))+\s*$/u, '').trim();
+}
 function namesMatch(expected: string, fileName: string, artists: readonly string[] = []): boolean {
   // 只比较完整名称。共享歌手、一个词或相似片段不能证明是同一首歌。
   const artistNames = new Set([...artists.map(normalizeName), normalizeName(artists.join('、'))].filter(Boolean));
@@ -120,7 +123,8 @@ export function parseKugouStream(value: unknown, id: string, expected?: { name: 
   const responseHash = typeof raw.hash === 'string' ? raw.hash.toLowerCase() : '';
   const standardHash = typeof raw.std_hash === 'string' ? raw.std_hash.toLowerCase() : '';
   if (identity && identity.hash !== id) throw new DomainError('track-mismatch');
-  if (identity && expected && !namesMatch(expected.name, identity.name, expected.artists)) throw new DomainError('track-mismatch');
+  if (identity && expected && !namesMatch(expected.name, identity.name, expected.artists)
+    && !namesMatch(expected.name, withoutVersionSuffix(identity.name), expected.artists)) throw new DomainError('track-mismatch');
   const verifiedHashes = identity?.hashes ?? [];
   const hashMatches = responseHash === id || standardHash === id || verifiedHashes.includes(responseHash) || verifiedHashes.includes(standardHash);
   const responseTimeLength = optionalInteger(raw.timeLength, 'kugou.timeLength');
@@ -136,12 +140,15 @@ export function parseKugouStream(value: unknown, id: string, expected?: { name: 
   // 播放响应的 fileName 可能省略 Remix/Live 等版本信息。只有资源详情的完整名称
   // 已匹配所选版本，且实际返回 hash 明确属于该资源时，才以资源详情纠正文件名。
   // 仅 std_hash 相同、曲名相似或时长接近都不能消除文件名冲突。
-  const versionlessName = expected?.name.normalize('NFKC').replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape)$/i, '')
-    .replace(/(?:\s*\([^()]*\))+\s*$/u, '').trim();
+  const versionlessName = expected === undefined ? undefined : withoutVersionSuffix(expected.name);
   // 云歌单可能没有 singerinfo；资源详情已按 hash 和完整曲名核验后，可使用它的歌手前缀。
   const resourceArtists = [...(expected?.artists ?? []), ...(identity?.name.split(/\s+[-–—]\s+/).slice(0, -1) ?? [])];
+  // 部分资源只给出「hash - 数字编号.mp/wa」而非歌名。只识别绑定到实际 hash 的
+  // 固定格式，并仍要求资源详情的完整名称和编码关系已通过核验。
+  const opaqueFile = fileName.match(/^([a-f0-9]{32})\s+-\s+\d{1,30}\.(?:mp|wa|mp3|wav|flac|m4a|aac|ogg)$/i);
+  const opaqueHashMatches = opaqueFile?.[1] !== undefined && verifiedHashes.includes(opaqueFile[1].toLowerCase());
   const resourceConfirmsFile = expected !== undefined && identity !== undefined && verifiedHashes.includes(responseHash)
-    && versionlessName !== undefined && versionlessName.length > 0 && namesMatch(versionlessName, fileName, resourceArtists);
+    && (opaqueHashMatches || (versionlessName !== undefined && versionlessName.length > 0 && namesMatch(versionlessName, fileName, resourceArtists)));
   if (nameMatch === false && !resourceConfirmsFile) throw new DomainError('track-mismatch');
   // 完整资源须匹配原 hash 或后台核验的同曲编码；试听另 hash 仍要求名称、歌手和有效范围。
   if (mode === 'full' && !hashMatches) throw new DomainError('track-mismatch');
@@ -633,16 +640,20 @@ export class KugouService {
     if (generation !== this.#state.generation || !this.#knownTracks.has(kugouId(id))) throw new DomainError('stale-operation');
     const item = this.#knownTracks.get(id)!;
     const resolution = ++this.#resolution;
+    const current = (): void => {
+      if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
+    };
     this.#update({ error: undefined });
     // 只按 hash 取链；歌单里的 album_id/album_audio_id 可能与 hash 错配，导致平台返回别的歌曲。
     const request = (freePart: boolean) => transport.call('stream', { hash: item.hash, freePart }, lease.signal);
     let identity: KugouResourceIdentity | undefined;
+    let identityRequest: Promise<KugouResourceIdentity> | undefined;
     const parse = async (value: unknown, mode: 'full' | 'preview'): Promise<StreamResolution> => {
       let result: StreamResolution;
       try { result = parseKugouStream(value, id, item.track, mode); }
       catch (error: unknown) {
         if (!(error instanceof DomainError) || error.code !== 'track-mismatch') throw error;
-        identity ??= parseKugouResourceIdentity(await transport.call('resource', { hash: item.hash }, lease.signal), item.hash);
+        identity ??= await (identityRequest ??= transport.call('resource', { hash: item.hash }, lease.signal).then(value => parseKugouResourceIdentity(value, item.hash)));
         if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
         result = parseKugouStream(value, id, item.track, mode, identity);
       }
@@ -659,9 +670,29 @@ export class KugouService {
         // 完整资源不可用或权限未确认时只回退一次；身份不一致不再走更宽松的试听判断。
         if (!canFallbackPreview(error) || !this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw error;
       }
-      const preview = await request(true);
-      if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
-      return await parse(preview, 'preview');
+      let previewError: unknown;
+      try { const preview = await request(true); current(); return await parse(preview, 'preview'); }
+      catch (error: unknown) { current(); if (!canFallbackPreview(error)) throw error; previewError = error; }
+      // 旧取链不可用/权限不明确时，在同一个标准版会话中走官方授权链一次。
+      // 不使用歌单中的 album ID，不混用概念版或网页 Token；每个等待点丢弃旧请求。
+      try {
+        const verification = await transport.call('verifyPlayback', {}, lease.signal); current();
+        const account = record(success(verification).data, 'kugou.playback.account');
+        if (integerValue(account.valid, 'kugou.playback.valid') !== 1) throw new DomainError('permission-denied');
+        const authorization = text(account.auth, 'kugou.playback.authorization');
+        const authorized = await transport.call('authorizePlayback', { hash: item.hash, authorization }, lease.signal); current();
+        const permission = record(success(authorized).data, 'kugou.playback.permission');
+        const proof = text(permission.auth, 'kugou.playback.proof');
+        const openTime = integerValue(permission.open_time, 'kugou.playback.openTime');
+        if (openTime === 0) throw new DomainError('invalid-response');
+        const value = await transport.call('authorizedStream', { hash: item.hash, authorization: proof, openTime: String(openTime) }, lease.signal); current();
+        return await parse(value, 'full');
+      } catch (error: unknown) {
+        current();
+        // 未提供授权能力时保留原资源错误，不把“权限待确认”错误地改为资源下架。
+        if (error instanceof DomainError && error.code === 'unavailable') throw previewError;
+        throw error;
+      }
     } catch (error: unknown) {
       if (resolution === this.#resolution && this.#sessions.isCurrent(lease)) {
         if (error instanceof DomainError && ['permission-denied', 'unavailable'].includes(error.code)) this.#trackAccess(id, 'unavailable');

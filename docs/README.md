@@ -55,3 +55,5 @@
 - [Arch 原生安装包验证](validation/2026-10-27-arch-package.md)
 
 - [酷狗文件名格式误拒](validation/2026-10-28-kugou-filename.md)
+
+- [酷狗官方授权取链与内部文件名](validation/2026-10-28-kugou-authorized-playback.md)

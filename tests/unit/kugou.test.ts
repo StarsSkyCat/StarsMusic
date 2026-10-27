@@ -5,6 +5,7 @@ import { KugouService, parseKugouStream, parseKugouResourceIdentity } from '../.
 import { DirectKugouTransport, type KugouEndpoint, type KugouTransport, type KugouTransportSession } from '../../packages/providers/src/kugou/transport.ts';
 import { DomainError } from '../../packages/contracts/src/errors.ts';
 import type { KugouCredentialBundle } from '../../packages/contracts/src/credentials.ts';
+import { parseTracks } from '../../packages/providers/src/kugou/response.ts';
 
 // 全部为合成数据，不连接平台，不使用真实凭据/登录二维码。
 const hash = 'a'.repeat(32);
@@ -33,6 +34,7 @@ class FakeTransport implements KugouTransport {
     if (endpoint === 'account') return ok({ userid: this.profileAccount, nickname: '合成账号' });
     if (endpoint === 'playlists') return ok({ info: [{ listid: 1, name: '合成歌单', count: 1 }] });
     if (endpoint === 'resource') return ok([{ hash: data.hash, name: '合成歌手 - 合成曲目', relate_goods: [{ hash: data.hash, quality: '128' }] }]);
+    if (endpoint === 'verifyPlayback' || endpoint === 'authorizePlayback' || endpoint === 'authorizedStream') return { status: 0 };
     if (endpoint === 'playlist') return ok({ count: 1, info: [{ hash, name: '合成曲目', singerinfo: [{ name: '合成歌手' }], duration: 30, audio_id: 2, album_audio_id: 0 }] });
     return stream;
   }
@@ -383,6 +385,8 @@ test('酷狗编码关系按原始 hash 配对，不接受相邻资源、位置�
   const response = { ...stream, hash: encoded, std_hash: encoded, fileName: '合成曲目' };
   const expected = { name: '合成歌手 - 合成曲目.mp3', durationMs: 30000, artists: ['合成歌手'] };
   assert.equal(parseKugouStream(response, hash, expected, 'full', identity).access.kind, 'full');
+  assert.equal(parseKugouStream({ ...response, fileName: `${hash} - 123.mp` }, hash, expected, 'full', identity).access.kind, 'full');
+  assert.equal(parseKugouStream(response, hash, { ...expected, name: '合成曲目' }, 'full', identity).access.kind, 'full');
   assert.throws(() => parseKugouStream({ ...response, hash: other, std_hash: other }, hash, expected, 'full', identity));
   assert.throws(() => parseKugouStream(response, hash, { ...expected, name: '另一首曲目' }, 'full', identity));
   assert.throws(() => parseKugouStream({ ...response, priv_status: 1 }, hash, expected, 'preview', identity), (e: unknown) => e instanceof DomainError && e.code === 'playback-access-unknown');
@@ -416,6 +420,133 @@ test('歌曲文件名的歌手别名差异不否定已确认 hash，但仍拒绝
   const expected = { name: '合成艺名 - 合成曲目.mp3', durationMs: 30000, artists: ['合成艺名（合成本名）'] };
   assert.equal(parseKugouStream({ ...stream, fileName: '合成曲目' }, hash, expected).access.kind, 'full');
   assert.throws(() => parseKugouStream({ ...stream, fileName: '另一首曲目' }, hash, expected));
+});
+
+test('云歌单无 singerinfo 时从明确字段或文件名前缀显示歌手，保持原 hash 和名称', () => {
+  const tracks = parseTracks([
+    { hash, name: '合成歌手 - 合成曲目（合成版本）.mp3' },
+    { hash: 'b'.repeat(32), name: '合成曲目', singername: '合成歌手' },
+    { hash: 'c'.repeat(32), name: '只有曲名' },
+    { hash: 'd'.repeat(32), name: '文件名前缀 - 合成曲目', singerinfo: [{ name: '已确认歌手' }] },
+  ]).items;
+  assert.deepEqual(tracks.map(x => x.track.artists), [['合成歌手'], ['合成歌手'], [], ['已确认歌手']]);
+  assert.equal(tracks[0]!.hash, hash); assert.equal(tracks[0]!.track.name, '合成歌手 - 合成曲目（合成版本）');
+});
+
+test('内部编号文件名须绑定实际 hash，且由完整资源名称与编码关系确认', () => {
+  const encoded = 'b'.repeat(32); const other = 'c'.repeat(32);
+  const expected = { name: '合成歌手 - 合成曲目（合成版本）', durationMs: 30000, artists: ['合成歌手'] };
+  const identity = parseKugouResourceIdentity(ok([{ hash, name: expected.name, relate_goods: [{ hash: encoded }] }]), hash);
+  const response = { ...stream, hash: encoded, std_hash: encoded, fileName: `${encoded.toUpperCase()} - 123456789.mp`, is_full_audio: 1 };
+  const mismatch = (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch';
+  assert.throws(() => parseKugouStream(response, hash, expected), mismatch);
+  assert.equal(parseKugouStream(response, hash, expected, 'full', identity).access.kind, 'full');
+  assert.throws(() => parseKugouStream({ ...response, fileName: `${other} - 123.mp` }, hash, expected, 'full', identity), mismatch);
+  assert.throws(() => parseKugouStream({ ...response, hash: other, std_hash: hash, fileName: `${other} - 123.mp` }, hash, expected, 'full', identity), mismatch);
+  assert.throws(() => parseKugouStream(response, hash, { ...expected, name: '不同曲目' }, 'full', identity), mismatch);
+  assert.throws(() => parseKugouStream({ ...response, is_full_audio: 0 }, hash, expected, 'full', identity), (e: unknown) => e instanceof DomainError && e.code === 'playback-access-unknown');
+});
+
+test('旧接口无地址时用同一账号验证、单曲授权和标准版取链，后台 proof 不进入快照', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport); const calls: string[] = [];
+  try {
+    await connect(service); await service.loadPlaylists(); await service.loadPlaylist('1', 0);
+    transport.handlers.set('stream', async data => { calls.push(data.freePart ? 'preview' : 'full'); return { status: 3 }; });
+    transport.handlers.set('verifyPlayback', async () => { calls.push('verify'); assert.equal(transport.authenticated, true); return ok({ valid: 1, auth: 'synthetic-account-proof' }); });
+    transport.handlers.set('authorizePlayback', async data => {
+      calls.push('authorize'); assert.deepEqual(data, { hash, authorization: 'synthetic-account-proof' });
+      return ok({ auth: 'synthetic-track-proof', open_time: '1234567890' });
+    });
+    transport.handlers.set('authorizedStream', async data => {
+      calls.push('authorizedStream'); assert.deepEqual(data, { hash, authorization: 'synthetic-track-proof', openTime: '1234567890' });
+      return { ...stream, fileName: '合成曲目' };
+    });
+    assert.equal((await service.resolveTrack(hash, service.snapshot().generation)).access.kind, 'full');
+    assert.deepEqual(calls, ['full', 'preview', 'verify', 'authorize', 'authorizedStream']);
+    assert.equal(service.snapshot().error, undefined);
+    assert.equal(JSON.stringify(service.snapshot()).includes('proof'), false);
+    // 即使取到授权，响应明确试听时仍保留范围；没有边界不能放行。
+    transport.handlers.set('authorizedStream', async () => ({ ...stream, priv_status: 1, is_full_audio: 0, free_part_start: 0, free_part_end: 1000 }));
+    assert.deepEqual((await service.resolveTrack(hash, service.snapshot().generation)).access, { kind: 'preview', startMs: 0, durationMs: 1000 });
+    transport.handlers.set('authorizedStream', async () => ({ ...stream, priv_status: 1, is_full_audio: 0 }));
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (e: unknown) => e instanceof DomainError && e.code === 'playback-access-unknown');
+    transport.handlers.set('authorizedStream', async () => ({ ...stream, hash: 'b'.repeat(32), fileName: '另一首曲目' }));
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch');
+  } finally { service.dispose(); }
+});
+
+test('账号验证拒绝不继续取链，明确错歌也不启动授权回退', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport); let verifications = 0; let authorizations = 0;
+  try {
+    await connect(service); await service.loadPlaylists(); await service.loadPlaylist('1', 0);
+    transport.handlers.set('stream', async () => ({ status: 3 }));
+    transport.handlers.set('verifyPlayback', async () => { verifications++; return ok({ valid: 0, auth: 'synthetic-denied' }); });
+    transport.handlers.set('authorizePlayback', async () => { authorizations++; return ok({}); });
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (e: unknown) => e instanceof DomainError && e.code === 'permission-denied');
+    assert.equal(verifications, 1); assert.equal(authorizations, 0);
+    transport.handlers.set('stream', async () => ({ ...stream, hash: 'b'.repeat(32), fileName: '另一首曲目' }));
+    await assert.rejects(service.resolveTrack(hash, service.snapshot().generation), (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch');
+    assert.equal(verifications, 1);
+  } finally { service.dispose(); }
+});
+
+test('授权 transport 固定 HTTPS 官方路径、标准版身份和 hash-only 参数，校验临时 proof', async () => {
+  const transport = new DirectKugouTransport(); const original = globalThis.fetch; let calls = 0;
+  transport.acceptIdentity('42', 'synthetic-private-marker');
+  try {
+    globalThis.fetch = async (input, init) => {
+      calls++; const url = new URL(String(input)); const headers = init?.headers as Record<string, string>;
+      assert.equal(url.origin, 'https://gateway.kugou.com'); assert.equal(init?.redirect, 'error');
+      assert.equal(url.searchParams.get('appid'), '1005'); assert.equal(url.searchParams.get('userid'), '42');
+      assert.equal(url.searchParams.get('token'), 'synthetic-private-marker'); assert.equal(url.searchParams.get('module_id'), '51');
+      if (url.pathname === '/v1/user_verify') assert.equal(headers['x-router'], 'trackercdngz.kugou.com');
+      else {
+        assert.equal(url.searchParams.get('hash'), hash); assert.equal(url.searchParams.get('album_audio_id'), '0');
+        if (url.pathname === '/v1/authorization') {
+          assert.equal(headers['x-router'], 'trackercdngz.kugou.com');
+          assert.equal(url.searchParams.get('authorization'), 'synthetic-account-proof');
+        } else {
+          assert.equal(url.pathname, '/tracker/v5/url'); assert.equal(headers['x-router'], undefined);
+          assert.equal(url.searchParams.get('auth'), 'synthetic-track-proof'); assert.equal(url.searchParams.get('open_time'), '1234567890');
+          assert.equal(url.searchParams.get('quality'), '128'); assert.equal(url.searchParams.get('pid'), '2');
+          assert.equal(url.searchParams.get('album_id'), '0'); assert.equal(url.searchParams.has('IsFreePart'), false);
+        }
+      }
+      return new Response(JSON.stringify(ok({})));
+    };
+    const signal = new AbortController().signal;
+    await transport.call('verifyPlayback', {}, signal);
+    await transport.call('authorizePlayback', { hash, authorization: 'synthetic-account-proof', album_audio_id: '999' }, signal);
+    await transport.call('authorizedStream', { hash, authorization: 'synthetic-track-proof', openTime: '1234567890', album_id: '999' }, signal);
+    assert.equal(calls, 3);
+    for (const authorization of ['', 'unsafe\nproof', 'x'.repeat(4097)]) await assert.rejects(transport.call('authorizePlayback', { hash, authorization }, signal));
+    await assert.rejects(transport.call('authorizePlayback', { hash: 'invalid', authorization: 'synthetic-account-proof' }, signal));
+    await assert.rejects(transport.call('authorizedStream', { hash, authorization: 'synthetic-track-proof', openTime: '0' }, signal));
+    assert.equal(calls, 3);
+  } finally { transport.clear(); globalThis.fetch = original; }
+});
+
+test('授权链每个等待点的旧曲目或退出响应均丢弃，不继续使用旧 proof', async () => {
+  for (const boundary of ['verifyPlayback', 'authorizePlayback', 'authorizedStream'] as const) for (const logout of [false, true]) {
+    const transport = new FakeTransport(); const service = create(() => transport); const late = deferred<unknown>(); const calls: string[] = [];
+    try {
+      await connect(service); await service.loadPlaylists();
+      transport.handlers.set('playlist', async () => ok({ count: 2, info: [{ hash, name: '合成曲目' }, { hash: 'b'.repeat(32), name: '合成 B' }] }));
+      await service.loadPlaylist('1', 0);
+      transport.handlers.set('stream', async data => data.hash === hash ? { status: 3 } : { ...stream, hash: data.hash });
+      const values = { verifyPlayback: ok({ valid: 1, auth: 'synthetic-account-proof' }), authorizePlayback: ok({ auth: 'synthetic-track-proof', open_time: 1234567890 }), authorizedStream: stream };
+      for (const endpoint of ['verifyPlayback', 'authorizePlayback', 'authorizedStream'] as const) transport.handlers.set(endpoint, async () => {
+        calls.push(endpoint); return endpoint === boundary ? late.promise : values[endpoint];
+      });
+      const pending = service.resolveTrack(hash, service.snapshot().generation);
+      await new Promise<void>(done => setImmediate(done));
+      assert.equal(calls.at(-1), boundary);
+      if (logout) service.logout(); else await service.resolveTrack('b'.repeat(32), service.snapshot().generation);
+      const count = calls.length; late.resolve(values[boundary]);
+      await assert.rejects(pending, (e: unknown) => e instanceof DomainError && e.code === 'stale-operation');
+      assert.equal(calls.length, count); assert.equal(service.snapshot().error, undefined);
+    } finally { service.dispose(); }
+  }
 });
 
 test('曲名在前歌手在后的官方文件名及明确又名标注不误判为错歌', () => {

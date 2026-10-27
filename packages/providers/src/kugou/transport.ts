@@ -6,7 +6,7 @@ import { parseApiJson } from '../api-json.ts';
 import { accountProof, md5, registerProof, signature } from './crypto.ts';
 
 export const kugouProtocolBaseline = 'kugoumusicapi@1.6.2/62730f900dc9fdc51396a663b3d33a6c4c704046';
-export type KugouEndpoint = 'membership' | 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register' | 'searchSongs' | 'searchPlaylists' | 'publicPlaylists' | 'publicPlaylist';
+export type KugouEndpoint = 'membership' | 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register' | 'searchSongs' | 'searchPlaylists' | 'publicPlaylists' | 'publicPlaylist' | 'verifyPlayback' | 'authorizePlayback' | 'authorizedStream';
 export interface KugouTransportSession {
   readonly userid: string;
   readonly token: string;
@@ -34,7 +34,25 @@ const endpoints: Record<KugouEndpoint, readonly [string, string | undefined]> = 
   searchPlaylists: ['https://gateway.kugou.com/v1/search/special', 'complexsearch.kugou.com'],
   publicPlaylists: ['https://gateway.kugou.com/v2/special_recommend', 'specialrec.service.kugou.com'],
   publicPlaylist: ['https://gateway.kugou.com/pubsongs/v2/get_other_list_file_nofilt', undefined],
+  verifyPlayback: ['https://gateway.kugou.com/v1/user_verify', 'trackercdngz.kugou.com'],
+  authorizePlayback: ['https://gateway.kugou.com/v1/authorization', 'trackercdngz.kugou.com'],
+  authorizedStream: ['https://gateway.kugou.com/tracker/v5/url', undefined],
 };
+function playbackHash(value: unknown): string {
+  const hash = text(value, 'kugou.hash').toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(hash)) throw new DomainError('invalid-input');
+  return hash;
+}
+function playbackProof(value: unknown): string {
+  const proof = text(value, 'kugou.authorization');
+  if (!/^[\x21-\x7e]{1,4096}$/.test(proof)) throw new DomainError('invalid-response');
+  return proof;
+}
+function playbackOpenTime(value: unknown): string {
+  const time = text(value, 'kugou.openTime');
+  if (!/^[1-9]\d{0,14}$/.test(time)) throw new DomainError('invalid-response');
+  return time;
+}
 
 export class DirectKugouTransport implements KugouTransport {
   // App 协议使用由 GUID 派生的十进制大整数 MID；全程按字符串处理，不转 Number。
@@ -98,10 +116,15 @@ export class DirectKugouTransport implements KugouTransport {
         resource: [{ type: 'audio', page_id: 0, hash, album_id: 0 }],
         qualities: ['128', '320', 'flac', 'high'],
       });
-    } else if (endpoint === 'stream') {
+    } else if (endpoint === 'verifyPlayback') {
+      params.module_id = '51';
+    } else if (endpoint === 'authorizePlayback') {
+      Object.assign(params, { authorization: playbackProof(data.authorization), module_id: '51', album_audio_id: '0', clientver: '11561', hash: playbackHash(data.hash) });
+    } else if (endpoint === 'stream' || endpoint === 'authorizedStream') {
       // 歌单/搜索数据里的 album_id/album_audio_id 可能与主 hash 错配，带上会被平台带到其他文件。
       // 固定 0，让平台只按 hash 解析；IsFreePart 默认 0，避免返回另一条试听音频。
-      Object.assign(params, { album_id: 0, area_code: '1', hash: data.hash, ssa_flag: 'is_fromtrack', version: '11430', page_id: '151369488', quality: '128', album_audio_id: 0, behavior: 'play', pid: '2', cmd: '26', pidversion: '3001', IsFreePart: data.freePart === true ? '1' : '0', ppage_id: '463467626,350369493,788954147', cdnBackup: '1', module: '', clientver: '11430' });
+      Object.assign(params, { album_id: 0, area_code: '1', hash: playbackHash(data.hash), ssa_flag: 'is_fromtrack', version: '11430', page_id: '151369488', quality: '128', album_audio_id: 0, behavior: 'play', pid: '2', cmd: '26', pidversion: '3001', ...(endpoint === 'stream' ? { IsFreePart: data.freePart === true ? '1' : '0' } : {}), ppage_id: '463467626,350369493,788954147', cdnBackup: '1', module: '', clientver: '11430' });
+      if (endpoint === 'authorizedStream') Object.assign(params, { need_m: '0', open_time: playbackOpenTime(data.openTime), ptype: '0', need_ogg: '1', auth: playbackProof(data.authorization), mtype: '0', module_id: '51', clientver: '11561' });
       params.key = md5(`${params.hash}57ae12eb6890223e355ccfcb74edf70d1005${this.#mid}${this.#userid || '0'}`);
     } else if (endpoint === 'register') {
       aesKey = randomBytes(3).toString('hex'); const digest = md5(aesKey);
