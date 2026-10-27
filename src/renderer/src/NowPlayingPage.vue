@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ArrowLeft, ArrowRight, AudioLines, ListMusic, Music2 } from '@lucide/vue';
-import type { PlaybackSnapshot, QueueTrack } from '../../../packages/contracts/src/playback';
+import { adjacentIndex, type PlaybackSnapshot, type QueueTrack } from '../../../packages/contracts/src/playback';
 import type { PresentationSnapshot } from '../../../packages/contracts/src/presentation';
 import { providerNames } from './useProvider';
 import TrackLyrics from './TrackLyrics.vue';
@@ -25,7 +25,10 @@ watch(
   },
 );
 const cover = computed(() => (props.artwork && !failed.value ? props.artwork : defaultArtwork));
-const next = computed(() => props.playback.queue[(props.playback.currentIndex ?? -1) + 1]);
+const next = computed(() => {
+  const index = props.playback.loopMode === 'track' ? props.playback.currentIndex : adjacentIndex(props.playback, 1);
+  return props.playback.queue[index ?? -1];
+});
 </script>
 <template>
   <section class="now-playing-page" :class="{ 'has-track': !!track }" aria-label="正在播放">

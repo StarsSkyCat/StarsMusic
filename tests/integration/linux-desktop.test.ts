@@ -28,6 +28,12 @@ test('独立真实 session D-Bus / mpv：MPRIS 发现、状态、微秒、音量
     assert.ok(await owner(client, name));
     const request = (member: string, signature = '', body: unknown[] = []) => call(client, name, mprisPath, mprisPlayer, member, signature, body);
     const get = async (key: string) => (await call(client, name, mprisPath, 'org.freedesktop.DBus.Properties', 'Get', 'ss', [mprisPlayer, key]))[0] as dbus.Variant<unknown>;
+    const set = (key: string, value: dbus.Variant) => call(client, name, mprisPath, 'org.freedesktop.DBus.Properties', 'Set', 'ssv', [mprisPlayer, key, value]);
+    const changed: Record<string, dbus.Variant>[] = [];
+    await call(client, 'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'AddMatch', 's', ["type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"]);
+    client.on('message', message => {
+      if (isSignal(message, 'org.freedesktop.DBus.Properties', 'PropertiesChanged') && message.body[0] === mprisPlayer) changed.push(message.body[1] as Record<string, dbus.Variant>);
+    });
     const introspection = await call(client, name, mprisPath, 'org.freedesktop.DBus.Introspectable', 'Introspect');
     assert.ok(String(introspection[0]).includes('org.mpris.MediaPlayer2.Player'));
     await call(client, 'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'AddMatch', 's', [`type='signal',interface='${mprisPlayer}',member='Seeked'`]);
@@ -52,6 +58,21 @@ test('独立真实 session D-Bus / mpv：MPRIS 发现、状态、微秒、音量
     assert.equal(transitions.includes('playing'), false); unsubscribe();
     await request('Stop'); assert.equal((await get('PlaybackStatus')).value, 'Stopped');
     await request('Next'); assert.equal(player.snapshot().currentIndex, 2); assert.equal(player.snapshot().status, 'idle');
+    assert.equal((await get('LoopStatus')).value, 'None'); assert.equal((await get('Shuffle')).value, false);
+    assert.equal((await get('CanGoNext')).value, false);
+    await set('LoopStatus', new dbus.Variant('s', 'Playlist'));
+    assert.equal(player.snapshot().loopMode, 'playlist'); assert.equal((await get('CanGoNext')).value, true);
+    await request('Next'); assert.equal(player.snapshot().currentIndex, 0); assert.equal(player.snapshot().status, 'idle');
+    await request('Previous'); assert.equal(player.snapshot().currentIndex, 2);
+    const track = trackPath(player.snapshot()); const generation = player.snapshot().generation;
+    await set('Shuffle', new dbus.Variant('b', true));
+    assert.equal(player.snapshot().shuffle, true); assert.equal(trackPath(player.snapshot()), track); assert.equal(player.snapshot().generation, generation);
+    await set('LoopStatus', new dbus.Variant('s', 'Track')); assert.equal(player.snapshot().loopMode, 'track');
+    await assert.rejects(set('LoopStatus', new dbus.Variant('s', 'invalid'))); assert.equal(player.snapshot().loopMode, 'track');
+    await assert.rejects(set('Shuffle', new dbus.Variant('s', 'true'))); assert.equal(player.snapshot().shuffle, true);
+    await until(() => changed.some(value => value.LoopStatus?.value === 'Playlist') && changed.some(value => value.Shuffle?.value === true));
+    player.setLoopMode('none'); player.setShuffle(false);
+    assert.equal((await get('LoopStatus')).value, 'None'); assert.equal((await get('Shuffle')).value, false);
     await assert.rejects(request('OpenUri', 's', ['https://example.invalid/arbitrary']));
     await call(client, name, mprisPath, 'org.mpris.MediaPlayer2', 'Raise'); await call(client, name, mprisPath, 'org.mpris.MediaPlayer2', 'Quit');
     assert.equal(raised, 1); assert.equal(quit, 1);

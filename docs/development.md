@@ -112,6 +112,8 @@ main、preload、renderer、公共契约、会话守卫、网易云 Provider、�
 
 ## 日常开发
 
+播放模式由唯一 MusicPlayer 管理，底栏随机/循环控制、MPRIS 以及桌面切歌共用队列导航；模式和随机顺序跨重启保存。验证范围见 [播放模式记录](validation/2026-10-27-playback-modes.md)。
+
 底栏播放权限与音质标签在 960px 起的窗口中保留完整宽度，双主题缩放验证见 [底栏信息记录](validation/2026-10-27-player-details.md)。
 
 1. 阅读 AGENTS.md，检查 git status 和当前任务状态。

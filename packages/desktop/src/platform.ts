@@ -1,4 +1,4 @@
-import type { PlaybackSnapshot } from '../../contracts/src/playback.ts';
+import type { LoopMode, PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import type { PresentationSnapshot } from '../../contracts/src/presentation.ts';
 
 import type { CapabilityState, Capability } from '../../contracts/src/system.ts';
@@ -14,6 +14,8 @@ export interface PlaybackPort {
   subscribeSeeked(listener: (seconds: number) => void): () => void;
   playTrack(id: string, paused?: boolean): Promise<PlaybackSnapshot>;
   cueTrack(id: string): Promise<PlaybackSnapshot>;
+  next(): Promise<PlaybackSnapshot>; previous(): Promise<PlaybackSnapshot>;
+  setLoopMode(mode: LoopMode): PlaybackSnapshot; setShuffle(enabled: boolean): PlaybackSnapshot;
   resume(): Promise<PlaybackSnapshot>; pause(): Promise<PlaybackSnapshot>; stop(): Promise<PlaybackSnapshot>;
   seek(seconds: number): Promise<PlaybackSnapshot>; setVolume(volume: number): Promise<PlaybackSnapshot>; setMuted(muted: boolean): Promise<PlaybackSnapshot>;
 }
@@ -36,10 +38,8 @@ export function desktopEnvironment(env: NodeJS.ProcessEnv): Pick<DesktopServices
     desktop: (env.XDG_CURRENT_DESKTOP ?? '未声明桌面').replace(/[^\p{L}\p{N}_: .-]/gu, '').slice(0, 80) || '未声明桌面' };
 }
 export async function adjacent(player: PlaybackPort, offset: number): Promise<void> {
-  const state = player.snapshot(); const index = (state.currentIndex ?? -1) + offset;
-  const track = state.queue[index]; if (!track) return;
-  if (['idle', 'ended', 'error'].includes(state.status)) await player.cueTrack(track.id);
-  else await player.playTrack(track.id, state.status === 'paused');
+  if (offset === 1) await player.next();
+  else if (offset === -1) await player.previous();
 }
 export async function togglePlayback(player: PlaybackPort): Promise<void> {
   const state = player.snapshot();

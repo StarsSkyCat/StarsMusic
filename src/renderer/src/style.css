@@ -1883,7 +1883,7 @@ main:focus {
   grid-column: 1 / -1;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 1.35fr) max-content;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 1.35fr) max-content;
   align-items: center;
   gap: 28px;
   min-width: 0;
@@ -1968,13 +1968,22 @@ main:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 6px;
   position: relative;
 }
 
 .transport .icon-button {
   color: var(--muted);
+  width: 36px;
+  min-width: 36px;
   min-height: 36px;
+  padding: 8px;
+}
+
+.transport .playback-mode[aria-pressed='true'] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--line);
 }
 
 .play-button {
@@ -1995,8 +2004,6 @@ main:focus {
 }
 
 .transport .stop-button {
-  position: absolute;
-  left: calc(50% + 105px);
   color: var(--muted);
 }
 
@@ -3213,11 +3220,11 @@ dialog::backdrop {
     padding: 6px;
   }
   .transport {
-    gap: 9px;
+    gap: 4px;
   }
   .transport .icon-button {
-    min-width: 30px;
-    width: 30px;
+    min-width: 26px;
+    width: 26px;
   }
   .seek-control {
     gap: 6px;

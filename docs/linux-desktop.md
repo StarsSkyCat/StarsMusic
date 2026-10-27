@@ -12,7 +12,7 @@
 
 每实例服务名 `org.mpris.MediaPlayer2.StarsMusic.instance<PID>`，对象路径 `/org/mpris/MediaPlayer2`。实现根接口与 Player，支持播放、暂停、停止、上一首/下一首、相对 Seek、带当前 TrackId 的 SetPosition、音量、显示窗口、退出，以及状态、曲目、歌手、时长、位置和当前封面。微秒位置用 D-Bus int64，正常位置更新不发送 PropertiesChanged(Position)，确认定位后发送 Seeked；旧 ID、负值及越界 SetPosition 忽略。
 
-mpv 的命令回执可能早于实际定位；定位按代次/序号串行合并，等待 seek/playback-restart 后回读实际位置，切歌/停止使旧请求失效。不用请求目标伪造实际进度。暂停/停止时系统切歌保持原状态。速率固定为 1，不提供循环、随机或 TrackList。OpenUri 明确拒绝，系统客户端不能借此请求任意地址或文件路径。
+mpv 的命令回执可能早于实际定位；定位按代次/序号串行合并，等待 seek/playback-restart 后回读实际位置，切歌/停止使旧请求失效。不用请求目标伪造实际进度。暂停/停止时系统切歌保持原状态。速率固定为 1，不提供 TrackList。已实现可读写 LoopStatus（None / Playlist / Track）和 Shuffle；模式修改广播 PropertiesChanged，界面、MPRIS、托盘与快捷键共用 MusicPlayer 的队列导航，CanGoNext / CanGoPrevious 随循环模式变化。暂停/停止时切换模式不启动音频。实现与双向验证见 [播放模式记录](validation/2026-10-27-playback-modes.md)。OpenUri 明确拒绝，系统客户端不能借此请求任意地址或文件路径。
 
 媒体键交给桌面经 MPRIS 路由，不再次抢占 MediaPlayPause/MediaNext 等全局键。桌面是否提供媒体面板、锁屏控制和激活窗口的权限，由实际桌面决定。
 

@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Pause, Play, SkipBack, SkipForward, Square } from '@lucide/vue';
-import type { PlaybackApi, PlaybackSnapshot } from '../../../packages/contracts/src/playback';
+import { computed, ref } from 'vue';
+import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Square } from '@lucide/vue';
+import { adjacentIndex, type PlaybackApi, type PlaybackSnapshot } from '../../../packages/contracts/src/playback';
 import { formatTime } from './music-ui';
 const props = defineProps<{ playback: PlaybackSnapshot }>();
 const emit = defineEmits<{
   control: [action: (api: PlaybackApi) => Promise<PlaybackSnapshot>];
 }>();
 const draft = ref<number | null>(null);
-function adjacent(offset: number): void {
-  const track = props.playback.queue[(props.playback.currentIndex ?? -1) + offset];
-  if (track) emit('control', (api) => api.playTrack(track.id));
+const loopLabel = computed(() => ({ none: '顺序播放', playlist: '列表循环', track: '单曲循环' })[props.playback.loopMode]);
+function cycleLoop(): void {
+  const mode = props.playback.loopMode === 'none' ? 'playlist' : props.playback.loopMode === 'playlist' ? 'track' : 'none';
+  emit('control', api => api.setLoopMode(mode));
 }
 function seek(event: Event): void {
   emit('control', (api) => api.seek(Number((event.target as HTMLInputElement).value)));
@@ -21,11 +22,12 @@ function seek(event: Event): void {
 <template>
   <div class="playback-controls">
     <div class="transport">
+      <button class="icon-button playback-mode shuffle-toggle" aria-label="随机播放" :aria-pressed="playback.shuffle" :title="playback.shuffle ? '关闭随机播放，恢复原顺序' : '开启列表随机播放'" @click="emit('control', api => api.setShuffle(!playback.shuffle))"><Shuffle :size="17" /></button>
       <button
         class="icon-button"
         aria-label="上一首"
-        :disabled="playback.currentIndex === null || playback.currentIndex === 0"
-        @click="adjacent(-1)"
+        :disabled="adjacentIndex(playback, -1) === null"
+        @click="emit('control', api => api.previous())"
       >
         <SkipBack :size="19" />
       </button>
@@ -53,13 +55,12 @@ function seek(event: Event): void {
       <button
         class="icon-button"
         aria-label="下一首"
-        :disabled="
-          playback.currentIndex === null || playback.currentIndex >= playback.queue.length - 1
-        "
-        @click="adjacent(1)"
+        :disabled="adjacentIndex(playback, 1) === null"
+        @click="emit('control', api => api.next())"
       >
         <SkipForward :size="19" />
       </button>
+      <button class="icon-button playback-mode repeat-toggle" :aria-label="loopLabel" :aria-pressed="playback.loopMode !== 'none'" :title="`${loopLabel}：点击切换顺序播放、列表循环、单曲循环`" @click="cycleLoop"><Repeat1 v-if="playback.loopMode === 'track'" :size="17" /><Repeat v-else :size="17" /></button>
       <button
         class="icon-button stop-button"
         aria-label="停止"

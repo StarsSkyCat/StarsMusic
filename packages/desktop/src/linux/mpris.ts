@@ -2,7 +2,7 @@ import dbus from 'dbus-next';
 import type { MessageBus } from 'dbus-next';
 import type { PlaybackPort, WindowPort } from '../platform.ts';
 import { adjacent, togglePlayback } from '../platform.ts';
-import type { PlaybackSnapshot } from '../../../contracts/src/playback.ts';
+import { adjacentIndex, type PlaybackSnapshot } from '../../../contracts/src/playback.ts';
 
 const { Interface } = dbus.interface;
 export const mprisPath = '/org/mpris/MediaPlayer2';
@@ -54,6 +54,16 @@ class PlayerInterface extends Interface {
   }
   OpenUri(): never { throw new dbus.DBusError('org.mpris.MediaPlayer2.Error.NotSupported', 'OpenUri is not supported'); }
   get PlaybackStatus() { return this.state.status === 'playing' ? 'Playing' : ['paused', 'loading'].includes(this.state.status) ? 'Paused' : 'Stopped'; }
+  get LoopStatus() { return { none: 'None', playlist: 'Playlist', track: 'Track' }[this.state.loopMode]; }
+  set LoopStatus(value: string) {
+    if (value !== 'None' && value !== 'Playlist' && value !== 'Track') throw new dbus.DBusError('org.freedesktop.DBus.Error.InvalidArgs', 'Invalid loop status');
+    this.#player.setLoopMode(value === 'Track' ? 'track' : value === 'Playlist' ? 'playlist' : 'none');
+  }
+  get Shuffle() { return this.state.shuffle; }
+  set Shuffle(value: boolean) {
+    if (typeof value !== 'boolean') throw new dbus.DBusError('org.freedesktop.DBus.Error.InvalidArgs', 'Invalid shuffle');
+    this.#player.setShuffle(value);
+  }
   get Rate() { return 1; }
   set Rate(value: number) { if (value !== 1) throw new dbus.DBusError('org.freedesktop.DBus.Error.NotSupported', 'Only rate 1 is supported'); }
   get MinimumRate() { return 1; } get MaximumRate() { return 1; }
@@ -72,8 +82,8 @@ class PlayerInterface extends Interface {
       ...(this.#artUrl ? { 'mpris:artUrl': new dbus.Variant('s', this.#artUrl) } : {}),
     };
   }
-  get CanGoNext() { return this.state.currentIndex !== null && this.state.currentIndex + 1 < this.state.queue.length; }
-  get CanGoPrevious() { return this.state.currentIndex !== null && this.state.currentIndex > 0; }
+  get CanGoNext() { return adjacentIndex(this.state, 1) !== null; }
+  get CanGoPrevious() { return adjacentIndex(this.state, -1) !== null; }
   get CanPlay() { return this.state.queue.length > 0; }
   get CanPause() { return ['paused', 'playing'].includes(this.state.status); }
   get CanSeek() { return this.CanPause && this.state.durationSeconds > 0; }
@@ -81,7 +91,7 @@ class PlayerInterface extends Interface {
   Seeked(position: bigint): bigint { return position; }
   setArt(url: string | undefined): void { this.#artUrl = url; this.publish(); }
   publish(): void {
-    try { Interface.emitPropertiesChanged(this, { PlaybackStatus: this.PlaybackStatus, Metadata: this.Metadata, Volume: this.Volume,
+    try { Interface.emitPropertiesChanged(this, { PlaybackStatus: this.PlaybackStatus, LoopStatus: this.LoopStatus, Shuffle: this.Shuffle, Metadata: this.Metadata, Volume: this.Volume,
       CanGoNext: this.CanGoNext, CanGoPrevious: this.CanGoPrevious, CanPlay: this.CanPlay, CanPause: this.CanPause, CanSeek: this.CanSeek }, []); } catch { /* 桌面总线故障不传播到音频状态源。 */ }
   }
 }
@@ -90,6 +100,7 @@ PlayerInterface.configureMembers({ methods: { Next: {}, Previous: {}, Pause: {},
     ...Object.fromEntries([['PlaybackStatus', 's'], ['Metadata', 'a{sv}'], ['Position', 'x'], ['MinimumRate', 'd'], ['MaximumRate', 'd'],
       ['CanGoNext', 'b'], ['CanGoPrevious', 'b'], ['CanPlay', 'b'], ['CanPause', 'b'], ['CanSeek', 'b'], ['CanControl', 'b']].map(([key, signature]) => [key!, { signature: signature!, access: 'read' as const }])),
     Rate: { signature: 'd', access: 'readwrite' }, Volume: { signature: 'd', access: 'readwrite' },
+    LoopStatus: { signature: 's', access: 'readwrite' }, Shuffle: { signature: 'b', access: 'readwrite' },
   } });
 
 export class MprisService {
