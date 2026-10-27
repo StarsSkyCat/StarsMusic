@@ -2,8 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, Flame, Headphones, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
-import { catalogPageSize, neteaseCategories, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
+import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
 import TrackTable from './TrackTable.vue';
+import GlassSelect from './GlassSelect.vue';
 import NeteaseArtwork from './NeteaseArtwork.vue';
 import './netease.css';
 import type { DisplayTrack } from './music-ui';
@@ -95,8 +96,8 @@ onMounted(() => {
         <div class="ne-search-bottom"><div class="catalog-search-types" aria-label="搜索内容"><button type="button" :aria-pressed="searchType === 'songs'" @click="searchType = 'songs'; request()">歌曲</button><button type="button" :aria-pressed="searchType === 'playlists'" @click="searchType = 'playlists'; request()">歌单</button></div><span>按 Enter，遇见下一首喜欢</span></div>
       </form>
       <div v-if="tab === 'playlists' && !detail" class="catalog-filters">
-        <div class="ne-genres" aria-label="快速选择歌单分类"><button v-for="genre in (['全部', '华语', '流行', '摇滚', '轻音乐', '电子'] as const)" :key="genre" :aria-pressed="category === genre" @click="category = genre; request()">{{ genre }}</button></div>
-        <div class="ne-filter-selects"><label><span class="sr-only">歌单分类</span><select v-model="category" aria-label="歌单分类" @change="request()"><option v-for="item in neteaseCategories" :key="item" :value="item">{{ item }}</option></select></label><label><span class="sr-only">歌单排序</span><select v-model="order" aria-label="歌单排序" @change="request()"><option value="hot">热门</option><option value="new">最新</option></select></label></div>
+        <div class="ne-genres" aria-label="快速选择歌单分类"><button v-for="genre in (['全部', '华语', '欧美', '日语', '韩语', '流行', '摇滚', '民谣', '电子', '轻音乐', '古风', 'ACG'] as const)" :key="genre" :aria-pressed="category === genre" @click="category = genre; request()">{{ genre }}</button></div>
+        <GlassSelect v-model="order" label="歌单排序" :options="[{ value: 'hot', label: '热门' }, { value: 'new', label: '最新' }]" @change="request()" />
       </div>
       <button v-if="detail" class="text-button catalog-back" @click="back"><ArrowLeft :size="16" />返回{{ tab === 'search' ? '搜索结果' : '歌单发现' }}</button>
       <div v-if="detail && catalog.playlist" class="ne-detail-hero">
