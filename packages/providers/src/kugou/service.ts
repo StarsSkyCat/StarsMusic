@@ -29,18 +29,23 @@ function canFallbackPreview(error: unknown): boolean {
 function normalizeName(value: string): string {
   return value.normalize('NFKC').toLowerCase().replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape)$/i, '').replace(/[^\p{L}\p{N}]+/gu, '');
 }
+function withoutExplicitAlias(value: string): string {
+  return value.normalize('NFKC').replace(/\s*\((?:又名|别名|原名)\s*:[^()]+\)\s*$/u, '').trim();
+}
 function namesMatch(expected: string, fileName: string, artists: readonly string[] = []): boolean {
   // 只比较完整名称。共享歌手、一个词或相似片段不能证明是同一首歌。
   const artistNames = new Set([...artists.map(normalizeName), normalizeName(artists.join('、'))].filter(Boolean));
   const stripKnownArtist = (value: string): string => {
     const parts = value.split(/\s*[-–—]\s*/);
-    return parts.length > 1 && artistNames.has(normalizeName(parts[0]!)) ? parts.slice(1).join('-') : value;
+    if (parts.length > 1 && artistNames.has(normalizeName(parts[0]!))) return parts.slice(1).join('-');
+    if (parts.length > 1 && artistNames.has(normalizeName(parts.at(-1)!))) return parts.slice(0, -1).join('-');
+    return value;
   };
-  const left = normalizeName(stripKnownArtist(expected)); const right = normalizeName(stripKnownArtist(fileName));
+  const left = normalizeName(withoutExplicitAlias(stripKnownArtist(expected))); const right = normalizeName(withoutExplicitAlias(stripKnownArtist(fileName)));
   if (!left || !right) return false;
   if (left === right) return true;
   // 云歌单和取链接口可能分别返回「歌手 - 歌名」或单独歌名。
-  const title = (value: string) => normalizeName(stripKnownArtist(value).replace(/^.*?\s+[-–—]\s+/, ''));
+  const title = (value: string) => normalizeName(withoutExplicitAlias(stripKnownArtist(value).replace(/^.*?\s+[-–—]\s+/, '')));
   return title(expected) === title(fileName);
 }
 export interface KugouResourceIdentity {
@@ -128,8 +133,16 @@ export function parseKugouStream(value: unknown, id: string, expected?: { name: 
   const quality = { level: ext === 'flac' ? 'lossless' as const : bitrate === undefined ? 'unknown' as const : bitrate > 128 ? 'high' as const : 'standard' as const,
     ...(bitrate ? { bitrateKbps: bitrate } : {}), ...(['mp3', 'flac', 'm4a', 'ogg', 'aac'].includes(ext) ? { codec: ext } : {}) };
   debugKugou(`media host accepted mode=${mode} host=${url.hostname} request=${id.slice(0, 6)} response=${responseHash ? responseHash.slice(0, 6) : 'none'} std=${standardHash ? standardHash.slice(0, 6) : 'none'} match=${hashMatches} expected=${expectedSeconds === undefined ? 'none' : Math.round(expectedSeconds)} responseTime=${responseSeconds === undefined ? 'none' : Math.round(responseSeconds)} durationMatch=${durationMatches} nameMatch=${nameMatch === undefined ? 'unknown' : nameMatch} fileName=${fileName ? 'set' : 'none'} priv=${String(raw.priv_status)} full=${String(raw.is_full_audio)} freeStart=${typeof raw.free_part_start} freeEnd=${typeof raw.free_part_end} ext=${typeof raw.extName} bitRate=${typeof raw.bitRate}`);
-  // 明确冲突的文件名在 hash 相同的情况下也不能放行；时长接近更不能替代身份。
-  if (nameMatch === false) throw new DomainError('track-mismatch');
+  // 播放响应的 fileName 可能省略 Remix/Live 等版本信息。只有资源详情的完整名称
+  // 已匹配所选版本，且实际返回 hash 明确属于该资源时，才以资源详情纠正文件名。
+  // 仅 std_hash 相同、曲名相似或时长接近都不能消除文件名冲突。
+  const versionlessName = expected?.name.normalize('NFKC').replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape)$/i, '')
+    .replace(/(?:\s*\([^()]*\))+\s*$/u, '').trim();
+  // 云歌单可能没有 singerinfo；资源详情已按 hash 和完整曲名核验后，可使用它的歌手前缀。
+  const resourceArtists = [...(expected?.artists ?? []), ...(identity?.name.split(/\s+[-–—]\s+/).slice(0, -1) ?? [])];
+  const resourceConfirmsFile = expected !== undefined && identity !== undefined && verifiedHashes.includes(responseHash)
+    && versionlessName !== undefined && versionlessName.length > 0 && namesMatch(versionlessName, fileName, resourceArtists);
+  if (nameMatch === false && !resourceConfirmsFile) throw new DomainError('track-mismatch');
   // 完整资源须匹配原 hash 或后台核验的同曲编码；试听另 hash 仍要求名称、歌手和有效范围。
   if (mode === 'full' && !hashMatches) throw new DomainError('track-mismatch');
   if (mode === 'preview' && !hashMatches) {

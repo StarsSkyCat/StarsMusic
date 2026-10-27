@@ -418,6 +418,66 @@ test('歌曲文件名的歌手别名差异不否定已确认 hash，但仍拒绝
   assert.throws(() => parseKugouStream({ ...stream, fileName: '另一首曲目' }, hash, expected));
 });
 
+test('曲名在前歌手在后的官方文件名及明确又名标注不误判为错歌', () => {
+  const mismatch = (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch';
+  const expected = { name: '合成歌手 - 合成曲目', durationMs: 30000, artists: ['合成歌手'] };
+  assert.equal(parseKugouStream({ ...stream, fileName: '合成曲目 - 合成歌手' }, hash, expected).access.kind, 'full');
+  const alias = { ...expected, name: '合成歌手 - 合成曲目 (又名：synthetic alias)' };
+  assert.equal(parseKugouStream({ ...stream, fileName: '合成曲目' }, hash, alias).access.kind, 'full');
+  assert.throws(() => parseKugouStream({ ...stream, fileName: '另一首曲目 - 合成歌手' }, hash, expected), mismatch);
+  assert.throws(() => parseKugouStream({ ...stream, fileName: '合成曲目 - 另一位歌手' }, hash, expected), mismatch);
+  assert.throws(() => parseKugouStream({ ...stream, hash: 'b'.repeat(32), fileName: '合成曲目 - 合成歌手' }, hash, expected), mismatch);
+  assert.throws(() => parseKugouStream({ ...stream, fileName: '合成曲目 (Live)' }, hash, alias), mismatch);
+});
+
+test('播放文件名省略版本时须由精确资源名称和实际编码 hash 共同确认', () => {
+  const encoded = 'b'.repeat(32); const other = 'c'.repeat(32);
+  const expected = { name: '合成曲目 (Remix)(合成版)', durationMs: 30000, artists: ['合成歌手'] };
+  const response = { ...stream, fileName: '合成曲目', hash: encoded, std_hash: hash, is_full_audio: 1 };
+  const identity = parseKugouResourceIdentity(ok([{ hash, name: '合成歌手 - 合成曲目 (Remix)(合成版)', relate_goods: [{ hash: encoded }] }]), hash);
+  const mismatch = (e: unknown) => e instanceof DomainError && e.code === 'track-mismatch';
+  assert.throws(() => parseKugouStream(response, hash, expected), mismatch);
+  for (const returnedHash of [hash, encoded]) {
+    assert.equal(parseKugouStream({ ...response, hash: returnedHash }, hash, expected, 'full', identity).access.kind, 'full');
+  }
+  assert.equal(parseKugouStream({ ...response, fileName: '合成曲目 - 合成歌手' }, hash,
+    { ...expected, name: '合成歌手 - 合成曲目 (Remix)(合成版)', artists: [] }, 'full', identity).access.kind, 'full');
+  // std_hash 关联不等于实际返回文件已核实；不能放行未列出的编码或错误版本。
+  assert.throws(() => parseKugouStream({ ...response, hash: other }, hash, expected, 'full', identity), mismatch);
+  assert.throws(() => parseKugouStream({ ...response, hash: undefined }, hash, expected, 'full', identity), mismatch);
+  assert.throws(() => parseKugouStream({ ...response, fileName: '另一首曲目' }, hash, expected, 'full', identity), mismatch);
+  assert.throws(() => parseKugouStream({ ...response, fileName: '合成曲目 (Live)' }, hash, expected, 'full', identity), mismatch);
+  const wrongVersion = parseKugouResourceIdentity(ok([{ hash, name: '合成歌手 - 合成曲目 (Live)', relate_goods: [{ hash: encoded }] }]), hash);
+  assert.throws(() => parseKugouStream(response, hash, expected, 'full', wrongVersion), mismatch);
+  assert.throws(() => parseKugouStream(response, hash, { ...expected, name: '另一首曲目' }, 'full', identity), mismatch);
+  // 身份确认不产生播放授权，试听仍只接受明确范围。
+  const restricted = { ...response, is_full_audio: 0, priv_status: 1 };
+  assert.throws(() => parseKugouStream(restricted, hash, expected, 'preview', identity), (e: unknown) => e instanceof DomainError && e.code === 'playback-access-unknown');
+  assert.deepEqual(parseKugouStream({ ...restricted, free_part_start: 0, free_part_end: 1000 }, hash, expected, 'preview', identity).access,
+    { kind: 'preview', startMs: 0, durationMs: 1000 });
+});
+
+test('版本文件名误拒可补查一次资源详情并继续权限回退，不公开后台身份关系', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport); const calls: string[] = [];
+  try {
+    await connect(service); await service.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 1, info: [{ hash, name: '合成曲目 (Remix)', singerinfo: [{ name: '合成歌手' }] }] }));
+    await service.loadPlaylist('1', 0);
+    transport.handlers.set('stream', async data => {
+      calls.push(data.freePart ? 'preview' : 'full');
+      return { ...stream, fileName: '合成曲目', priv_status: 1, ...(data.freePart ? { is_full_audio: 1 } : {}) };
+    });
+    transport.handlers.set('resource', async data => {
+      calls.push('resource'); assert.equal(data.hash, hash); assert.equal(transport.authenticated, true);
+      return ok([{ hash, name: '合成歌手 - 合成曲目 (Remix)', relate_goods: [{ hash: 'b'.repeat(32) }] }]);
+    });
+    assert.equal((await service.resolveTrack(hash, service.snapshot().generation)).access.kind, 'full');
+    assert.deepEqual(calls, ['full', 'resource', 'preview']);
+    assert.equal(service.snapshot().error, undefined);
+    assert.equal(JSON.stringify(service.snapshot()).includes('relate_goods'), false);
+  } finally { service.dispose(); }
+});
+
 
 test('编码关系查询晚到时仍丢弃旧曲目，不覆盖新的播放结果', async () => {
   const transport = new FakeTransport(); const service = create(() => transport);
