@@ -25,4 +25,6 @@
 
 独立包在 Wayland 下实际点击最小化、最大化/还原和关闭均通过，窗口事件与按钮状态同步；匿名后台、PipeWire、MPRIS、单实例也通过。当前 niri 的 XWayland 环境中，按钮与直接调用 Electron 原生 minimize/maximize 均不产生窗口状态变化，不能宣称这两个动作通过；真实状态未改变时图标仍为最大化。X11 下关闭、匿名后台、PipeWire、MPRIS 和单实例通过。打包测试会单独报告原生宿主忽略操作，原生接口若有效但按钮无效仍判失败，不把 UI 故障归入宿主限制。
 
-真实 Windows/macOS、其他 Linux 桌面/发行版及完整原生拖动手势矩阵尚未验证。本机安装后的检查另行在完成后记录。
+已用 pacman 升级本机安装，再次运行 `pnpm test:package /opt/starsmusic/starsmusic`。Wayland 的最小化、最大化/还原、关闭及播放/系统集成均通过；X11 下仍明确报告上述原生宿主限制，关闭及其余检查通过。`pacman -Qk starsmusic` 验证 5615 个文件、缺失 0，安装元数据指向干净源码 `b0e9f3c1934b5ca6969329d546facd91c42f9c8a`。未关闭用户现有窗口、读取真实登录数据或修改其队列，旧进程需要重启生效。
+
+真实 Windows/macOS、其他 Linux 桌面/发行版及完整原生拖动手势矩阵尚未验证。
