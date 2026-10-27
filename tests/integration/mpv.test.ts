@@ -28,6 +28,42 @@ async function children(): Promise<number[]> {
   return result;
 }
 
+test('真实 mpv EOF 驱动顺序结束、列表回绕、单曲重播和随机一轮不重复，停止不自动重播', async () => {
+  const directory = await mkdtemp('/tmp/starsmusic-mode-mpv-');
+  const player = new MusicPlayer({ audioOutput: 'null' });
+  const files = ['a.wav', 'b.wav', 'c.wav'].map(file => path.join(directory, file));
+  try {
+    await Promise.all(files.map(file => writeSilentWav(file, .4)));
+    for (const mode of ['none', 'playlist', 'track'] as const) {
+      player.setLoopMode(mode);
+      const played: string[] = []; let generation = -1;
+      const unsubscribe = player.subscribe(state => {
+        if (state.status === 'playing' && state.generation !== generation) {
+          generation = state.generation; played.push(state.queue[state.currentIndex!]!.title);
+        }
+      });
+      await player.openFiles(files.slice(0, 2));
+      if (mode === 'none') { await until(() => player.snapshot().status === 'ended'); assert.deepEqual(played, ['a.wav', 'b.wav']); }
+      else {
+        await until(() => played.length >= 3);
+        assert.deepEqual(played.slice(0, 3), mode === 'track' ? ['a.wav', 'a.wav', 'a.wav'] : ['a.wav', 'b.wav', 'a.wav']);
+      }
+      unsubscribe(); await player.stop(); const stopped = player.snapshot().generation;
+      await delay(100); assert.equal(player.snapshot().status, 'idle'); assert.equal(player.snapshot().generation, stopped);
+    }
+    player.setLoopMode('none'); player.setShuffle(true);
+    const played: string[] = []; let generation = -1;
+    const unsubscribe = player.subscribe(state => {
+      if (state.status === 'playing' && state.generation !== generation) { generation = state.generation; played.push(state.queue[state.currentIndex!]!.id); }
+    });
+    await player.openFiles(files); const order = player.snapshot().queue.map(track => track.id);
+    await until(() => player.snapshot().status === 'ended'); unsubscribe();
+    assert.deepEqual(played, order); assert.equal(new Set(played).size, 3);
+    assert.ok((await children()).length <= 1);
+  } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
+  assert.deepEqual(await children(), []);
+});
+
 test('实际 mpv 私有 FD 握手、请求关联、头重置与退出清理', async () => {
   const client = new MpvClient({ audioOutput: 'null', onEvent: () => undefined, onFailure: () => undefined });
   try {

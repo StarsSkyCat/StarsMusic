@@ -1,9 +1,9 @@
 import { parseStoredPlaybackSession, type StoredPlaybackSession, type StoredPlaybackTrack, type StoredRemoteTrack } from '../../contracts/src/playback-session.ts';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { appError, DomainError, normalizeError, type AppError } from '../../contracts/src/errors.ts';
-import { parsePlaybackSnapshot, playbackNumber, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
+import { adjacentIndex, parseLoopMode, parsePlaybackSnapshot, playbackNumber, type LoopMode, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import { MpvClient, type MpvOptions } from './mpv-client.ts';
 import { parseStreamResolution, type StreamResolution, type OnlineProviderId } from '../../contracts/src/music.ts';
 import { MediaGateway } from './media-gateway.ts';
@@ -23,6 +23,7 @@ export class MusicPlayer {
     positionSeconds: 0, durationSeconds: 0, volume: 70,
   });
   #tracks: PlayerTrack[] = [];
+  #originalOrder: string[] = [];
   #abort = new AbortController();
   #gateway: MediaGateway | undefined;
   #engine: MpvClient | undefined;
@@ -61,12 +62,15 @@ export class MusicPlayer {
   }
   exportSession(): StoredPlaybackSession {
     const queue = this.#tracks.flatMap(track => { const saved = this.#storedTrack(track); return saved ? [saved] : []; });
+    const savedIds = new Set(queue.map(track => track.id));
     const current = this.#tracks[this.#state.currentIndex ?? -1];
     const currentId = current && queue.some(track => track.id === current.id) ? current.id : null;
     return parseStoredPlaybackSession({ version: 1, queue, currentId,
       positionSeconds: currentId && this.#state.status !== 'ended' ? Math.min(604800, this.#state.positionSeconds) : 0,
       durationSeconds: currentId ? Math.min(604800, this.#state.durationSeconds) : 0,
-      volume: this.#desiredVolume, muted: this.#state.muted, lastAudibleVolume: this.#lastAudibleVolume });
+      volume: this.#desiredVolume, muted: this.#state.muted, lastAudibleVolume: this.#lastAudibleVolume,
+      loopMode: this.#state.loopMode, shuffle: this.#state.shuffle,
+      ...(this.#state.shuffle ? { originalOrder: this.#originalOrder.filter(id => savedIds.has(id)) } : {}) });
   }
   restoreSession(value: StoredPlaybackSession, resolve: (track: StoredRemoteTrack, signal: AbortSignal) => Promise<StreamResolution>): void {
     if (this.#tracks.length || this.#engine || this.#disposed) throw new DomainError('stale-operation');
@@ -75,11 +79,13 @@ export class MusicPlayer {
       ? { id: track.id, title: track.title, ...(track.artist ? { artist: track.artist } : {}), path: track.path }
       : { id: track.id, title: track.title, ...(track.artist ? { artist: track.artist } : {}), sourceId: track.sourceId, accountId: track.accountId, ...(track.durationMs === undefined ? {} : { durationMs: track.durationMs }), provider: track.kind, resolve: signal => resolve(track, signal) });
     this.#restored = new Set(saved.queue.filter(track => track.kind !== 'local').map(track => track.id));
+    this.#originalOrder = saved.originalOrder ?? saved.queue.map(track => track.id);
     const index = this.#tracks.findIndex(track => track.id === saved.currentId);
     this.#desiredVolume = saved.volume; this.#lastAudibleVolume = saved.lastAudibleVolume;
     this.#bookmark = index < 0 ? undefined : { id: saved.currentId!, seconds: saved.positionSeconds, duration: saved.durationSeconds };
-    this.#update({ queue: this.#queue(), currentIndex: index < 0 ? null : index, status: index < 0 ? 'idle' : 'paused',
-      positionSeconds: index < 0 ? 0 : saved.positionSeconds, durationSeconds: index < 0 ? 0 : saved.durationSeconds, volume: saved.volume, muted: saved.muted });
+    this.#update({ queue: this.#queue(false), currentIndex: index < 0 ? null : index, status: index < 0 ? 'idle' : 'paused',
+      positionSeconds: index < 0 ? 0 : saved.positionSeconds, durationSeconds: index < 0 ? 0 : saved.durationSeconds, volume: saved.volume, muted: saved.muted,
+      loopMode: saved.loopMode ?? 'none', shuffle: saved.shuffle ?? false });
   }
   async bindRestoredProvider(provider: OnlineProviderId, accountId: string): Promise<void> {
     await this.#removeTracks(track => track.provider === provider && this.#restored.has(track.id) && track.accountId !== accountId);
@@ -112,6 +118,7 @@ export class MusicPlayer {
       return Promise.resolve(this.reportError(appError('file-unavailable')));
     }
     this.#tracks = paths.map((file) => ({ id: randomUUID(), title: path.basename(file), path: file }));
+    this.#newQueueOrder();
     this.#update({ queue: this.#queue(), currentIndex: null, status: 'idle' });
     return this.#switch(0);
   }
@@ -133,10 +140,54 @@ export class MusicPlayer {
     this.#seekListeners.add(listener); return () => { this.#seekListeners.delete(listener); };
   }
 
-  #queue(): PlaybackSnapshot['queue'] {
+  #queue(syncOrder = true): PlaybackSnapshot['queue'] {
+    const ids = new Set(this.#tracks.map(track => track.id));
+    if (syncOrder && !this.#state.shuffle) this.#originalOrder = [...ids];
+    else if (syncOrder) {
+      const known = new Set(this.#originalOrder);
+      this.#originalOrder = [...this.#originalOrder.filter(id => ids.has(id)), ...[...ids].filter(id => !known.has(id))];
+    }
     return this.#tracks.map(({ id, title, provider, artist, sourceId, detail }) => ({ id, title, provider: provider ?? 'local',
       ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}), ...(detail ? { detail } : {}),
     }));
+  }
+
+  // 随机顺序直接体现在队列中；上一首及下一首预览沿用同一顺序，一轮内不重复。
+  #shuffleTracks(currentId?: string): void {
+    const current = this.#tracks.find(track => track.id === currentId);
+    const tracks = this.#tracks.filter(track => track.id !== currentId);
+    for (let i = tracks.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1); [tracks[i], tracks[j]] = [tracks[j]!, tracks[i]!];
+    }
+    this.#tracks = current ? [current, ...tracks] : tracks;
+  }
+  #newQueueOrder(): void {
+    this.#originalOrder = this.#tracks.map(track => track.id);
+    if (this.#state.shuffle) this.#shuffleTracks();
+  }
+  setLoopMode(mode: LoopMode): PlaybackSnapshot {
+    this.#update({ loopMode: parseLoopMode(mode) }); return this.#state;
+  }
+  setShuffle(enabled: boolean): PlaybackSnapshot {
+    if (typeof enabled !== 'boolean') throw new DomainError('invalid-input');
+    if (enabled === this.#state.shuffle) return this.#state;
+    const currentId = this.#tracks[this.#state.currentIndex ?? -1]?.id;
+    if (enabled) { this.#originalOrder = this.#tracks.map(track => track.id); this.#shuffleTracks(currentId); }
+    else {
+      const tracks = new Map(this.#tracks.map(track => [track.id, track]));
+      this.#tracks = this.#originalOrder.flatMap(id => tracks.has(id) ? [tracks.get(id)!] : []);
+    }
+    const index = this.#tracks.findIndex(track => track.id === currentId);
+    this.#update({ shuffle: enabled, queue: this.#queue(false), currentIndex: index < 0 ? null : index });
+    return this.#state;
+  }
+  next(): Promise<PlaybackSnapshot> { return this.#adjacent(1); }
+  previous(): Promise<PlaybackSnapshot> { return this.#adjacent(-1); }
+  #adjacent(offset: 1 | -1): Promise<PlaybackSnapshot> {
+    const index = adjacentIndex(this.#state, offset);
+    if (index === null) return Promise.resolve(this.#state);
+    if (['idle', 'ended', 'error'].includes(this.#state.status)) return this.cueTrack(this.#tracks[index]!.id);
+    return this.#switch(index, false, this.#state.status === 'paused' || (this.#state.status === 'loading' && this.#paused));
   }
 
   moveNext(id: string): PlaybackSnapshot {
@@ -179,6 +230,7 @@ export class MusicPlayer {
     if (this.#disposed) return Promise.resolve(this.#state);
     if (!tracks.length || tracks.length > 10000) throw new DomainError('invalid-input');
     this.#tracks = tracks.map(track => ({ ...track, id: randomUUID(), provider }));
+    this.#newQueueOrder();
     this.#update({ queue: this.#queue(), currentIndex: null, status: 'idle' });
     return this.#switch(0);
   }
@@ -305,8 +357,8 @@ export class MusicPlayer {
       this.#pendingSeek?.done(false); this.#pendingSeek = undefined;
       this.#loaded = false;
       if (event.reason === 'eof') {
-        const next = (this.#state.currentIndex ?? -1) + 1;
-        if (next < this.#tracks.length) void this.#switch(next);
+        const next = this.#state.loopMode === 'track' ? this.#state.currentIndex : adjacentIndex(this.#state, 1);
+        if (next !== null) void this.#switch(next);
         else this.#update({ status: 'ended' });
       }
       else if (event.reason === 'error' || event.reason === 'redirect') {

@@ -8,6 +8,8 @@ export const playbackChannels = {
   moveNext: 'starsmusic:playback:move-next',
   removeTrack: 'starsmusic:playback:remove-track',
   clearUpcoming: 'starsmusic:playback:clear-upcoming',
+  next: 'starsmusic:playback:next', previous: 'starsmusic:playback:previous',
+  setLoopMode: 'starsmusic:playback:set-loop-mode', setShuffle: 'starsmusic:playback:set-shuffle',
   resume: 'starsmusic:playback:resume',
   pause: 'starsmusic:playback:pause',
   stop: 'starsmusic:playback:stop',
@@ -15,6 +17,17 @@ export const playbackChannels = {
   setVolume: 'starsmusic:playback:set-volume', setMuted: 'starsmusic:playback:set-muted',
   stateChanged: 'starsmusic:playback:state-changed',
 } as const;
+
+export type LoopMode = 'none' | 'playlist' | 'track';
+export function parseLoopMode(value: unknown): LoopMode {
+  return choice(value, ['none', 'playlist', 'track'], 'playback.loopMode');
+}
+export function adjacentIndex(state: Pick<PlaybackSnapshot, 'queue' | 'currentIndex' | 'loopMode'>, offset: 1 | -1): number | null {
+  if (state.currentIndex === null || !state.queue.length) return null;
+  const index = state.currentIndex + offset;
+  if (index >= 0 && index < state.queue.length) return index;
+  return state.loopMode === 'none' ? null : (index + state.queue.length) % state.queue.length;
+}
 
 export interface QueueTrack {
   readonly id: string;
@@ -35,6 +48,8 @@ export interface PlaybackSnapshot {
   readonly durationSeconds: number;
   readonly volume: number;
   readonly muted: boolean;
+  readonly loopMode: LoopMode;
+  readonly shuffle: boolean;
   readonly engineVersion?: string;
   readonly audioOutput?: string;
   readonly error?: AppError;
@@ -48,6 +63,10 @@ export interface PlaybackApi {
   moveNext(id: string): Promise<PlaybackSnapshot>;
   removeTrack(id: string): Promise<PlaybackSnapshot>;
   clearUpcoming(): Promise<PlaybackSnapshot>;
+  next(): Promise<PlaybackSnapshot>;
+  previous(): Promise<PlaybackSnapshot>;
+  setLoopMode(mode: LoopMode): Promise<PlaybackSnapshot>;
+  setShuffle(enabled: boolean): Promise<PlaybackSnapshot>;
   resume(): Promise<PlaybackSnapshot>;
   pause(): Promise<PlaybackSnapshot>;
   stop(): Promise<PlaybackSnapshot>;
@@ -67,6 +86,7 @@ export function playbackNumber(value: unknown, maximum = Number.MAX_SAFE_INTEGER
 export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
   const input = record(value, 'playback');
   if (input.muted !== undefined && typeof input.muted !== 'boolean') throw new ContractValidationError('playback.muted');
+  if (input.shuffle !== undefined && typeof input.shuffle !== 'boolean') throw new ContractValidationError('playback.shuffle');
   if (!Array.isArray(input.queue) || input.queue.length > 10000) throw new ContractValidationError('playback.queue');
   const queue = input.queue.map((value: unknown) => {
     const item = record(value, 'playback.queue.item');
@@ -91,6 +111,7 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
     positionSeconds: playbackNumber(input.positionSeconds),
     durationSeconds: playbackNumber(input.durationSeconds),
     volume: playbackNumber(input.volume, 100), muted: input.muted === true,
+    loopMode: input.loopMode === undefined ? 'none' : parseLoopMode(input.loopMode), shuffle: input.shuffle === true,
     ...(input.engineVersion === undefined ? {} : { engineVersion: text(input.engineVersion, 'playback.engineVersion') }),
     ...(input.audioOutput === undefined ? {} : { audioOutput: text(input.audioOutput, 'playback.audioOutput') }),
     ...(input.saveError === undefined ? {} : { saveError: parseAppError(input.saveError) }),
@@ -102,10 +123,12 @@ export function parsePlaybackArgument(command: string, args: readonly unknown[])
   const trackCommands: readonly string[] = [playbackChannels.playTrack, playbackChannels.moveNext, playbackChannels.removeTrack];
   if (trackCommands.includes(command) && args.length === 1) return text(args[0], 'playback.trackId');
   if (command === playbackChannels.setMuted && args.length === 1 && typeof args[0] === 'boolean') return args[0];
+  if (command === playbackChannels.setShuffle && args.length === 1 && typeof args[0] === 'boolean') return args[0];
+  if (command === playbackChannels.setLoopMode && args.length === 1) return parseLoopMode(args[0]);
   if (command === playbackChannels.seek && args.length === 1) return playbackNumber(args[0]);
   if (command === playbackChannels.setVolume && args.length === 1) return playbackNumber(args[0], 100);
   const noArguments: readonly string[] = [playbackChannels.getState, playbackChannels.openFiles,
-    playbackChannels.resume, playbackChannels.pause, playbackChannels.stop, playbackChannels.clearUpcoming];
+    playbackChannels.resume, playbackChannels.pause, playbackChannels.stop, playbackChannels.clearUpcoming, playbackChannels.next, playbackChannels.previous];
   if (noArguments.includes(command) && args.length === 0) return undefined;
   throw new ContractValidationError('playback.command');
 }

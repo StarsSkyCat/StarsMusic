@@ -1,5 +1,5 @@
 import { ContractValidationError, record } from './validation.ts';
-import { playbackNumber } from './playback.ts';
+import { playbackNumber, parseLoopMode, type LoopMode } from './playback.ts';
 
 // 仅可信后台使用；不经 preload 暴露。白名单不包含凭据、地址或播放权限缓存。
 interface StoredTrackBase { id: string; title: string; artist?: string }
@@ -8,6 +8,7 @@ export type StoredPlaybackTrack = (StoredTrackBase & { kind: 'local'; path: stri
 export interface StoredPlaybackSession {
   version: 1; queue: StoredPlaybackTrack[]; currentId: string | null;
   positionSeconds: number; durationSeconds: number; volume: number; muted: boolean; lastAudibleVolume: number;
+  loopMode?: LoopMode; shuffle?: boolean; originalOrder?: string[];
 }
 function invalid(): never { throw new ContractValidationError('playback.session'); }
 function string(value: unknown, max: number): string {
@@ -35,13 +36,22 @@ export function parseStoredPlaybackTrack(value: unknown): StoredPlaybackTrack {
 }
 export function parseStoredPlaybackSession(value: unknown): StoredPlaybackSession {
   const row = record(value, 'playback.session');
-  keys(row, ['version', 'queue', 'currentId', 'positionSeconds', 'durationSeconds', 'volume', 'muted', 'lastAudibleVolume']);
+  keys(row, ['version', 'queue', 'currentId', 'positionSeconds', 'durationSeconds', 'volume', 'muted', 'lastAudibleVolume', 'loopMode', 'shuffle', 'originalOrder']);
   if (row.version !== 1 || !Array.isArray(row.queue) || row.queue.length > 10000 || typeof row.muted !== 'boolean') invalid();
   const queue = row.queue.map(parseStoredPlaybackTrack);
   const ids = new Set(queue.map(track => track.id));
   if (ids.size !== queue.length || (row.currentId !== null && (typeof row.currentId !== 'string' || !ids.has(row.currentId)))) invalid();
   const lastAudibleVolume = playbackNumber(row.lastAudibleVolume, 100); if (lastAudibleVolume <= 0) invalid();
+  if (row.shuffle !== undefined && typeof row.shuffle !== 'boolean') invalid();
+  let originalOrder: string[] | undefined;
+  if (row.originalOrder !== undefined) {
+    if (!Array.isArray(row.originalOrder) || row.originalOrder.length !== queue.length) invalid();
+    originalOrder = row.originalOrder.map(value => string(value, 100));
+    if (new Set(originalOrder).size !== ids.size || originalOrder.some(id => !ids.has(id))) invalid();
+  }
   return { version: 1, queue, currentId: row.currentId as string | null,
     positionSeconds: playbackNumber(row.positionSeconds, 604800), durationSeconds: playbackNumber(row.durationSeconds, 604800),
-    volume: playbackNumber(row.volume, 100), muted: row.muted, lastAudibleVolume };
+    volume: playbackNumber(row.volume, 100), muted: row.muted, lastAudibleVolume,
+    ...(row.loopMode === undefined ? {} : { loopMode: parseLoopMode(row.loopMode) }),
+    ...(row.shuffle === undefined ? {} : { shuffle: row.shuffle }), ...(originalOrder ? { originalOrder } : {}) };
 }

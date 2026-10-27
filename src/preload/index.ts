@@ -5,7 +5,7 @@ import { parsePresentationSnapshot, presentationChannels } from '../../packages/
 import { contextBridge, ipcRenderer } from 'electron';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
 import { credentialChannels, credentialProviderIds, parseCredentialStatus, type CredentialProvider } from '../../packages/contracts/src/credentials';
-import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
+import { playbackChannels, parsePlaybackSnapshot, type LoopMode } from '../../packages/contracts/src/playback';
 import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/kugou';
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
 import { parseCatalogRequest, type CatalogRequest } from '../../packages/contracts/src/netease-catalog';
@@ -66,6 +66,10 @@ const api: DesktopApi = Object.freeze({
     moveNext: (id: string) => invokePlayback(playbackChannels.moveNext, id),
     removeTrack: (id: string) => invokePlayback(playbackChannels.removeTrack, id),
     clearUpcoming: () => invokePlayback(playbackChannels.clearUpcoming),
+    next: () => invokePlayback(playbackChannels.next),
+    previous: () => invokePlayback(playbackChannels.previous),
+    setLoopMode: (mode: LoopMode) => invokePlayback(playbackChannels.setLoopMode, mode),
+    setShuffle: (enabled: boolean) => invokePlayback(playbackChannels.setShuffle, enabled),
     resume: () => invokePlayback(playbackChannels.resume),
     pause: () => invokePlayback(playbackChannels.pause),
     stop: () => invokePlayback(playbackChannels.stop),

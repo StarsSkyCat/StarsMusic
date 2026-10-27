@@ -31,6 +31,20 @@ test('播放保存契约严格白名单，拒绝流地址/凭据/相对路径/�
   ]) assert.throws(() => parseStoredPlaybackSession(value));
 });
 
+test('播放模式和随机原序跨 SQLite 实例恢复，旧记录默认顺序播放，拒绝损坏原序', async () => {
+  const directory = await mkdtemp('/tmp/starsmusic-mode-db-'); const file = path.join(directory, 'playback.sqlite');
+  let store = new SqlitePlaybackSessionStore(file); const first = new MusicPlayer(); const second = new MusicPlayer();
+  try {
+    first.restoreSession(saved(), neverResolve); assert.equal(first.snapshot().loopMode, 'none'); assert.equal(first.snapshot().shuffle, false);
+    first.setLoopMode('track'); first.setShuffle(true); const session = first.exportSession();
+    await store.write(session); await store.close(); store = new SqlitePlaybackSessionStore(file);
+    const read = (await store.read())!; assert.deepEqual(read, session); second.restoreSession(read, neverResolve);
+    assert.equal(second.snapshot().loopMode, 'track'); assert.equal(second.snapshot().shuffle, true);
+    second.setShuffle(false); assert.deepEqual(second.snapshot().queue.map(track => track.id), saved().queue.map(track => track.id));
+    for (const invalid of [{ ...session, loopMode: 'invalid' }, { ...session, shuffle: 1 }, { ...session, originalOrder: [] }, { ...session, originalOrder: session.queue.map(() => session.queue[0]!.id) }]) assert.throws(() => parseStoredPlaybackSession(invalid));
+  } finally { await store.close(); await first.dispose(); await second.dispose(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test('SQLite 跨实例恢复队列顺序、进度与静音，事务失败保留此前记录及私有文件权限', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-playback-db-')); const file = path.join(directory, 'playback.sqlite');
   let store = new SqlitePlaybackSessionStore(file);

@@ -86,3 +86,32 @@ test('未播放时也保留音量与独立静音，零音量取消静音恢复�
     assert.equal(player.snapshot().volume,91); assert.equal(player.snapshot().muted,false);
   } finally {await player.dispose();}
 });
+
+test('随机队列一轮无重复、保留当前曲目和代次，关闭恢复原序，循环切歌且停放不启动音频', async () => {
+  const player = new MusicPlayer(); const restored = new MusicPlayer();
+  try {
+    await player.openFiles(Array.from({ length: 12 }, (_, i) => `/tmp/starsmusic-mode-missing-${i}.wav`));
+    const original = player.snapshot().queue.map(track => track.id);
+    await player.cueTrack(original[5]!); const generation = player.snapshot().generation;
+    player.setShuffle(true);
+    const shuffled = player.snapshot().queue.map(track => track.id);
+    assert.equal(shuffled[0], original[5]); assert.equal(player.snapshot().generation, generation);
+    assert.deepEqual([...shuffled].sort(), [...original].sort());
+    player.setLoopMode('playlist');
+    // 真实 SQLite 存储的同一契约；恢复不取链、不启动音频。
+    restored.restoreSession(player.exportSession(), async () => { throw new Error('not requested'); });
+    assert.equal(restored.snapshot().shuffle, true); assert.equal(restored.snapshot().loopMode, 'playlist');
+    assert.deepEqual(restored.snapshot().queue.map(track => track.id), shuffled);
+    restored.setShuffle(false); assert.deepEqual(restored.snapshot().queue.map(track => track.id), original);
+    const seen = [shuffled[0]];
+    for (let i = 1; i < shuffled.length; i++) { await player.next(); seen.push(player.snapshot().queue[player.snapshot().currentIndex!]!.id); }
+    assert.deepEqual(seen, shuffled); assert.equal(player.snapshot().status, 'idle');
+    await player.next(); assert.equal(player.snapshot().currentIndex, 0);
+    await player.previous(); assert.equal(player.snapshot().currentIndex, shuffled.length - 1);
+    player.setLoopMode('track'); await player.previous(); assert.equal(player.snapshot().currentIndex, shuffled.length - 2);
+    player.setShuffle(false); assert.deepEqual(player.snapshot().queue.map(track => track.id), original);
+    player.setLoopMode('none'); await player.cueTrack(original.at(-1)!);
+    const lastGeneration = player.snapshot().generation; await player.next(); assert.equal(player.snapshot().generation, lastGeneration);
+    assert.throws(() => player.setLoopMode('invalid' as never)); assert.throws(() => player.setShuffle('true' as never));
+  } finally { await player.dispose(); await restored.dispose(); }
+});
