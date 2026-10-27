@@ -2,7 +2,9 @@ import { parseStoredPlaybackTrack } from '../../packages/contracts/src/playback-
 import { DomainError } from '../../packages/contracts/src/errors';
 import { KugouService } from '../../packages/providers/src/kugou/service';
 import { normalizeError } from '../../packages/contracts/src/errors';
-import { record, text, nonNegativeInteger } from '../../packages/contracts/src/validation';
+import { choice, record, text, nonNegativeInteger } from '../../packages/contracts/src/validation';
+import { parseKugouCatalogRequest } from '../../packages/contracts/src/kugou-catalog';
+import { parseKugouArtworkRequest } from '../../packages/contracts/src/kugou-artwork';
 import { kugouId } from '../../packages/contracts/src/kugou';
 
 // 平台凭据只在可信后台流转；主进程负责解密/加密，SQLite 仅保存密文。
@@ -23,6 +25,9 @@ port.on('message', (event) => {
       else if (operation === 'logout') result = service.logout();
       else if (operation === 'loadPlaylists') result = await service.loadPlaylists();
       else if (operation === 'loadPlaylist') result = await service.loadPlaylist(kugouId(message.id), nonNegativeInteger(message.offset, 'provider.offset'));
+      else if (operation === 'browse') result = await service.browse(parseKugouCatalogRequest(message.catalog));
+      else if (operation === 'getArtwork') result = await service.getArtwork(parseKugouArtworkRequest(message.artwork));
+      else if (operation === 'preparePlaylist') result = await service.preparePlaylist(kugouId(message.id), choice(message.source, ['public', 'owned'], 'kugou.playlist.source'));
       else if (operation === 'restoreCredentials') result = await service.restoreCredentials(message.credentials);
       else if (operation === 'exportCredentials') result = service.exportCredentials() ?? null;
       else if (operation === 'getPresentation') result = await service.getPresentation(kugouId(message.id), nonNegativeInteger(message.generation, 'provider.generation'));

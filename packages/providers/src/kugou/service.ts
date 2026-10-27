@@ -1,7 +1,10 @@
 import { parseStoredPlaybackTrack, type StoredRemoteTrack } from '../../../contracts/src/playback-session.ts';
 import { getKugouLyrics, type LyricRequest } from './lyrics.ts';
 import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
-import { loadArtwork, type LoadArtwork } from '../artwork.ts';
+import { artworkUrl, loadArtwork, type LoadArtwork } from '../artwork.ts';
+import { parseKugouArtwork, parseKugouArtworkRequest, type KugouArtworkRequest } from '../../../contracts/src/kugou-artwork.ts';
+import { parseKugouCatalog, parseKugouCatalogRequest, type KugouCatalogRequest, type KugouCatalogPlaylist } from '../../../contracts/src/kugou-catalog.ts';
+import { fetchKugouCatalog, publicPlaylistPage } from './catalog.ts';
 import QRCode from 'qrcode';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
 import { parseCredentialBundle, type KugouCredentialBundle } from '../../../contracts/src/credentials.ts';
@@ -12,72 +15,9 @@ import { nonNegativeInteger, record, text } from '../../../contracts/src/validat
 import { SessionGeneration, type SessionLease } from '../session-generation.ts';
 import { DirectKugouTransport, type KugouTransport } from './transport.ts';
 
-export function apiId(value: unknown): string {
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
-  return kugouId(value);
-}
-function success(value: unknown): Record<string, unknown> {
-  const body = record(value, 'kugou.response');
-  if (body.status !== 1 || (body.error_code !== undefined && body.error_code !== 0)) throw new DomainError('unavailable');
-  return body;
-}
-interface BackendTrack { track: KugouTrack; hash: string; cover?: string; album?: string }
+import { integerValue, numericId, optionalInteger, parseTracks, success, type BackendTrack } from './response.ts';
 const trackPageSize = kugouTrackPageSize;
-let loggedTrackRow = false;
-function numericId(value: unknown): string {
-  const id = apiId(value); if (!/^\d{1,30}$/.test(id)) throw new DomainError('invalid-response'); return id;
-}
-// 平台不同端点可能把数量/时长作为数字或十进制字符串返回；只接受非负安全整数。
-function integerValue(value: unknown, field: string): number {
-  if (typeof value === 'number') return nonNegativeInteger(value, field);
-  if (typeof value === 'string' && /^\d{1,15}$/.test(value)) {
-    const parsed = Number(value);
-    if (Number.isSafeInteger(parsed)) return parsed;
-  }
-  throw new DomainError('invalid-response');
-}
-function optionalInteger(value: unknown, field: string): number | undefined {
-  return value === undefined || value === null || value === '' ? undefined : integerValue(value, field);
-}
-function parseTracks(value: unknown): { items: BackendTrack[]; received: number } {
-  if (!Array.isArray(value) || value.length > 500) throw new DomainError('invalid-response');
-  const items: BackendTrack[] = [];
-  for (const entry of value) {
-    // 单条损坏不应让整页不可用；仍要求至少有一条可播放曲目。
-    try {
-      const raw = record(entry, 'kugou.song');
-      const hash = text(raw.hash ?? raw.filehash, 'kugou.hash').toLowerCase();
-      if (!/^[a-f0-9]{32}$/.test(hash)) continue;
-      const singers = Array.isArray(raw.singerinfo) ? raw.singerinfo
-        : Array.isArray(raw.authors) ? raw.authors : [];
-      const artists = singers.flatMap((value: unknown) => {
-        try {
-          const singer = record(value, 'kugou.singer');
-          return [text(singer.name ?? singer.author_name, 'kugou.singer.name')];
-        } catch { return []; }
-      });
-      const name = text(raw.name ?? raw.filename ?? raw.songname, 'kugou.song.name').replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape|opus|aiff?)$/i, '').trim();
-      if (!name) continue;
-      const timelen = optionalInteger(raw.timelen, 'kugou.timelen');
-      const seconds = optionalInteger(raw.duration, 'kugou.duration');
-      const durationMs = timelen ?? (seconds === undefined ? 0 : seconds * 1000);
-      if (!loggedTrackRow) {
-        loggedTrackRow = true;
-        const nameSource = raw.name !== undefined ? 'name' : raw.filename !== undefined ? 'filename' : 'songname';
-        debugKugou(`track row keys=${Object.keys(raw).sort().join(',')} nameSource=${nameSource} hash=${hash.slice(0, 6)} fileid=${raw.fileid === undefined ? 'none' : 'set'} duration=${durationMs}`);
-      }
-      const album = raw.albuminfo && typeof raw.albuminfo === 'object' ? record(raw.albuminfo, 'kugou.album') : {};
-      const trans = raw.trans_param && typeof raw.trans_param === 'object' ? record(raw.trans_param, 'kugou.track.extra') : {};
-      const cover = [raw.cover, raw.img, album.img, album.cover, album.sizable_cover, trans.union_cover].find(value => typeof value === 'string' && value.length > 0);
-      items.push({ track: { id: hash, name, artists, durationMs }, hash,
-        ...(typeof cover === 'string' && cover ? { cover } : {}),
-        ...(typeof album.name === 'string' ? { album: album.name.slice(0, 500) } : {}),
-      });
-    } catch { /* 跳过无法安全解析的单条记录 */ }
-  }
-  if (value.length > 0 && items.length === 0) throw new DomainError('invalid-response');
-  return { items, received: value.length };
-}
+export { apiId } from './response.ts';
 function debugKugou(message: string): void {
   if (process.env.STARSMUSIC_DEBUG === '1') console.error(`[kugou-debug] ${message}`);
 }
@@ -250,6 +190,15 @@ export class KugouService {
   #knownTracks = new Map<string, BackendTrack>();
   #listBusy = false;
   #pollingLease: SessionLease | undefined;
+  #guestTransport: KugouTransport | undefined;
+  #catalogView = 0;
+  #catalogAbort: AbortController | undefined;
+  #queueAbort: AbortController | undefined;
+  #publicPlaylists = new Map<string, KugouCatalogPlaylist>();
+  #playlistCovers = new Map<string, string>();
+  #artworkAbort = new AbortController();
+  #artworkCache = new Map<string, string | null>();
+  #artworkPending = new Map<string, Promise<string | null>>();
 
   constructor(options: ServiceOptions = {}) { this.#options = options; }
   #now(): number { return this.#options.now?.() ?? Date.now(); }
@@ -265,6 +214,10 @@ export class KugouService {
     clearTimeout(this.#timer); this.#timer = undefined;
     this.#transport?.clear(); this.#transport = undefined; this.#key = '';
     this.#knownTracks.clear(); this.#knownPlaylists.clear(); this.#playlistOffset = 0; this.#listBusy = false; this.#view++;
+    this.#guestTransport?.clear(); this.#guestTransport = undefined;
+    this.#catalogAbort?.abort(); this.#queueAbort?.abort(); this.#catalogView++;
+    this.#artworkAbort.abort(); this.#artworkAbort = new AbortController();
+    this.#publicPlaylists.clear(); this.#playlistCovers.clear(); this.#artworkCache.clear(); this.#artworkPending.clear();
   }
   #end(status: 'signed-out' | 'cancelled' | 'expired' | 'failed', error?: KugouSnapshot['error']): KugouSnapshot {
     this.#sessions.invalidate('kugou'); this.#lease = undefined; this.#clear();
@@ -433,11 +386,12 @@ export class KugouService {
       const entries = rows.map((value: unknown) => {
         const item = record(value, 'kugou.playlist');
         const id = numericId(item.list_create_listid ?? item.listid);
-        return { id, name: text(item.name ?? item.listname, 'kugou.playlist.name'), trackCount: nonNegativeInteger(item.count ?? item.song_count ?? 0, 'kugou.count'), type: nonNegativeInteger(item.type ?? 0, 'kugou.type') };
+        const cover = item.pic ?? item.img ?? item.cover ?? item.imgurl;
+        return { id, name: text(item.name ?? item.listname, 'kugou.playlist.name'), trackCount: integerValue(item.count ?? item.song_count ?? 0, 'kugou.count'), type: nonNegativeInteger(item.type ?? 0, 'kugou.type'), ...(typeof cover === 'string' && cover ? { cover } : {}) };
       });
       this.#sessions.commit(lease, () => {
         this.#playlistOffset += 50;
-        for (const item of entries) this.#knownPlaylists.set(item.id, item.type);
+        for (const item of entries) { this.#knownPlaylists.set(item.id, item.type); if (item.cover) this.#playlistCovers.set(item.id, item.cover); }
         const items = entries.map(({ id, name, trackCount }) => ({ id, name, trackCount }));
         const merged = new Map([...this.#state.playlists, ...items].map((item) => [item.id, item]));
         this.#update({ playlists: [...merged.values()], playlistsMore: rows.length >= 50, busy: false });
@@ -478,6 +432,78 @@ export class KugouService {
     if (this.#knownTracks.has(saved.sourceId)) return;
     this.#knownTracks.set(saved.sourceId, { hash: saved.sourceId,
       track: { id: saved.sourceId, name: saved.title, artists: saved.artist ? saved.artist.split('、') : [], durationMs: saved.durationMs ?? 0 } });
+  }
+  async browse(input: KugouCatalogRequest): Promise<KugouSnapshot> {
+    const request = parseKugouCatalogRequest(input);
+    if (request.kind === 'playlist' && !this.#publicPlaylists.has(request.id)) throw new DomainError('invalid-input');
+    const view = ++this.#catalogView; this.#catalogAbort?.abort();
+    const controller = new AbortController(); this.#catalogAbort = controller;
+    const generation = this.#state.generation;
+    const connected = this.#state.status === 'connected';
+    const transport = connected ? this.#transport! : (this.#guestTransport ??= this.#options.transport?.() ?? new DirectKugouTransport());
+    const signal = connected && this.#lease ? AbortSignal.any([controller.signal, this.#lease.signal]) : controller.signal;
+    this.#update({ catalog: parseKugouCatalog({ ...this.#state.catalog, kind: request.kind, offset: request.offset,
+      ...(request.kind === 'search' ? { query: request.query, searchType: request.searchType } : {}),
+      ...(request.kind === 'playlist' ? { playlist: this.#publicPlaylists.get(request.id) } : { playlist: undefined }),
+      tracks: [], playlists: [], more: false, total: 0, status: 'loading', error: undefined }) });
+    try {
+      const result = await fetchKugouCatalog(request, this.#state.catalog, transport, signal);
+      if (generation !== this.#state.generation || view !== this.#catalogView || signal.aborted) return this.#state;
+      for (const item of result.tracks) this.#knownTracks.set(item.track.id, item);
+      for (const item of result.playlists) { this.#publicPlaylists.set(item.playlist.id, item.playlist); if (item.cover) this.#playlistCovers.set(item.playlist.id, item.cover); }
+      this.#update({ catalog: result.catalog });
+    } catch (error: unknown) {
+      if (generation === this.#state.generation && view === this.#catalogView && !signal.aborted) this.#update({ catalog: { ...this.#state.catalog, status: 'error', error: normalizeError(error) } });
+    }
+    return this.#state;
+  }
+  async getArtwork(input: KugouArtworkRequest): Promise<string | null> {
+    const { id, kind, generation } = parseKugouArtworkRequest(input);
+    if (generation !== this.#state.generation) throw new DomainError('stale-operation');
+    if (kind === 'track' ? !this.#knownTracks.has(id) : !this.#knownPlaylists.has(id) && !this.#publicPlaylists.has(id)) throw new DomainError('invalid-input');
+    const key = `${kind}:${id}`;
+    if (this.#artworkCache.has(key)) return this.#artworkCache.get(key)!;
+    const pending = this.#artworkPending.get(key); if (pending) return pending;
+    if (this.#artworkPending.size >= 4) throw new DomainError('unavailable');
+    const cover = kind === 'track' ? this.#knownTracks.get(id)?.cover : this.#playlistCovers.get(id);
+    if (!cover) return null;
+    const url = artworkUrl(cover, 'kugou'); const signal = this.#artworkAbort.signal;
+    const operation = (async () => {
+      const image = parseKugouArtwork(await (this.#options.artwork ?? loadArtwork)(url.href, 'kugou', signal));
+      if (signal.aborted || generation !== this.#state.generation) throw new DomainError('stale-operation');
+      this.#artworkCache.set(key, image); while (this.#artworkCache.size > 32) this.#artworkCache.delete(this.#artworkCache.keys().next().value!);
+      return image;
+    })();
+    this.#artworkPending.set(key, operation);
+    try { return await operation; } finally { if (this.#artworkPending.get(key) === operation) this.#artworkPending.delete(key); }
+  }
+  async preparePlaylist(id: string, source: 'public' | 'owned'): Promise<readonly KugouTrack[]> {
+    kugouId(id); const { lease, transport } = this.#connected();
+    if (source !== 'public' && source !== 'owned') throw new DomainError('invalid-input');
+    if (source === 'public' ? !this.#publicPlaylists.has(id) : !this.#knownPlaylists.has(id)) throw new DomainError('invalid-input');
+    this.#queueAbort?.abort(); const controller = new AbortController(); this.#queueAbort = controller;
+    const signal = AbortSignal.any([lease.signal, controller.signal]); const items = new Map<string, BackendTrack>();
+    for (let offset = 0; offset < 10000; offset += trackPageSize) {
+      signal.throwIfAborted();
+      let page: { tracks: BackendTrack[]; received: number; total?: number };
+      if (source === 'public') page = await publicPlaylistPage(id, offset, trackPageSize, transport, signal);
+      else {
+        const data = record(success(await transport.call('playlist', { id, type: this.#knownPlaylists.get(id), page: offset / trackPageSize + 1 }, signal)).data, 'kugou.queue.playlist');
+        const rows = data.info ?? data.songs ?? data.lists ?? data.file;
+        const parsed = parseTracks(rows === undefined && offset > 0 ? [] : Array.isArray(rows) ? rows : record(rows, 'kugou.files').file);
+        if (parsed.received > trackPageSize) throw new DomainError('invalid-response');
+        page = { tracks: parsed.items, received: parsed.received, ...(data.count === undefined && data.total === undefined ? {} : { total: integerValue(data.count ?? data.total, 'kugou.queue.total') }) };
+      }
+      if (signal.aborted || !this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
+      if ((page.total ?? 0) > 10000) throw new DomainError('unavailable');
+      for (const item of page.tracks) items.set(item.track.id, item);
+      if (items.size > 10000 || (page.total !== undefined && offset + page.received < page.total && page.received < trackPageSize)) throw new DomainError('invalid-response');
+      if (page.received < trackPageSize || (page.total !== undefined && offset + page.received >= page.total)) break;
+      if (offset + trackPageSize >= 10000) throw new DomainError('unavailable');
+    }
+    if (!items.size) throw new DomainError('unavailable');
+    for (const [id, item] of items) this.#knownTracks.set(id, item);
+    return Object.freeze([...items.values()].map(item => item.track));
   }
   async getPresentation(id: string, generation: number): Promise<PresentationContent> {
     const { lease, transport } = this.#connected();

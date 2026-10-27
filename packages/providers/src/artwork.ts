@@ -16,7 +16,7 @@ export function artworkUrl(value: unknown, provider: OnlineProviderId): URL {
   const hosts =
     provider === 'netease'
       ? ['p1.music.126.net', 'p2.music.126.net', 'p3.music.126.net', 'p4.music.126.net']
-      : ['imge.kugou.com', 'imgessl.kugou.com', 'singerimg.kugou.com'];
+      : ['imge.kugou.com', 'imgessl.kugou.com', 'singerimg.kugou.com', 'c1.kgimg.com'];
   if (
     !hosts.includes(url.hostname) ||
     url.protocol !== 'https:' ||

@@ -10,6 +10,8 @@ import { kugouChannels, parseKugouSnapshot } from '../../packages/contracts/src/
 import { neteaseChannels, parseNeteaseSnapshot } from '../../packages/contracts/src/netease';
 import { parseCatalogRequest, type CatalogRequest } from '../../packages/contracts/src/netease-catalog';
 import { appearanceChannels, parseThemePreference, type ThemePreference } from '../../packages/contracts/src/appearance';
+import { parseKugouCatalogRequest, type KugouCatalogRequest } from '../../packages/contracts/src/kugou-catalog';
+import { parseKugouArtwork, parseKugouArtworkRequest, type KugouArtworkRequest } from '../../packages/contracts/src/kugou-artwork';
 
 const invokePlayback = async (channel: string, ...args: unknown[]) => {
   const value: unknown = await ipcRenderer.invoke(channel, ...args);
@@ -116,6 +118,9 @@ const api: DesktopApi = Object.freeze({
     loadPlaylist: (id: string, offset: number) => invokeKugou(kugouChannels.loadPlaylist, id, offset),
     async playTrack(id: string): Promise<void> { await ipcRenderer.invoke(kugouChannels.playTrack, id); },
     async enqueueNext(id: string): Promise<void> { await ipcRenderer.invoke(kugouChannels.enqueueNext, id); },
+    browse: (request: KugouCatalogRequest) => invokeKugou(kugouChannels.browse, parseKugouCatalogRequest(request)),
+    async getArtwork(request: KugouArtworkRequest) { return parseKugouArtwork(await ipcRenderer.invoke(kugouChannels.getArtwork, parseKugouArtworkRequest(request))); },
+    async playPlaylist(id: string, source: 'public' | 'owned') { await ipcRenderer.invoke(kugouChannels.playPlaylist, id, source); },
     onStateChanged(listener: (state: ReturnType<typeof parseKugouSnapshot>) => void) {
       if (typeof listener !== 'function') throw new Error('监听器无效');
       const receive = (_event: unknown, value: unknown) => listener(parseKugouSnapshot(value));

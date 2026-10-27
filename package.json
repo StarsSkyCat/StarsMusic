@@ -24,6 +24,7 @@
     "probe:netease-discovery": "node scripts/probe-netease-discovery.ts",
     "test:e2e": "electron-vite build && playwright test",
     "probe:kugou": "node scripts/probe-kugou.ts",
+    "probe:kugou-discovery": "node scripts/probe-kugou-discovery.ts",
     "test:desktop": "dbus-run-session -- env STARSMUSIC_TEST_BUS=isolated node --test tests/integration/linux-desktop.test.ts"
   },
   "dependencies": {

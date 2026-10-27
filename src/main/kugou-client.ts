@@ -5,13 +5,15 @@ import { DomainError, normalizeError, parseAppError } from '../../packages/contr
 import { initialKugouSnapshot, parseKugouSnapshot, type KugouSnapshot } from '../../packages/contracts/src/kugou';
 import { parseStreamResolution, type StreamResolution } from '../../packages/contracts/src/music';
 import { parseCredentialBundle, type KugouCredentialBundle } from '../../packages/contracts/src/credentials';
+import { parseKugouArtwork, type KugouArtworkRequest } from '../../packages/contracts/src/kugou-artwork';
+import { parseKugouQueue } from '../../packages/contracts/src/kugou-catalog';
 
 interface Request {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'ensureRestoredTrack' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
+type Operation = 'ensureRestoredTrack' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'browse' | 'getArtwork' | 'preparePlaylist';
 
 export class KugouClient {
   #worker: UtilityProcess | undefined;
@@ -89,12 +91,12 @@ export class KugouClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#requests.delete(requestId); reject(new DomainError('timeout')); this.#fail(worker);
-      }, operation === 'resolveTrack' ? 45000 : 30000);
+      }, operation === 'preparePlaylist' ? 120000 : operation === 'resolveTrack' ? 45000 : 30000);
       this.#requests.set(requestId, { resolve, reject, timer });
       worker.postMessage({ operation, requestId, ...args });
     });
   }
-  async command(operation: Exclude<Operation, 'ensureRestoredTrack' | 'resolveTrack' | 'getPresentation'>, args: Record<string, unknown> = {}): Promise<KugouSnapshot> {
+  async command(operation: Exclude<Operation, 'ensureRestoredTrack' | 'resolveTrack' | 'getPresentation' | 'getArtwork' | 'preparePlaylist'>, args: Record<string, unknown> = {}): Promise<KugouSnapshot> {
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
       if (!this.#disposed) {
@@ -121,6 +123,18 @@ export class KugouClient {
     await this.#request('ensureRestoredTrack', { track: parseStoredPlaybackTrack(track), generation: this.#workerGeneration });
     signal.throwIfAborted();
     if (this.#state.status !== 'connected' || this.#state.generation !== generation || this.#state.account?.id !== track.accountId) throw new DomainError('stale-operation');
+  }
+  async getArtwork(request: KugouArtworkRequest): Promise<string | null> {
+    if (this.#state.generation !== request.generation) throw new DomainError('stale-operation');
+    const value = await this.#request('getArtwork', { artwork: { ...request, generation: this.#workerGeneration } });
+    if (this.#state.generation !== request.generation) throw new DomainError('stale-operation');
+    return parseKugouArtwork(value);
+  }
+  async preparePlaylist(id: string, source: 'public' | 'owned', generation: number) {
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
+    const value = await this.#request('preparePlaylist', { id, source });
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
+    return parseKugouQueue(value);
   }
   async getPresentation(id: string, generation: number, signal: AbortSignal): Promise<PresentationContent> {
     signal.throwIfAborted();

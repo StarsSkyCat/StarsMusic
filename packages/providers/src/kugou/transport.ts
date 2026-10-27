@@ -6,7 +6,7 @@ import { parseApiJson } from '../api-json.ts';
 import { accountProof, md5, registerProof, signature } from './crypto.ts';
 
 export const kugouProtocolBaseline = 'kugoumusicapi@1.6.2/62730f900dc9fdc51396a663b3d33a6c4c704046';
-export type KugouEndpoint = 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register';
+export type KugouEndpoint = 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register' | 'searchSongs' | 'searchPlaylists' | 'publicPlaylists' | 'publicPlaylist';
 export interface KugouTransportSession {
   readonly userid: string;
   readonly token: string;
@@ -29,6 +29,10 @@ const endpoints: Record<KugouEndpoint, readonly [string, string | undefined]> = 
   stream: ['https://gateway.kugou.com/v5/url', 'trackercdn.kugou.com'],
   resource: ['https://gateway.kugou.com/v2/get_res_privilege/lite', 'media.store.kugou.com'],
   register: ['https://userservice.kugou.com/risk/v3/r_register_dev', undefined],
+  searchSongs: ['https://gateway.kugou.com/v2/search/song', 'complexsearch.kugou.com'],
+  searchPlaylists: ['https://gateway.kugou.com/v1/search/special', 'complexsearch.kugou.com'],
+  publicPlaylists: ['https://gateway.kugou.com/v2/special_recommend', 'specialrec.service.kugou.com'],
+  publicPlaylist: ['https://gateway.kugou.com/pubsongs/v2/get_other_list_file_nofilt', undefined],
 };
 
 export class DirectKugouTransport implements KugouTransport {
@@ -72,6 +76,18 @@ export class DirectKugouTransport implements KugouTransport {
       params.plat = '1'; body = JSON.stringify({ userid: this.#userid, token: this.#token, total_ver: 979, type: 2, page: data.page, pagesize: 50 });
     } else if (endpoint === 'playlist') {
       body = JSON.stringify({ listid: data.id, userid: this.#userid, type: data.type, page: data.page, pagesize: kugouTrackPageSize, area_code: 1, allplatform: 1, show_cover: 1, token: this.#token });
+    } else if (endpoint === 'searchSongs' || endpoint === 'searchPlaylists') {
+      Object.assign(params, { keyword: data.query, page: data.page, pagesize: 30, platform: 'AndroidFilter', iscorrection: 1,
+        ...(endpoint === 'searchSongs' ? { privilegefilter: 0, area_code: 1, dopicfull: 1 } : { albumhide: 0, nocollect: 0 }) });
+    } else if (endpoint === 'publicPlaylists') {
+      body = JSON.stringify({ appid: 1005, mid: this.#mid, clientver: 20489, platform: 'android', clienttime: time,
+        userid: this.#userid || 0, module_id: 1, page: data.page, pagesize: 30,
+        key: md5(`1005OIlwieks28dk2k092lksi2UIkp20489${time}`),
+        special_recommend: { withtag: 1, withsong: 1, sort: 1, ugc: 1, is_selected: 0, withrecommend: 1, area_code: 1, categoryid: 0 },
+        req_multi: 1, retrun_min: 5, return_special_falg: 1 });
+    } else if (endpoint === 'publicPlaylist') {
+      Object.assign(params, { area_code: 1, begin_idx: data.offset, plat: 1, type: 1, mode: 1, personal_switch: 1,
+        extend_fields: 'abtags,hot_cmt,popularization', pagesize: data.limit, global_collection_id: data.id });
     } else if (endpoint === 'resource') {
       const hash = text(data.hash, 'kugou.hash').toLowerCase();
       if (!/^[a-f0-9]{32}$/.test(hash)) throw new DomainError('invalid-input');

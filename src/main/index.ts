@@ -302,10 +302,21 @@ void app.whenReady().then(async () => {
       assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
       const argument = parseKugouArguments(channel, args);
       if (quitting) return kugou.snapshot();
+      if (channel === kugouChannels.getArtwork) return kugou.getArtwork(argument.artwork!);
+      if (channel === kugouChannels.browse) return kugou.command('browse', { catalog: argument.catalog });
+      if (channel === kugouChannels.playPlaylist) {
+        const selection = ++selectionGeneration; const state = kugou.snapshot();
+        if (state.status !== 'connected') throw new Error('请先登录');
+        const tracks = await kugou.preparePlaylist(argument.id!, argument.source!, state.generation);
+        if (quitting || selection !== selectionGeneration || kugou.snapshot().generation !== state.generation) throw new Error('播放操作已过期');
+        await player.openRemoteList('kugou', tracks.map(track => ({ title: track.name, sourceId: track.id, artist: track.artists.join('、'), accountId: state.account!.id, durationMs: track.durationMs,
+          resolve: (signal: AbortSignal) => kugou.resolveTrack(track.id, state.generation, signal) })));
+        return;
+      }
       if (channel === kugouChannels.playTrack || channel === kugouChannels.enqueueNext) {
         if (channel === kugouChannels.playTrack) selectionGeneration++;
         const state = kugou.snapshot();
-        const track = state.tracks.find((track) => track.id === argument.id);
+        const track = state.tracks.find((track) => track.id === argument.id) ?? state.catalog.tracks.find(track => track.id === argument.id);
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
         const resolve = (signal: AbortSignal) => kugou.resolveTrack(track.id, state.generation, signal);
         if (channel === kugouChannels.enqueueNext) {
