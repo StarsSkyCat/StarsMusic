@@ -154,7 +154,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       }, [audioFile, secondFile, thirdFile]);
       await page.getByRole('button', { name: '音乐库', exact: true }).click();
       await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
-      await expect(page.getByRole('heading', { name: '本次导入' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '本地队列' })).toBeVisible();
       await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
       const desktopPid = desktop.process().pid!;
       const children = (await readFile(`/proc/${desktopPid}/task/${desktopPid}/children`, 'utf8')).trim().split(/\s+/);

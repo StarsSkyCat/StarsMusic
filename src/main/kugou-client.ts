@@ -1,3 +1,4 @@
+import { parseStoredPlaybackTrack, type StoredRemoteTrack } from '../../packages/contracts/src/playback-session.ts';
 import { parsePresentationContent, type PresentationContent } from '../../packages/contracts/src/presentation';
 import { utilityProcess, type UtilityProcess } from 'electron';
 import { DomainError, normalizeError, parseAppError } from '../../packages/contracts/src/errors';
@@ -10,7 +11,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
+type Operation = 'ensureRestoredTrack' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
 
 export class KugouClient {
   #worker: UtilityProcess | undefined;
@@ -93,7 +94,7 @@ export class KugouClient {
       worker.postMessage({ operation, requestId, ...args });
     });
   }
-  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation'>, args: Record<string, unknown> = {}): Promise<KugouSnapshot> {
+  async command(operation: Exclude<Operation, 'ensureRestoredTrack' | 'resolveTrack' | 'getPresentation'>, args: Record<string, unknown> = {}): Promise<KugouSnapshot> {
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
       if (!this.#disposed) {
@@ -113,6 +114,13 @@ export class KugouClient {
     const bundle = parseCredentialBundle(value);
     if (bundle.provider !== 'kugou') throw new DomainError('invalid-response');
     return bundle;
+  }
+  async ensureRestoredTrack(track: StoredRemoteTrack, generation: number, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation || this.#state.account?.id !== track.accountId) throw new DomainError('playback-login-required');
+    await this.#request('ensureRestoredTrack', { track: parseStoredPlaybackTrack(track), generation: this.#workerGeneration });
+    signal.throwIfAborted();
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation || this.#state.account?.id !== track.accountId) throw new DomainError('stale-operation');
   }
   async getPresentation(id: string, generation: number, signal: AbortSignal): Promise<PresentationContent> {
     signal.throwIfAborted();

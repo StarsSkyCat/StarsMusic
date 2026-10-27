@@ -474,3 +474,17 @@ test('酷狗歌词封面独立失败且不泄露原图地址，不影响播放�
     await assert.rejects(instance.getPresentation('b'.repeat(32), instance.snapshot().generation));
   } finally { instance.dispose(); }
 });
+
+test('恢复酷狗 hash 元数据仅限原账号，仍按现有身份和权限校验取链', async () => {
+  const transport = new FakeTransport(); const instance = create(() => transport);
+  const track = { id: 'saved', title: '合成曲目', artist: '合成歌手', kind: 'kugou' as const, accountId: '42', sourceId: hash };
+  try {
+    await connect(instance); const generation = instance.snapshot().generation;
+    await assert.rejects(instance.ensureRestoredTrack({ ...track, accountId: '99' }, generation));
+    await instance.ensureRestoredTrack(track, generation);
+    assert.equal((await instance.resolveTrack(hash, generation)).track.id, hash);
+    transport.handlers.set('stream', async () => ({ ...stream, hash: 'b'.repeat(32), fileName: '另一首不相符的歌曲' }));
+    await assert.rejects(instance.resolveTrack(hash, generation), (error: unknown) => error instanceof DomainError && error.code === 'track-mismatch');
+    instance.logout(); await assert.rejects(instance.ensureRestoredTrack(track, generation));
+  } finally { instance.dispose(); }
+});

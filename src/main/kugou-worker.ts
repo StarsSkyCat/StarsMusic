@@ -1,3 +1,5 @@
+import { parseStoredPlaybackTrack } from '../../packages/contracts/src/playback-session';
+import { DomainError } from '../../packages/contracts/src/errors';
 import { KugouService } from '../../packages/providers/src/kugou/service';
 import { normalizeError } from '../../packages/contracts/src/errors';
 import { record, text, nonNegativeInteger } from '../../packages/contracts/src/validation';
@@ -24,6 +26,11 @@ port.on('message', (event) => {
       else if (operation === 'restoreCredentials') result = await service.restoreCredentials(message.credentials);
       else if (operation === 'exportCredentials') result = service.exportCredentials() ?? null;
       else if (operation === 'getPresentation') result = await service.getPresentation(kugouId(message.id), nonNegativeInteger(message.generation, 'provider.generation'));
+      else if (operation === 'ensureRestoredTrack') {
+        const track = parseStoredPlaybackTrack(message.track);
+        if (track.kind === 'local') throw new DomainError('invalid-input');
+        await service.ensureRestoredTrack(track, nonNegativeInteger(message.generation, 'provider.generation'));
+      }
       else if (operation === 'resolveTrack') result = await service.resolveTrack(kugouId(message.id), nonNegativeInteger(message.generation, 'provider.generation'));
       else throw new Error('unknown operation');
       port.postMessage({ kind: 'reply', requestId, ok: true, result });

@@ -1,3 +1,4 @@
+import { parseStoredPlaybackTrack, type StoredRemoteTrack } from '../../../contracts/src/playback-session.ts';
 import { getKugouLyrics, type LyricRequest } from './lyrics.ts';
 import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
 import { loadArtwork, type LoadArtwork } from '../artwork.ts';
@@ -469,6 +470,14 @@ export class KugouService {
       });
     } catch (error: unknown) { if (view === this.#view) this.#operationError(lease, error); }
     return this.#state;
+  }
+  async ensureRestoredTrack(value: StoredRemoteTrack, generation: number): Promise<void> {
+    const saved = parseStoredPlaybackTrack(value);
+    const { lease } = this.#connected();
+    if (saved.kind !== 'kugou' || saved.accountId !== lease.context.accountId || generation !== this.#state.generation) throw new DomainError('stale-operation');
+    if (this.#knownTracks.has(saved.sourceId)) return;
+    this.#knownTracks.set(saved.sourceId, { hash: saved.sourceId,
+      track: { id: saved.sourceId, name: saved.title, artists: saved.artist ? saved.artist.split('、') : [], durationMs: saved.durationMs ?? 0 } });
   }
   async getPresentation(id: string, generation: number): Promise<PresentationContent> {
     const { lease, transport } = this.#connected();

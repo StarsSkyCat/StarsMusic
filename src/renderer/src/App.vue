@@ -188,7 +188,7 @@ const playlistTitle = computed(
   () => providerState.value?.playlists.find((p) => p.id === selectedPlaylistId.value)?.name,
 );
 const tableTitle = computed(
-  () => playlistTitle.value ?? (view.value === 'local' ? '本次导入' : '当前播放队列'),
+  () => playlistTitle.value ?? (view.value === 'local' ? '本地队列' : '当前播放队列'),
 );
 const tracks = computed<readonly DisplayTrack[]>(() => {
   if (providerState.value) {
@@ -508,7 +508,7 @@ onUnmounted(() => {
         <span class="sidebar-queue">
           <ListMusic :size="18" /><strong>{{ playback.queue.length }} 首音乐</strong
           ><ChevronRight :size="15" /></span
-        ><small>顺序播放 · 本次会话</small>
+        ><small>顺序播放 · 自动保存</small>
       </button>
       <button
         class="settings-nav"
@@ -626,7 +626,7 @@ onUnmounted(() => {
                   ><strong>本地音乐</strong
                   ><small>{{
                     localTracks.length
-                      ? `${localTracks.length} 首 · 本次会话`
+                      ? `${localTracks.length} 首 · 已加入队列`
                       : '从你的设备，发现好音乐'
                   }}</small></span
                 ><span class="source-card-state"><i></i>随时出发</span>
@@ -667,7 +667,7 @@ onUnmounted(() => {
               <p>
                 {{
                   view === 'local'
-                    ? '把收藏的声音，留在身边。本次导入仅保留在当前会话。'
+                    ? '把收藏的声音，留在身边。队列与进度会自动保存在本机。'
                     : '熟悉的歌单，新的聆听方式。'
                 }}
               </p>
@@ -913,7 +913,7 @@ onUnmounted(() => {
               {{ providerState.busy ? '读取中…' : '加载更多曲目' }}<ChevronDown :size="15" />
             </button>
             <p v-if="!activeProvider && tracks.length" class="list-footnote">
-              仅保留本次会话 · 双击歌曲播放 · 悬停操作可加入下一首
+              队列自动保存 · 双击歌曲播放 · 悬停操作可加入下一首
             </p>
           </section>
           <p
@@ -1030,8 +1030,8 @@ onUnmounted(() => {
         </button>
       </div>
     </footer>
-    <p v-if="playbackError || playback.error" class="player-error error-message" role="alert">
-      {{ playbackError || playback.error?.message
+    <p v-if="playbackError || playback.error || playback.saveError" class="player-error error-message" role="alert">
+      {{ playbackError || playback.error?.message || playback.saveError?.message
       }}<button class="text-button" @click="showQueue">查看队列</button>
     </p>
     <div v-if="toast" class="toast" role="status"><Check :size="17" />{{ toast }}</div>
@@ -1116,7 +1116,7 @@ onUnmounted(() => {
           <p>在歌曲旁点击「下一首播放」，<br />音乐会在这里接着响起。</p>
         </div>
       </div>
-      <p class="drawer-footnote">顺序播放 · 会话队列 · 最多 10000 首</p>
+      <p class="drawer-footnote">顺序播放 · 队列与进度自动保存 · 最多 10000 首</p>
     </dialog>
     <dialog ref="addDialog" class="ne-add-dialog" aria-labelledby="ne-add-title">
       <header><div><span class="eyebrow">SAVE TO YOUR COLLECTION</span><h2 id="ne-add-title">添加到自建歌单</h2><p>选择歌单后，将保存到网易云账号。</p></div><button class="icon-button" aria-label="关闭添加到歌单" @click="addDialog?.close()"><X :size="19" /></button></header>

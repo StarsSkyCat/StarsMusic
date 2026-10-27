@@ -16,6 +16,7 @@ export interface MpvOptions {
   audioOutput?: 'null';
   network?: 'loopback';
   playbackLength?: number;
+  startSeconds?: number;
 }
 
 export class MpvClient {
@@ -44,6 +45,10 @@ export class MpvClient {
       '--access-references=no', '--autoload-files=no', `--demuxer-lavf-o=protocol_whitelist=%${protocols.length}%${protocols}`,
       '--input-ipc-client=fd://3',
     ];
+    if (this.#options.startSeconds !== undefined) {
+      if (!Number.isFinite(this.#options.startSeconds) || this.#options.startSeconds < 0 || this.#options.startSeconds > 604800) throw new DomainError('invalid-input');
+      args.push(`--start=${this.#options.startSeconds}`);
+    }
     if (this.#options.audioOutput === 'null') args.push('--ao=null');
     if (this.#options.playbackLength !== undefined) {
       if (!Number.isFinite(this.#options.playbackLength) || this.#options.playbackLength <= 0) throw new DomainError('invalid-input');

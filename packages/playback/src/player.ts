@@ -1,3 +1,4 @@
+import { parseStoredPlaybackSession, type StoredPlaybackSession, type StoredPlaybackTrack, type StoredRemoteTrack } from '../../contracts/src/playback-session.ts';
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import { MediaGateway } from './media-gateway.ts';
 
 export const audioExtensions = ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'aif', 'aiff'];
 interface PlayerTrack {
-  id: string; title: string; artist?: string; sourceId?: string; detail?: string; path?: string; provider?: OnlineProviderId;
+  id: string; title: string; artist?: string; sourceId?: string; accountId?: string; durationMs?: number; detail?: string; path?: string; provider?: OnlineProviderId;
   resolve?: (signal: AbortSignal) => Promise<StreamResolution>;
 }
 interface PlayerOptions extends Pick<MpvOptions, 'executable' | 'audioOutput'> {
@@ -32,6 +33,8 @@ export class MusicPlayer {
   #lastAudibleVolume = 70;
   #volumeRevision = 0;
   #volumeWrite: Promise<void> | undefined;
+  #restored = new Set<string>();
+  #bookmark: { id: string; seconds: number; duration: number } | undefined;
   #previewSeconds: number | undefined;
   #disposed = false;
   #tail: Promise<void> = Promise.resolve();
@@ -42,14 +45,55 @@ export class MusicPlayer {
 
   snapshot(): PlaybackSnapshot { return this.#state; }
 
+  storedTrack(id: string): StoredPlaybackTrack | undefined {
+    const track = this.#tracks.find(track => track.id === id);
+    return track ? this.#storedTrack(track) : undefined;
+  }
+  #storedTrack(track: PlayerTrack): StoredPlaybackTrack | undefined {
+    const base = { id: track.id, title: track.title, ...(track.artist ? { artist: track.artist } : {}) };
+    if (track.path) return { ...base, kind: 'local', path: track.path };
+    if (track.provider && track.sourceId && track.accountId) return { ...base, kind: track.provider, sourceId: track.sourceId, accountId: track.accountId, ...(track.durationMs === undefined ? {} : { durationMs: track.durationMs }) };
+    return undefined;
+  }
+  exportSession(): StoredPlaybackSession {
+    const queue = this.#tracks.flatMap(track => { const saved = this.#storedTrack(track); return saved ? [saved] : []; });
+    const current = this.#tracks[this.#state.currentIndex ?? -1];
+    const currentId = current && queue.some(track => track.id === current.id) ? current.id : null;
+    return parseStoredPlaybackSession({ version: 1, queue, currentId,
+      positionSeconds: currentId && this.#state.status !== 'ended' ? Math.min(604800, this.#state.positionSeconds) : 0,
+      durationSeconds: currentId ? Math.min(604800, this.#state.durationSeconds) : 0,
+      volume: this.#desiredVolume, muted: this.#state.muted, lastAudibleVolume: this.#lastAudibleVolume });
+  }
+  restoreSession(value: StoredPlaybackSession, resolve: (track: StoredRemoteTrack, signal: AbortSignal) => Promise<StreamResolution>): void {
+    if (this.#tracks.length || this.#engine || this.#disposed) throw new DomainError('stale-operation');
+    const saved = parseStoredPlaybackSession(value);
+    this.#tracks = saved.queue.map(track => track.kind === 'local'
+      ? { id: track.id, title: track.title, ...(track.artist ? { artist: track.artist } : {}), path: track.path }
+      : { id: track.id, title: track.title, ...(track.artist ? { artist: track.artist } : {}), sourceId: track.sourceId, accountId: track.accountId, ...(track.durationMs === undefined ? {} : { durationMs: track.durationMs }), provider: track.kind, resolve: signal => resolve(track, signal) });
+    this.#restored = new Set(saved.queue.filter(track => track.kind !== 'local').map(track => track.id));
+    const index = this.#tracks.findIndex(track => track.id === saved.currentId);
+    this.#desiredVolume = saved.volume; this.#lastAudibleVolume = saved.lastAudibleVolume;
+    this.#bookmark = index < 0 ? undefined : { id: saved.currentId!, seconds: saved.positionSeconds, duration: saved.durationSeconds };
+    this.#update({ queue: this.#queue(), currentIndex: index < 0 ? null : index, status: index < 0 ? 'idle' : 'paused',
+      positionSeconds: index < 0 ? 0 : saved.positionSeconds, durationSeconds: index < 0 ? 0 : saved.durationSeconds, volume: saved.volume, muted: saved.muted });
+  }
+  async bindRestoredProvider(provider: OnlineProviderId, accountId: string): Promise<void> {
+    await this.#removeTracks(track => track.provider === provider && this.#restored.has(track.id) && track.accountId !== accountId);
+    for (const track of this.#tracks) if (track.provider === provider && track.accountId === accountId) this.#restored.delete(track.id);
+  }
+
   subscribe(listener: (state: PlaybackSnapshot) => void): () => void {
     this.#listeners.add(listener);
     return () => { this.#listeners.delete(listener); };
   }
 
-  #update(patch: Omit<Partial<PlaybackSnapshot>, 'error' | 'audioOutput'> & { error?: AppError | undefined; audioOutput?: string | undefined }): void {
+  #update(patch: Omit<Partial<PlaybackSnapshot>, 'error' | 'audioOutput' | 'saveError'> & { error?: AppError | undefined; saveError?: AppError | undefined; audioOutput?: string | undefined }): void {
     this.#state = parsePlaybackSnapshot({ ...this.#state, ...patch, revision: this.#state.revision + 1 });
     for (const listener of this.#listeners) listener(this.#state);
+  }
+
+  reportSaveError(failed: boolean): void {
+    if (!!this.#state.saveError !== failed) this.#update({ saveError: failed ? appError('playback-save-failed') : undefined });
   }
 
   reportError(error: AppError): PlaybackSnapshot {
@@ -107,37 +151,42 @@ export class MusicPlayer {
     return this.#state;
   }
 
-  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string): Promise<PlaybackSnapshot> {
+  openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string, accountId?: string, durationMs?: number): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
     if (this.#tracks.length >= 10000) return Promise.resolve(this.reportError(appError('invalid-input')));
-    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(durationMs === undefined ? {} : { durationMs }), ...(accountId ? { accountId } : {}), ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
     this.#tracks.push(track);
     this.#update({ queue: this.#queue() });
     return this.#switch(this.#tracks.length - 1);
   }
 
-  openRemoteList(provider: OnlineProviderId, tracks: readonly { title: string; sourceId: string; artist?: string; resolve: (signal: AbortSignal) => Promise<StreamResolution> }[]): Promise<PlaybackSnapshot> {
+  openRemoteList(provider: OnlineProviderId, tracks: readonly { title: string; sourceId: string; artist?: string; accountId?: string; durationMs?: number; resolve: (signal: AbortSignal) => Promise<StreamResolution> }[]): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
     if (!tracks.length || tracks.length > 10000) throw new DomainError('invalid-input');
     this.#tracks = tracks.map(track => ({ ...track, id: randomUUID(), provider }));
     this.#update({ queue: this.#queue(), currentIndex: null, status: 'idle' });
     return this.#switch(0);
   }
-  enqueueRemoteNext(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string): PlaybackSnapshot {
+  enqueueRemoteNext(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string, accountId?: string, durationMs?: number): PlaybackSnapshot {
     if (this.#disposed) return this.#state;
     if (this.#tracks.length >= 10000) throw new DomainError('invalid-input');
-    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
+    const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(durationMs === undefined ? {} : { durationMs }), ...(accountId ? { accountId } : {}), ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
     this.#tracks.splice((this.#state.currentIndex ?? -1) + 1, 0, track);
     this.#update({ queue: this.#queue() });
     return this.#state;
   }
 
-  async clearRemote(provider: OnlineProviderId): Promise<void> {
-    if (!this.#tracks.some((track) => track.provider === provider)) return;
+  clearRemote(provider: OnlineProviderId, preserveRestored = false): Promise<void> {
+    return this.#removeTracks(track => track.provider === provider && (!preserveRestored || !this.#restored.has(track.id)));
+  }
+  async #removeTracks(remove: (track: PlayerTrack) => boolean): Promise<void> {
+    if (!this.#tracks.some(remove)) return;
     const current = this.#tracks[this.#state.currentIndex ?? -1];
-    const stopping = current?.provider === provider ? this.stop() : undefined;
-    this.#tracks = this.#tracks.filter((track) => track.provider !== provider);
-    const index = current ? this.#tracks.findIndex((track) => track.id === current.id) : -1;
+    const stopping = current && remove(current) ? this.stop() : undefined;
+    const removed = new Set(this.#tracks.filter(remove).map(track => track.id));
+    this.#tracks = this.#tracks.filter(track => !removed.has(track.id));
+    for (const id of removed) this.#restored.delete(id);
+    const index = current ? this.#tracks.findIndex(track => track.id === current.id) : -1;
     this.#update({ queue: this.#queue(), currentIndex: index < 0 ? null : index });
     await stopping;
   }
@@ -149,17 +198,19 @@ export class MusicPlayer {
     return this.#tail.then(() => this.#state);
   }
 
-  #switch(index: number): Promise<PlaybackSnapshot> {
+  #switch(index: number, restore = false): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
     const track = this.#tracks[index];
     if (!track) return Promise.resolve(this.#state);
+    const bookmark = restore && this.#bookmark?.id === track.id ? this.#bookmark : undefined;
+    if (!restore) this.#bookmark = undefined;
     const generation = this.#state.generation + 1;
     this.#abort.abort(); this.#abort = new AbortController();
     const signal = this.#abort.signal;
     this.#loaded = false;
     this.#paused = false;
     this.#previewSeconds = undefined;
-    this.#update({ generation, currentIndex: index, status: 'loading', positionSeconds: 0, durationSeconds: 0, error: undefined, audioOutput: undefined });
+    this.#update({ generation, currentIndex: index, status: 'loading', positionSeconds: bookmark?.seconds ?? 0, durationSeconds: bookmark?.duration ?? 0, error: undefined, audioOutput: undefined });
     return this.#enqueue(async () => {
       const old = this.#engine;
       this.#engine = undefined;
@@ -191,10 +242,11 @@ export class MusicPlayer {
           } catch { throw new DomainError('file-unavailable'); }
         }
         if (this.#disposed || this.#state.generation !== generation) return;
+        const startSeconds = Math.max(0, Math.min(bookmark?.seconds ?? 0, Math.max(0, (previewSeconds ?? bookmark?.duration ?? Infinity) - .2)));
         engine = new MpvClient({
-          ...this.#options,
+          ...this.#options, startSeconds,
           ...(track.resolve ? { network: 'loopback' as const } : {}),
-          ...(previewSeconds === undefined ? {} : { playbackLength: previewSeconds }),
+          ...(previewSeconds === undefined ? {} : { playbackLength: Math.max(.1, previewSeconds - startSeconds) }),
           onEvent: (event) => { if (this.#state.generation === generation) this.#event(event); },
           onFailure: () => {
             if (!this.#disposed && this.#state.generation === generation) {
@@ -226,7 +278,7 @@ export class MusicPlayer {
   #event(event: Record<string, unknown>): void {
     if (this.#disposed) return;
     if (event.event === 'file-loaded') {
-      this.#loaded = true;
+      this.#loaded = true; this.#bookmark = undefined;
       this.#update({ status: this.#paused ? 'paused' : 'playing' });
       void this.setVolume(this.#desiredVolume, false);
     } else if (event.event === 'end-file') {
@@ -267,13 +319,18 @@ export class MusicPlayer {
 
   pause(): Promise<PlaybackSnapshot> { return this.#control(['set_property', 'pause', true]); }
   resume(): Promise<PlaybackSnapshot> {
-    if (this.#state.currentIndex !== null && ['ended', 'idle', 'error'].includes(this.#state.status)) {
-      return this.#switch(this.#state.currentIndex);
+    if (this.#state.currentIndex !== null && (!this.#loaded || ['ended', 'idle', 'error'].includes(this.#state.status))) {
+      return this.#switch(this.#state.currentIndex, this.#bookmark !== undefined);
     }
     return this.#control(['set_property', 'pause', false]);
   }
   seek(seconds: number): Promise<PlaybackSnapshot> {
     playbackNumber(seconds);
+    if (!this.#loaded && this.#bookmark) {
+      const positionSeconds = Math.min(seconds, this.#state.durationSeconds);
+      this.#bookmark.seconds = positionSeconds; this.#update({ positionSeconds });
+      return Promise.resolve(this.#state);
+    }
     return this.#control(['seek', Math.min(seconds, this.#state.durationSeconds), 'absolute+exact']);
   }
   async #flushVolume(): Promise<void> {
@@ -305,6 +362,7 @@ export class MusicPlayer {
   }
 
   stop(): Promise<PlaybackSnapshot> {
+    this.#bookmark = undefined;
     this.#abort.abort();
     this.#loaded = false;
     this.#update({ generation: this.#state.generation + 1, status: 'idle', positionSeconds: 0, durationSeconds: 0, error: undefined });

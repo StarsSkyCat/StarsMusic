@@ -1,3 +1,4 @@
+import { parseStoredPlaybackTrack, type StoredRemoteTrack } from '../../../contracts/src/playback-session.ts';
 import { ownedPlaylist, playlistOwner, playlistTrackIds } from './library.ts';
 import { parseNeteaseMutation, type NeteaseMutation } from '../../../contracts/src/netease-library.ts';
 import { parseLrc } from '../lyrics.ts';
@@ -606,6 +607,17 @@ export class NeteaseService {
     for (const track of tracks) this.#knownTracks.set(track.id, track);
     this.#rememberAlbums(originals);
     return tracks;
+  }
+  async ensureRestoredTrack(value: StoredRemoteTrack, generation: number): Promise<void> {
+    const saved = parseStoredPlaybackTrack(value);
+    const { lease, transport } = this.#connected();
+    if (saved.kind !== 'netease' || saved.accountId !== lease.context.accountId || generation !== this.#state.generation) throw new DomainError('stale-operation');
+    if (this.#knownTracks.has(saved.sourceId)) return;
+    const body = success(await transport.call('songs', { c: JSON.stringify([{ id: saved.sourceId }]) }, lease.signal));
+    if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
+    const found = parseTracks(body.songs, body.privileges).find(track => track.id === saved.sourceId);
+    if (!found) throw new DomainError('unavailable');
+    this.#knownTracks.set(found.id, found); this.#rememberAlbums(body.songs as unknown[]);
   }
   async getPresentation(id: string, generation: number): Promise<PresentationContent> {
     const { lease, transport } = this.#connected();

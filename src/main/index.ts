@@ -1,3 +1,7 @@
+import { PlaybackSession } from './playback-session';
+import { PlaybackSessionStoreClient } from './playback-session-client';
+import type { StoredRemoteTrack } from '../../packages/contracts/src/playback-session';
+import { DomainError } from '../../packages/contracts/src/errors';
 import type { CredentialProvider } from '../../packages/contracts/src/credentials';
 import { CredentialStoreClient } from './credential-store-client';
 import { LocalKeyCipher } from './local-key-cipher';
@@ -35,8 +39,19 @@ const kugou = new KugouClient(fileURLToPath(new URL('./kugou-worker.js', import.
 const presentation = new PresentationController(async (track, signal) => {
   if (!track.sourceId || !track.provider || track.provider === 'local') return { lyrics: [] };
   const client = track.provider === 'netease' ? netease : kugou;
-  return client.getPresentation(track.sourceId, client.snapshot().generation, signal);
+  const saved = player.storedTrack(track.id);
+  const generation = client.snapshot().generation;
+  if (saved && saved.kind !== 'local') await client.ensureRestoredTrack(saved, generation, signal);
+  return client.getPresentation(track.sourceId, generation, signal);
 });
+let playbackSession: PlaybackSession | undefined;
+async function resolveSavedTrack(track: StoredRemoteTrack, signal: AbortSignal) {
+  const client = track.kind === 'netease' ? netease : kugou;
+  const state = client.snapshot();
+  if (state.status !== 'connected' || state.account?.id !== track.accountId) throw new DomainError('playback-login-required');
+  await client.ensureRestoredTrack(track, state.generation, signal);
+  return client.resolveTrack(track.sourceId, state.generation, signal);
+}
 let vault: CredentialVault;
 let selectionGeneration = 0;
 let quitting = false;
@@ -136,6 +151,8 @@ void app.whenReady().then(async () => {
   const profile = app.getPath('userData');
   appearance = new AppearanceStore(path.join(profile, 'appearance.json'));
   await appearance.initialize();
+  playbackSession = new PlaybackSession(player, new PlaybackSessionStoreClient(fileURLToPath(new URL('./playback-session-worker.js', import.meta.url)), path.join(profile, 'playback.sqlite')));
+  await playbackSession.initialize(resolveSavedTrack);
   nativeTheme.on('updated', () => mainWindow?.setBackgroundColor(windowBackground()));
   for (const channel of Object.values(appearanceChannels)) {
     ipcMain.handle(channel, async (event, ...args: unknown[]) => {
@@ -191,7 +208,8 @@ void app.whenReady().then(async () => {
     if (contents && !contents.isDestroyed()) contents.send(playbackChannels.stateChanged, snapshot);
   });
   netease.subscribe((snapshot) => {
-    if (snapshot.status !== 'connected') void player.clearRemote('netease');
+    if (snapshot.status !== 'connected') void player.clearRemote('netease', true);
+    else if (snapshot.account) void player.bindRestoredProvider('netease', snapshot.account.id);
     const contents = mainWindow?.webContents;
     if (contents && !contents.isDestroyed()) contents.send(neteaseChannels.stateChanged, snapshot);
   });
@@ -208,7 +226,7 @@ void app.whenReady().then(async () => {
         if (state.status !== 'connected') throw new Error('请先登录');
         const tracks = await netease.preparePlaylist(argument.id!, state.generation);
         if (quitting || selection !== selectionGeneration || netease.snapshot().generation !== state.generation) throw new Error('播放操作已过期');
-        await player.openRemoteList('netease', tracks.map(track => ({ title: track.name, sourceId: track.id, artist: track.artists.join('、'), resolve: (signal: AbortSignal) => netease.resolveTrack(track.id, state.generation, signal) })));
+        await player.openRemoteList('netease', tracks.map(track => ({ title: track.name, sourceId: track.id, artist: track.artists.join('、'), accountId: state.account!.id, durationMs: track.durationMs, resolve: (signal: AbortSignal) => netease.resolveTrack(track.id, state.generation, signal) })));
         return;
       }
       if (channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) {
@@ -219,9 +237,9 @@ void app.whenReady().then(async () => {
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
         const resolve = (signal: AbortSignal) => netease.resolveTrack(track.id, state.generation, signal);
         if (channel === neteaseChannels.enqueueNext) {
-          player.enqueueRemoteNext('netease', track.name, resolve, track.artists.join('、'), track.id);
+          player.enqueueRemoteNext('netease', track.name, resolve, track.artists.join('、'), track.id, state.account!.id, track.durationMs);
         } else {
-          await player.openRemote('netease', track.name, resolve, track.artists.join('、'), track.id);
+          await player.openRemote('netease', track.name, resolve, track.artists.join('、'), track.id, state.account!.id, track.durationMs);
         }
         return;
       }
@@ -255,7 +273,8 @@ void app.whenReady().then(async () => {
     });
   }
   kugou.subscribe((snapshot) => {
-    if (snapshot.status !== 'connected') void player.clearRemote('kugou');
+    if (snapshot.status !== 'connected') void player.clearRemote('kugou', true);
+    else if (snapshot.account) void player.bindRestoredProvider('kugou', snapshot.account.id);
     const contents = mainWindow?.webContents;
     if (contents && !contents.isDestroyed()) contents.send(kugouChannels.stateChanged, snapshot);
   });
@@ -273,9 +292,9 @@ void app.whenReady().then(async () => {
         if (state.status !== 'connected' || !track) throw new Error('曲目尚未登记');
         const resolve = (signal: AbortSignal) => kugou.resolveTrack(track.id, state.generation, signal);
         if (channel === kugouChannels.enqueueNext) {
-          player.enqueueRemoteNext('kugou', track.name, resolve, track.artists.join('、'), track.id);
+          player.enqueueRemoteNext('kugou', track.name, resolve, track.artists.join('、'), track.id, state.account!.id, track.durationMs);
         } else {
-          await player.openRemote('kugou', track.name, resolve, track.artists.join('、'), track.id);
+          await player.openRemote('kugou', track.name, resolve, track.artists.join('、'), track.id, state.account!.id, track.durationMs);
         }
         return;
       }
@@ -376,7 +395,11 @@ app.on('before-quit', (event) => {
   quitting = true;
   presentation.dispose();
   selectionGeneration++;
-  void Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose(), vault?.close()]).then(() => app.quit());
+  void (async () => {
+    try { await playbackSession?.close(); } catch { /* 原记录保留；退出仍清理子进程。 */ }
+    await Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose(), vault?.close()]);
+    app.quit();
+  })();
 });
 app.on('will-quit', () => {
   ipcMain.removeHandler(desktopChannels.getAppInfo);

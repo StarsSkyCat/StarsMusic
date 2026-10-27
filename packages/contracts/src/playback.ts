@@ -38,6 +38,7 @@ export interface PlaybackSnapshot {
   readonly engineVersion?: string;
   readonly audioOutput?: string;
   readonly error?: AppError;
+  readonly saveError?: AppError;
 }
 
 export interface PlaybackApi {
@@ -92,6 +93,7 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
     volume: playbackNumber(input.volume, 100), muted: input.muted === true,
     ...(input.engineVersion === undefined ? {} : { engineVersion: text(input.engineVersion, 'playback.engineVersion') }),
     ...(input.audioOutput === undefined ? {} : { audioOutput: text(input.audioOutput, 'playback.audioOutput') }),
+    ...(input.saveError === undefined ? {} : { saveError: parseAppError(input.saveError) }),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),
   });
 }

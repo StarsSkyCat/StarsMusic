@@ -4,6 +4,7 @@ import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
   main: { build: { rolldownOptions: { input: {
+    'playback-session-worker': resolve('src/main/playback-session-worker.ts'),
     index: resolve('src/main/index.ts'), 'netease-worker': resolve('src/main/netease-worker.ts'), 'kugou-worker': resolve('src/main/kugou-worker.ts'), 'credential-store-worker': resolve('src/main/credential-store-worker.ts'),
   } } } },
   preload: {

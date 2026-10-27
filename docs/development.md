@@ -104,7 +104,7 @@ corepack pnpm dev
 | scripts | 可直接执行的仓库工具 |
 | docs | 设计、开发、决策及验证记录 |
 
-main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器、主进程 CredentialVault 和凭据 SQLite 后台已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js、kugou-worker.js 与 credential-store-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程协调本地密钥加密/解密和异步存储；业务请求仍由后台进程使用解密后的临时凭据。音乐库、队列存储和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
+main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器、主进程 CredentialVault 和凭据 SQLite 后台已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js、kugou-worker.js、credential-store-worker.js 与 playback-session-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程协调本地密钥加密/解密和异步存储；业务请求仍由后台进程使用解密后的临时凭据。队列存储已由独立 SQLite worker 实现，保存队列顺序、当前项、进度、音量与静音；重启暂停恢复、在线取链需原账号连接，详见 [播放说明](playback.md)。音乐库索引和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
 
 公共 contracts 不导入 Electron/Vue/Provider SDK；renderer 只能使用 preload API。平台请求在 Provider 后台处理。重型扫描和数据库工作与窗口主进程分离。
 

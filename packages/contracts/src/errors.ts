@@ -21,6 +21,8 @@ const definitions = {
   'unsupported': ['暂不支持此操作', false],
   'internal': ['操作失败，请稍后重试', false],
   'engine-unavailable': ['无法启动 mpv，请确认已安装并可运行', false],
+  'playback-save-failed': ['播放记录保存失败，请检查本地存储和文件权限', true],
+  'playback-login-required': ['请连接此队列原账号后继续播放', false],
   'playback-failed': ['音频播放失败，请检查文件或音频输出', false],
   'file-unavailable': ['本地音频文件无法访问或格式不支持', false],
 } as const;

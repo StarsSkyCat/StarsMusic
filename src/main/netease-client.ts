@@ -1,3 +1,4 @@
+import { parseStoredPlaybackTrack, type StoredRemoteTrack } from '../../packages/contracts/src/playback-session.ts';
 import { parseNeteaseArtwork, type NeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { parsePresentationContent, type PresentationContent } from '../../packages/contracts/src/presentation';
 import { utilityProcess, type UtilityProcess } from 'electron';
@@ -11,7 +12,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'refreshLibrary' | 'updateLibrary' | 'loadLikes' | 'preparePlaylist' | 'refreshMembership' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
+type Operation = 'ensureRestoredTrack' | 'refreshLibrary' | 'updateLibrary' | 'loadLikes' | 'preparePlaylist' | 'refreshMembership' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;
@@ -92,7 +93,7 @@ export class NeteaseClient {
       worker.postMessage({ operation, requestId, ...args });
     });
   }
-  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation' | 'getArtwork' | 'preparePlaylist'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
+  async command(operation: Exclude<Operation, 'ensureRestoredTrack' | 'resolveTrack' | 'getPresentation' | 'getArtwork' | 'preparePlaylist'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
     const generation = this.#state.generation;
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
@@ -125,6 +126,13 @@ export class NeteaseClient {
     const value = await this.#request('getArtwork', { artwork: { ...request, generation: this.#workerGeneration } });
     if (this.#state.generation !== request.generation) throw new DomainError('stale-operation');
     return parseNeteaseArtwork(value);
+  }
+  async ensureRestoredTrack(track: StoredRemoteTrack, generation: number, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation || this.#state.account?.id !== track.accountId) throw new DomainError('playback-login-required');
+    await this.#request('ensureRestoredTrack', { track: parseStoredPlaybackTrack(track), generation: this.#workerGeneration });
+    signal.throwIfAborted();
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation || this.#state.account?.id !== track.accountId) throw new DomainError('stale-operation');
   }
   async getPresentation(id: string, generation: number, signal: AbortSignal): Promise<PresentationContent> {
     signal.throwIfAborted();

@@ -626,3 +626,21 @@ test('收藏安全验证被明确提示，认证过期清空当前账号和收�
     assert.equal(f.instance.snapshot().status, 'expired'); assert.equal(f.instance.snapshot().library.likedIds.length, 0);
   } finally { f.instance.dispose(); }
 });
+
+test('重启曲目登记按原账号校验并重新读取官方元数据，旧账号迟到数据丢弃', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  const track = { id: 'saved', title: '保存项', kind: 'netease' as const, accountId: '42', sourceId: '7' };
+  try {
+    await connect(instance); const generation = instance.snapshot().generation;
+    await assert.rejects(instance.resolveTrack('7', generation));
+    await assert.rejects(instance.ensureRestoredTrack({ ...track, accountId: '99' }, generation));
+    await instance.ensureRestoredTrack(track, generation);
+    transport.handlers.set('stream', async () => ({ code: 200, data: [{ id: 7, code: 200, url: 'https://m10.music.126.net/synthetic', br: 128000, type: 'mp3' }] }));
+    assert.equal((await instance.resolveTrack('7', generation)).track.id, '7');
+    instance.logout(); await connect(instance);
+    const pending = deferred<unknown>(); transport.handlers.set('songs', async () => pending.promise);
+    const loading = instance.ensureRestoredTrack(track, instance.snapshot().generation);
+    instance.logout(); pending.resolve({ code: 200, songs: [{ id: 7, name: '旧数据', ar: [], dt: 1 }] });
+    await assert.rejects(loading); assert.equal(instance.snapshot().status, 'signed-out');
+  } finally { instance.dispose(); }
+});

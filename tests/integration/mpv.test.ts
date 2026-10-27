@@ -197,3 +197,44 @@ test('插队不打断实际音频，EOF 自动播放下一首并保留唯一 mpv
     assert.throws(() => process.kill(pid!, 0));
   } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
 });
+
+test('真实解码重启恢复：启动暂停且不创建 mpv，用户继续后从书签定位并保留静音', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-resume-mpv-')); const file = path.join(directory, 'resume.wav');
+  const first = new MusicPlayer({ audioOutput: 'null' }); const second = new MusicPlayer({ audioOutput: 'null' });
+  try {
+    await writeSilentWav(file); await first.openFiles([file]);
+    await until(() => first.snapshot().status === 'playing' && first.snapshot().durationSeconds > 0);
+    await first.pause(); await until(() => first.snapshot().status === 'paused');
+    await first.seek(8); await until(() => first.snapshot().positionSeconds >= 7.9);
+    await first.setVolume(41); await first.setMuted(true);
+    const saved = first.exportSession(); await first.dispose();
+    second.restoreSession(saved, async () => { throw new Error('unexpected online resolve'); });
+    assert.equal(second.snapshot().status, 'paused'); assert.deepEqual(await children(), []);
+    assert.equal(second.snapshot().positionSeconds, saved.positionSeconds); assert.equal(second.snapshot().volume, 41); assert.equal(second.snapshot().muted, true);
+    await second.seek(11); await second.resume();
+    await until(() => second.snapshot().status === 'playing' && second.snapshot().positionSeconds >= 10.9);
+    assert.equal((await children()).length, 1);
+    assert.match(await readFile(`/proc/${(await children())[0]}/cmdline`, 'utf8'), /--start=11/);
+    await second.setMuted(false); assert.equal(second.snapshot().volume, 41);
+  } finally { await first.dispose(); await second.dispose(); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('在线恢复重新获取实际权限，旧完整播放书签超出试听范围时限制到本次试听', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-resume-preview-')); const file = path.join(directory, 'synthetic.wav');
+  await writeSilentWav(file, 5); const audio = await readFile(file);
+  const fetch: FetchMedia = async (_url, headers) => {
+    const start = Number(/^bytes=(\d+)-/.exec(headers.Range ?? '')?.[1] ?? 0); const body = audio.subarray(start);
+    return { status: start > 0 ? 206 : 200, headers: { 'content-type': 'audio/wav', 'content-length': String(body.length), 'accept-ranges': 'bytes',
+      ...(start > 0 ? { 'content-range': `bytes ${start}-${audio.length - 1}/${audio.length}` } : {}) }, stream: Readable.from([body]) };
+  };
+  const player = new MusicPlayer({ audioOutput: 'null', openGateway: (url, signal, provider) => MediaGateway.open(url, signal, fetch, provider) });
+  try {
+    player.restoreSession({ version: 1, queue: [{ id: 'saved-online', kind: 'netease', sourceId: '7', accountId: '42', title: '合成试听' }],
+      currentId: 'saved-online', positionSeconds: 100, durationSeconds: 200, volume: 30, muted: false, lastAudibleVolume: 30 },
+    async () => ({ track: { provider: 'netease', id: '7' }, source: { kind: 'remote', url: 'https://m10.music.126.net/synthetic', headers: {} },
+      quality: { level: 'standard' }, access: { kind: 'preview', startMs: 0, durationMs: 2000 } }));
+    await player.resume(); await until(() => player.snapshot().status === 'ended');
+    assert.ok(player.snapshot().durationSeconds <= 2); assert.ok(player.snapshot().positionSeconds <= 2);
+    await player.stop(); assert.deepEqual(await children(), []);
+  } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
+});
