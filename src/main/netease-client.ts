@@ -87,7 +87,7 @@ export class NeteaseClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#requests.delete(requestId); reject(new DomainError('timeout')); this.#fail(worker);
-      }, operation === 'browse' ? 45000 : 30000);
+      }, operation === 'browse' || operation === 'refreshMembership' ? 45000 : 30000);
       this.#requests.set(requestId, { resolve, reject, timer });
       worker.postMessage({ operation, requestId, ...args });
     });

@@ -14,7 +14,7 @@ export function parseNeteaseTrackRights(value: unknown): NeteaseTrackRights {
 }
 export interface NeteaseMembership {
   readonly status: 'idle' | 'loading' | 'ready' | 'error';
-  readonly benefits: readonly { readonly kind: 'vip' | 'svip' | 'music-package' | 'album'; readonly expiresAt: number }[];
+  readonly benefits: readonly { readonly kind: 'vip' | 'svip' | 'music-package' | 'album'; readonly expiresAt?: number }[];
   readonly syncedAt?: number;
   readonly error?: AppError;
 }
@@ -23,7 +23,7 @@ export function parseNeteaseMembership(value: unknown): NeteaseMembership {
   if (!Array.isArray(raw.benefits) || raw.benefits.length > 4) throw new ContractValidationError('netease.membership.benefits');
   return Object.freeze({ status: choice(raw.status, ['idle', 'loading', 'ready', 'error'], 'netease.membership.status'), benefits: Object.freeze(raw.benefits.map(value => {
     const item = record(value, 'netease.membership.benefit');
-    return Object.freeze({ kind: choice(item.kind, ['vip', 'svip', 'music-package', 'album'], 'netease.membership.kind'), expiresAt: nonNegativeInteger(item.expiresAt, 'netease.membership.expiresAt') });
+    return Object.freeze({ kind: choice(item.kind, ['vip', 'svip', 'music-package', 'album'], 'netease.membership.kind'), ...(item.expiresAt === undefined ? {} : { expiresAt: nonNegativeInteger(item.expiresAt, 'netease.membership.expiresAt') }) });
   })), ...(raw.syncedAt === undefined ? {} : { syncedAt: nonNegativeInteger(raw.syncedAt, 'netease.membership.syncedAt') }), ...(raw.error === undefined ? {} : { error: parseAppError(raw.error) }) });
 }
 export const initialNeteaseMembership = (): NeteaseMembership => parseNeteaseMembership({ status: 'idle', benefits: [] });

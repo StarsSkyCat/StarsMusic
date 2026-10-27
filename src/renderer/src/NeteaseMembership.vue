@@ -9,9 +9,9 @@ const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => { timer = setInterval(() => { now.value = Date.now(); }, 30_000); });
 onUnmounted(() => { clearInterval(timer); });
-const active = computed(() => props.membership.benefits.filter(item => item.expiresAt > now.value));
+const active = computed(() => props.membership.benefits.filter(item => item.expiresAt === undefined || item.expiresAt > now.value));
 const label = computed(() => props.membership.status === 'loading' ? '正在同步官方权益' : props.membership.status === 'error' ? '权益同步失败' : props.membership.status !== 'ready' ? '权益待同步' : active.value.length ? [...new Set(active.value.map(item => names[item.kind]))].join(' · ') : '当前无有效会员套餐');
-const details = computed(() => active.value.map(item => `${names[item.kind]}有效期至 ${new Date(item.expiresAt).toLocaleDateString('zh-CN')}`).join('；'));
+const details = computed(() => active.value.map(item => item.expiresAt === undefined ? `${names[item.kind]}：官方未返回有效期` : `${names[item.kind]}有效期至 ${new Date(item.expiresAt).toLocaleDateString('zh-CN')}`).join('；'));
 </script>
 <template>
   <div class="netease-membership" :class="{ 'membership-active': active.length && membership.status === 'ready' }" aria-label="网易云官方会员权益">

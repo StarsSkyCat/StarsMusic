@@ -48,19 +48,32 @@ export function parseTracks(value: unknown, privileges?: unknown): NeteaseTrack[
 
 // 会员状态来自专用接口；等级/昵称都不能代替有效期限或单曲授权。
 export function parseMembershipResponse(value: unknown, accountId: string, now: number): NeteaseMembership {
-  const data = record(success(value).data, 'netease.vip.data');
-  if (apiId(data.userId) !== accountId) throw new DomainError('invalid-response');
+  const body = success(value);
+  const wrapper = record(body.data, 'netease.vip.data');
+  const data = wrapper.vipInfo === undefined ? wrapper : record(wrapper.vipInfo, 'netease.vip.info');
+  // 已由后台固定为当前账号的请求；返回账号时必须匹配，省略账号不是其他账号。
+  for (const owner of [wrapper.userId, data.userId]) if (owner !== undefined && apiId(owner) !== accountId) throw new DomainError('invalid-response');
+  const integer = (value: unknown): number | undefined => {
+    const parsed = typeof value === 'string' && /^\d{1,16}$/.test(value) ? Number(value) : value;
+    return typeof parsed === 'number' && Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+  };
   const kinds = { associator: 'vip', redplus: 'svip', musicPackage: 'music-package', albumVip: 'album' } as const;
-  const benefits: { kind: NeteaseMembership['benefits'][number]['kind']; expiresAt: number }[] = [];
+  const benefits: NeteaseMembership['benefits'][number][] = [];
   let recognized = false;
   for (const [key, kind] of Object.entries(kinds)) {
     if (data[key] === undefined) continue;
     recognized = true;
     if (data[key] === null) continue;
     const item = record(data[key], 'netease.vip.package');
-    const expiresAt = nonNegativeInteger(item.expireTime, 'netease.vip.expireTime');
-    if (typeof item.vipCode !== 'number' || !Number.isSafeInteger(item.vipCode) || item.vipCode < 0) throw new DomainError('invalid-response');
-    if (item.vipCode > 0 && expiresAt > now) benefits.push({ kind, expiresAt });
+    if (item.rights === false) continue;
+    const expiresAt = integer(item.expireTime);
+    if (expiresAt !== undefined) {
+      if (expiresAt > now) benefits.push({ kind, expiresAt });
+      continue;
+    }
+    // App 端有明确 rights 但不返回有效期时，只同步该标记，不制造到期日。
+    if (item.rights === true && item.expireTime == null) { benefits.push({ kind }); continue; }
+    throw new DomainError('invalid-response');
   }
   if (!recognized || (!benefits.length && (!Object.hasOwn(data, 'associator') || !Object.hasOwn(data, 'musicPackage')))) throw new DomainError('invalid-response');
   return { status: 'ready', benefits, syncedAt: now };

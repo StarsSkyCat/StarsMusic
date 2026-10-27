@@ -259,7 +259,13 @@ export class NeteaseService {
     const reset = (track: NeteaseTrack): NeteaseTrack => track.rights ? { ...track, rights: { ...track.rights, playback: 'unknown' } } : track;
     this.#update({ tracks: this.#state.tracks.map(reset), catalog: { ...this.#state.catalog, tracks: this.#state.catalog.tracks.map(reset) }, membership: { status: 'loading', benefits: [] } });
     try {
-      const membership = parseMembershipResponse(await transport.call('vip', { userId: lease.context.accountId }, lease.signal), lease.context.accountId!, this.#now());
+      let membership: NeteaseSnapshot['membership'];
+      try {
+        membership = parseMembershipResponse(await transport.call('vip', { userId: lease.context.accountId }, lease.signal), lease.context.accountId!, this.#now());
+      } catch (error: unknown) {
+        if (!this.#sessions.isCurrent(lease) || normalizeError(error).code !== 'invalid-response') throw error;
+        membership = parseMembershipResponse(await transport.call('vipClient', { userId: lease.context.accountId }, lease.signal), lease.context.accountId!, this.#now());
+      }
       if (!this.#sessions.isCurrent(lease)) return this.#state;
       verifiedMembership = membership;
       // 手动/周期同步同时刷新当前页单曲权限，避免开通会员后沿用旧页面权限。

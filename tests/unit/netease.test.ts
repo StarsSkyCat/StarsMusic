@@ -446,3 +446,20 @@ test('同步权益刷新当前单曲权限，迟到详情不覆盖新搜索；�
     assert.equal(instance.snapshot().membership.error?.code, 'network');
   } finally { instance.dispose(); }
 });
+
+
+test('会员兼容省略 userId/vipCode、字符串到期日及 App 明确权益，格式不兼容才回退', async () => {
+  const { parseMembershipResponse } = await import('../../packages/providers/src/netease/response.ts');
+  assert.equal(parseMembershipResponse({ code: 200, data: { associator: { expireTime: '5000' } } }, '42', 1000).benefits[0]?.kind, 'vip');
+  assert.deepEqual(parseMembershipResponse({ code: 200, data: { vipInfo: { redplus: { rights: true } } } }, '42', 1000).benefits, [{ kind: 'svip' }]);
+  assert.equal(parseMembershipResponse({ code: 200, data: { associator: { rights: false, expireTime: 5000 }, musicPackage: null } }, '42', 1000).benefits.length, 0);
+  const transport = new FakeTransport(); const instance = service(() => transport); let fallback = 0;
+  transport.handlers.set('vip', async () => ({ code: 200, data: {} }));
+  transport.handlers.set('vipClient', async () => { fallback++; return { code: 200, data: { associator: { rights: true } } }; });
+  try {
+    await connect(instance); await new Promise(done => setImmediate(done));
+    assert.equal(instance.snapshot().membership.status, 'ready'); assert.equal(fallback, 1);
+    transport.handlers.set('vip', async () => { throw new DomainError('network'); });
+    await instance.refreshMembership(); assert.equal(fallback, 1);
+  } finally { instance.dispose(); }
+});
