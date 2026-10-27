@@ -112,6 +112,8 @@ main、preload、renderer、公共契约、会话守卫、网易云 Provider、�
 
 ## 日常开发
 
+底栏播放权限与音质标签在 960px 起的窗口中保留完整宽度，双主题缩放验证见 [底栏信息记录](validation/2026-10-27-player-details.md)。
+
 1. 阅读 AGENTS.md，检查 git status 和当前任务状态。
 2. 对照 P0 验收目标完成最小闭环；有新发现就更新路线图和 ADR。
 3. TypeScript 使用严格模式，代码命名英文；文档与用户提示默认中文。

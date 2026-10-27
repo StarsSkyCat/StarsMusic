@@ -1025,7 +1025,7 @@ onUnmounted(() => {
       </button>
       <PlaybackControls :playback="playback" @control="control" />
       <div class="player-tools">
-        <span v-if="currentTrack?.detail" class="quality-label">{{ currentTrack.detail }}</span
+        <span v-if="currentTrack?.detail" class="quality-label" :title="currentTrack.detail">{{ currentTrack.detail }}</span
         > <VolumeControl :volume="playback.volume" :muted="playback.muted" :send="value => control(api => api.setVolume(value))" :mute="value => control(api => api.setMuted(value))" />
         <button class="queue-toggle" aria-label="打开播放队列" @click="showQueue">
           <ListMusic :size="20" /><span>{{ playback.queue.length }}</span>

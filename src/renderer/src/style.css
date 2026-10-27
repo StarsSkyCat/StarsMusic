@@ -1883,7 +1883,7 @@ main:focus {
   grid-column: 1 / -1;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(230px, 1.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 1.35fr) max-content;
   align-items: center;
   gap: 28px;
   min-width: 0;
@@ -2063,6 +2063,14 @@ input[type='range']:disabled {
   justify-content: flex-end;
   gap: 20px;
   min-width: 0;
+}
+
+.player-tools > * {
+  flex-shrink: 0;
+}
+
+.player-tools .quality-label {
+  max-width: none;
 }
 
 .volume-control {
@@ -2828,9 +2836,6 @@ dialog::backdrop {
   .player-tools {
     gap: 14px;
   }
-  .player-tools .quality-label {
-    display: none;
-  }
   .now-playing strong {
     font-size: 11px;
   }
@@ -3198,6 +3203,9 @@ dialog::backdrop {
   }
   .player-tools {
     gap: 0;
+  }
+  .player-tools .quality-label {
+    display: none;
   }
   .queue-toggle {
     min-width: 42px;
