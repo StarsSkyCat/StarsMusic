@@ -106,16 +106,23 @@ export class MusicPlayer {
 
   openRemote(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
-    if (this.#tracks.length >= 200) return Promise.resolve(this.reportError(appError('invalid-input')));
+    if (this.#tracks.length >= 10000) return Promise.resolve(this.reportError(appError('invalid-input')));
     const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
     this.#tracks.push(track);
     this.#update({ queue: this.#queue() });
     return this.#switch(this.#tracks.length - 1);
   }
 
+  openRemoteList(provider: OnlineProviderId, tracks: readonly { title: string; sourceId: string; artist?: string; resolve: (signal: AbortSignal) => Promise<StreamResolution> }[]): Promise<PlaybackSnapshot> {
+    if (this.#disposed) return Promise.resolve(this.#state);
+    if (!tracks.length || tracks.length > 10000) throw new DomainError('invalid-input');
+    this.#tracks = tracks.map(track => ({ ...track, id: randomUUID(), provider }));
+    this.#update({ queue: this.#queue(), currentIndex: null, status: 'idle' });
+    return this.#switch(0);
+  }
   enqueueRemoteNext(provider: OnlineProviderId, title: string, resolve: (signal: AbortSignal) => Promise<StreamResolution>, artist?: string, sourceId?: string): PlaybackSnapshot {
     if (this.#disposed) return this.#state;
-    if (this.#tracks.length >= 200) throw new DomainError('invalid-input');
+    if (this.#tracks.length >= 10000) throw new DomainError('invalid-input');
     const track: PlayerTrack = { id: randomUUID(), title, resolve, provider, ...(artist ? { artist } : {}), ...(sourceId ? { sourceId } : {}) };
     this.#tracks.splice((this.#state.currentIndex ?? -1) + 1, 0, track);
     this.#update({ queue: this.#queue() });

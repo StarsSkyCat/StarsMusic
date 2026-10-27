@@ -61,3 +61,16 @@ test('移除当前项之前的曲目会重定位索引；在线退出不会清�
     assert.deepEqual(player.snapshot().queue.map((t) => t.title), [b!.title, '保留项']);
   } finally { await player.dispose(); }
 });
+
+test('整张在线歌单原子替换队列，超过 200 首仍完整且仅按需取链', async () => {
+  const player = new MusicPlayer(); const calls: number[] = [];
+  try {
+    await player.openRemoteList('netease', Array.from({ length: 350 }, (_, index) => ({ title: `合成曲目 ${index}`, sourceId: String(index), resolve: async () => { calls.push(index); throw new Error('synthetic unavailable'); } })));
+    assert.equal(player.snapshot().queue.length, 350);
+    assert.equal(player.snapshot().queue[349]?.sourceId, '349');
+    assert.deepEqual(calls, [0]);
+    await player.playTrack(player.snapshot().queue[201]!.id);
+    assert.deepEqual(calls, [0, 201]);
+    await player.clearRemote('netease'); assert.equal(player.snapshot().queue.length, 0);
+  } finally { await player.dispose(); }
+});

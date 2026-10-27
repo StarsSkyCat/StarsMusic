@@ -28,7 +28,7 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
       const calls: Record<string, unknown>[] = [];
       Reflect.set(globalThis, '__starsMusicCatalogCalls', calls);
       const publish = () => { BrowserWindow.getAllWindows()[0]!.webContents.send(channels.stateChanged, state); return state; };
-      for (const channel of [channels.browse, channels.loadPlaylists, channels.loadPlaylist, channels.playTrack, channels.enqueueNext, channels.getArtwork, channels.refreshMembership]) ipcMain.removeHandler(channel);
+      for (const channel of [channels.browse, channels.loadPlaylists, channels.loadPlaylist, channels.playTrack, channels.enqueueNext, channels.getArtwork, channels.refreshMembership, channels.playPlaylist]) ipcMain.removeHandler(channel);
       const artworkCalls: Record<string, unknown>[] = [];
       Reflect.set(globalThis, '__starsMusicArtworkCalls', artworkCalls);
       ipcMain.handle(channels.getArtwork, (_event, request: { kind: string; id: string; generation: number }) => {
@@ -42,6 +42,7 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
         state = { ...state, revision: state.revision + 1, membership: { status: 'ready', benefits: [{ kind: 'vip', expiresAt: Date.now() + 86400000 }], syncedAt: Date.now() } };
         return publish();
       });
+      ipcMain.handle(channels.playPlaylist, (_event, id: string) => { calls.push({ operation: 'playlist', id }); });
       ipcMain.handle(channels.loadPlaylists, () => publish());
       ipcMain.handle(channels.loadPlaylist, (_event, id: string) => {
         state = { ...state, revision: state.revision + 1, playlistId: id, tracks: [{ id: '700', name: '合成私藏歌曲', artists: ['合成歌手'], durationMs: 30000, rights: { fee: 'album', playback: 'unavailable' } }] } as typeof state;
@@ -113,6 +114,8 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     expect((await calls()).at(-1)).toMatchObject({ kind: 'playlists', category: '华语', order: 'new', offset: 0 });
     await explore.getByRole('button', { name: /合成华语歌单/ }).click();
     await expect(explore.getByRole('heading', { name: '合成公开歌单详情', exact: true })).toBeVisible();
+    await explore.getByRole('button', { name: '从第一首听起', exact: true }).click();
+    expect((await calls()).at(-1)).toMatchObject({ operation: 'playlist', id: '901' });
     await explore.getByRole('button', { name: '返回歌单发现', exact: true }).click();
     await explore.getByRole('button', { name: '搜索', exact: true }).click();
     await expect(explore.getByRole('heading', { name: '下一首喜欢的，搜搜看', exact: true })).toBeVisible();

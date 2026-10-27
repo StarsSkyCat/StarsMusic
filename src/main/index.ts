@@ -202,6 +202,15 @@ void app.whenReady().then(async () => {
       assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
       const argument = parseNeteaseArguments(channel, args);
       if (quitting) return netease.snapshot();
+      if (channel === neteaseChannels.playPlaylist) {
+        const selection = ++selectionGeneration;
+        const state = netease.snapshot();
+        if (state.status !== 'connected') throw new Error('请先登录');
+        const tracks = await netease.preparePlaylist(argument.id!, state.generation);
+        if (quitting || selection !== selectionGeneration || netease.snapshot().generation !== state.generation) throw new Error('播放操作已过期');
+        await player.openRemoteList('netease', tracks.map(track => ({ title: track.name, sourceId: track.id, artist: track.artists.join('、'), resolve: (signal: AbortSignal) => netease.resolveTrack(track.id, state.generation, signal) })));
+        return;
+      }
       if (channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) {
         if (channel === neteaseChannels.playTrack) selectionGeneration++;
         const state = netease.snapshot();

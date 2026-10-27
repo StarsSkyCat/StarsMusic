@@ -2,7 +2,7 @@ import { parseNeteaseArtwork, type NeteaseArtworkRequest } from '../../packages/
 import { parsePresentationContent, type PresentationContent } from '../../packages/contracts/src/presentation';
 import { utilityProcess, type UtilityProcess } from 'electron';
 import { DomainError, normalizeError, parseAppError } from '../../packages/contracts/src/errors';
-import { initialNeteaseSnapshot, parseNeteaseSnapshot, type NeteaseSnapshot } from '../../packages/contracts/src/netease';
+import { initialNeteaseSnapshot, parseNeteaseSnapshot, parseNeteaseQueue, type NeteaseTrack, type NeteaseSnapshot } from '../../packages/contracts/src/netease';
 import { parseStreamResolution, type StreamResolution } from '../../packages/contracts/src/music';
 import { parseCredentialBundle, type NeteaseCredentialBundle } from '../../packages/contracts/src/credentials';
 
@@ -11,7 +11,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'refreshMembership' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
+type Operation = 'preparePlaylist' | 'refreshMembership' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;
@@ -87,12 +87,12 @@ export class NeteaseClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#requests.delete(requestId); reject(new DomainError('timeout')); this.#fail(worker);
-      }, operation === 'browse' || operation === 'refreshMembership' ? 45000 : 30000);
+      }, operation === 'preparePlaylist' ? 90000 : operation === 'browse' || operation === 'refreshMembership' ? 45000 : 30000);
       this.#requests.set(requestId, { resolve, reject, timer });
       worker.postMessage({ operation, requestId, ...args });
     });
   }
-  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation' | 'getArtwork'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
+  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation' | 'getArtwork' | 'preparePlaylist'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
     const generation = this.#state.generation;
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
@@ -113,6 +113,12 @@ export class NeteaseClient {
     const bundle = parseCredentialBundle(value);
     if (bundle.provider !== 'netease') throw new DomainError('invalid-response');
     return bundle;
+  }
+  async preparePlaylist(id: string, generation: number): Promise<readonly NeteaseTrack[]> {
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
+    const result = await this.#request('preparePlaylist', { id });
+    if (this.#state.status !== 'connected' || this.#state.generation !== generation) throw new DomainError('stale-operation');
+    return parseNeteaseQueue(result);
   }
   async getArtwork(request: NeteaseArtworkRequest): Promise<string | null> {
     if (this.#state.generation !== request.generation) throw new DomainError('stale-operation');

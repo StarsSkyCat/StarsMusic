@@ -463,3 +463,23 @@ test('会员兼容省略 userId/vipCode、字符串到期日及 App 明确权益
     await instance.refreshMembership(); assert.equal(fallback, 1);
   } finally { instance.dispose(); }
 });
+
+test('整单准备读取全部 trackIds 并分批归并详情，不截断到当前页或提前取音频', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport); const sizes: number[] = [];
+  transport.handlers.set('playlist', async data => ({ code: 200, playlist: { id: data.id, trackIds: Array.from({ length: 1300 }, (_, index) => ({ id: index + 1 })) } }));
+  transport.handlers.set('songs', async data => {
+    const ids = JSON.parse(data.c as string) as { id: string }[]; sizes.push(ids.length);
+    return { code: 200, songs: ids.reverse().map(({ id }) => ({ id, name: `合成 ${id}`, ar: [], dt: 30000 })) };
+  });
+  try {
+    await connect(instance); await instance.loadPlaylists();
+    const tracks = await instance.preparePlaylist('1');
+    assert.deepEqual(sizes.sort((a,b)=>a-b), [300,1000]);
+    assert.equal(tracks.length, 1300); assert.equal(tracks[0]?.id, '1'); assert.equal(tracks[1299]?.id, '1300');
+    await assert.rejects(instance.preparePlaylist('99999'));
+    const late = deferred<unknown>(); transport.handlers.set('playlist', async () => late.promise);
+    const request = instance.preparePlaylist('1'); instance.logout();
+    late.resolve({ code: 200, playlist: { id: 1, trackIds: [] } });
+    await assert.rejects(request);
+  } finally { instance.dispose(); }
+});

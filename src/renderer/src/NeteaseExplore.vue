@@ -11,11 +11,11 @@ import NeteaseArtwork from './NeteaseArtwork.vue';
 import './netease.css';
 import type { DisplayTrack } from './music-ui';
 
-const props = defineProps<{ state: NeteaseSnapshot; currentId: string | undefined; error: string }>();
+const props = defineProps<{ state: NeteaseSnapshot; currentId: string | undefined; error: string; starting?: boolean }>();
 const tab = defineModel<'hot' | 'playlists' | 'search' | 'owned'>('tab', { default: 'hot' });
 const emit = defineEmits<{
   browse: [request: CatalogRequest]; play: [id: string]; next: [id: string]; enqueue: [ids: string[]];
-  refreshMembership: []; openOwned: [id: string]; loadOwned: []; manage: [];
+  playPlaylist: [id: string]; refreshMembership: []; openOwned: [id: string]; loadOwned: []; manage: [];
 }>();
 const tabs = [{ id: 'hot', label: '热歌榜', icon: Flame }, { id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const;
 const catalog = computed(() => props.state.catalog);
@@ -59,6 +59,10 @@ function selectAll(): void { selected.value = selected.value.length === tracks.v
 function play(id: string, next = false): void {
   if (props.state.status !== 'connected') { actionError.value = '播放前请先连接网易云账号。'; return; }
   actionError.value = ''; if (next) emit('next', id); else emit('play', id);
+}
+function playPlaylist(): void {
+  if (props.state.status !== 'connected') { actionError.value = '播放前请先连接网易云账号。'; return; }
+  if (catalog.value.playlist) emit('playPlaylist', catalog.value.playlist.id);
 }
 function enqueue(): void {
   if (props.state.status !== 'connected') { actionError.value = '加入队列前请先连接网易云账号。'; return; }
@@ -105,7 +109,7 @@ onMounted(() => {
       <button v-if="detail" class="text-button catalog-back" @click="back"><ArrowLeft :size="16" />返回{{ tab === 'search' ? '搜索结果' : '歌单发现' }}</button>
       <div v-if="detail && catalog.playlist" class="ne-detail-hero">
         <span class="ne-detail-cover"><NeteaseArtwork :id="catalog.playlist.id" kind="playlist" :generation="state.generation" :name="catalog.playlist.name" /></span>
-        <div><span class="ne-kicker">PLAYLIST / NETEASE</span><h2>{{ heading }}</h2><p>{{ catalog.total || catalog.playlist.trackCount }} 首歌曲 · 网易云音乐</p><button v-if="tracks[0]" class="ne-primary" @click="play(tracks[0].id)"><Play :size="15" fill="currentColor" />从第一首听起</button></div>
+        <div><span class="ne-kicker">PLAYLIST / NETEASE</span><h2>{{ heading }}</h2><p>{{ catalog.total || catalog.playlist.trackCount }} 首歌曲 · 网易云音乐</p><button v-if="tracks[0]" class="ne-primary" :disabled="starting" title="将整张歌单替换为本次播放队列" @click="playPlaylist()"><Play :size="15" fill="currentColor" />{{ starting ? '读取完整歌单…' : '从第一首听起' }}</button></div>
       </div>
       <div v-if="tab === 'hot' && !detail && relevant && catalog.status === 'ready' && featured.length" class="ne-chart-stage" aria-label="热歌前三名">
         <button v-for="(track, index) in featured" :key="track.id" class="ne-chart-feature" :class="{ 'ne-chart-lead': index === 0 }" :aria-label="`播放热榜第${index + 1}名 ${track.name}`" @click="play(track.id)">

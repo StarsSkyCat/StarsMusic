@@ -8,6 +8,7 @@ export const neteaseChannels = {
   getState: 'starsmusic:netease:get-state', startLogin: 'starsmusic:netease:start-login',
   cancelLogin: 'starsmusic:netease:cancel-login', logout: 'starsmusic:netease:logout',
   loadPlaylists: 'starsmusic:netease:load-playlists', loadPlaylist: 'starsmusic:netease:load-playlist',
+  playPlaylist: 'starsmusic:netease:play-playlist',
   refreshMembership: 'starsmusic:netease:refresh-membership',
   browse: 'starsmusic:netease:browse', getArtwork: 'starsmusic:netease:get-artwork',
   enqueueNext: 'starsmusic:netease:enqueue-next', playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
@@ -43,12 +44,24 @@ export interface NeteaseApi {
   browse(request: CatalogRequest): Promise<NeteaseSnapshot>;
   getArtwork(request: NeteaseArtworkRequest): Promise<string | null>;
   playTrack(id: string): Promise<void>;
+  playPlaylist(id: string): Promise<void>;
   enqueueNext(id: string): Promise<void>;
   onStateChanged(listener: (state: NeteaseSnapshot) => void): () => void;
 }
 export function neteaseId(value: unknown): string {
   if (typeof value !== 'string' || !/^\d{1,30}$/.test(value)) throw new ContractValidationError('netease.id');
   return value;
+}
+export function parseNeteaseTrack(value: unknown): NeteaseTrack {
+    const item = record(value, 'netease.track');
+    if (!Array.isArray(item.artists)) throw new ContractValidationError('netease.artists');
+    return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.track.name'), artists: Object.freeze(item.artists.map((artist: unknown) => text(artist, 'netease.artist'))), durationMs: nonNegativeInteger(item.durationMs, 'netease.duration'), ...(item.rights === undefined ? {} : { rights: parseNeteaseTrackRights(item.rights) }) });
+}
+export function parseNeteaseQueue(value: unknown): readonly NeteaseTrack[] {
+  if (!Array.isArray(value) || !value.length || value.length > 10000) throw new ContractValidationError('netease.queue');
+  const tracks = value.map(parseNeteaseTrack);
+  if (new Set(tracks.map(track => track.id)).size !== tracks.length) throw new ContractValidationError('netease.queue.ids');
+  return tracks;
 }
 export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
   const input = record(value, 'netease');
@@ -66,11 +79,7 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
     const item = record(value, 'netease.playlist');
     return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.playlist.name'), trackCount: nonNegativeInteger(item.trackCount, 'netease.trackCount') });
   }) : [];
-  const tracks = status === 'connected' ? input.tracks.map((value: unknown) => {
-    const item = record(value, 'netease.track');
-    if (!Array.isArray(item.artists)) throw new ContractValidationError('netease.artists');
-    return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.track.name'), artists: Object.freeze(item.artists.map((artist: unknown) => text(artist, 'netease.artist'))), durationMs: nonNegativeInteger(item.durationMs, 'netease.duration'), ...(item.rights === undefined ? {} : { rights: parseNeteaseTrackRights(item.rights) }) });
-  }) : [];
+  const tracks = status === 'connected' ? input.tracks.map(parseNeteaseTrack) : [];
   const qrAllowed = status === 'waiting-scan' || status === 'awaiting-confirmation';
   if (qrAllowed && (typeof input.qrImage !== 'string' || input.qrImage.length > 500_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(input.qrImage))) {
     throw new ContractValidationError('netease.qrImage');
@@ -95,7 +104,7 @@ export function initialNeteaseSnapshot(): NeteaseSnapshot {
 export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number; catalog?: CatalogRequest; artwork?: NeteaseArtworkRequest } {
   if (channel === neteaseChannels.getArtwork && args.length === 1) return { artwork: parseNeteaseArtworkRequest(args[0]) };
   if (channel === neteaseChannels.browse && args.length === 1) return { catalog: parseCatalogRequest(args[0]) };
-  if ((channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) && args.length === 1) return { id: neteaseId(args[0]) };
+  if ((channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext || channel === neteaseChannels.playPlaylist) && args.length === 1) return { id: neteaseId(args[0]) };
   if (channel === neteaseChannels.loadPlaylist && args.length === 2) {
     const offset = nonNegativeInteger(args[1], 'netease.offset');
     if (offset > 100000 || offset % 50 !== 0) throw new ContractValidationError('netease.offset');

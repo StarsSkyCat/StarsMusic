@@ -62,6 +62,13 @@ const selected = ref<string[]>([]);
 const queueDialog = ref<HTMLDialogElement>();
 const nowPlayingOpen = ref(false);
 const selectedPlaylistId = ref<string>();
+const playlistStarting = ref(false);
+async function playWholePlaylist(id: string): Promise<void> {
+  if (playlistStarting.value) return;
+  playlistStarting.value = true;
+  try { await providers.netease.run(() => window.starsMusic!.netease.playPlaylist(id)); }
+  finally { playlistStarting.value = false; }
+}
 const neteaseTab = ref<'hot' | 'playlists' | 'search' | 'owned'>('hot');
 const neteaseState = computed(() => providers.netease.state.value as NeteaseSnapshot);
 let browsingScroll = 0;
@@ -667,6 +674,8 @@ onUnmounted(() => {
             :state="neteaseState"
             :current-id="currentTrack?.provider === 'netease' ? currentTrack.sourceId : undefined"
             :error="providers.netease.error.value"
+            :starting="playlistStarting"
+            @play-playlist="playWholePlaylist"
             @browse="browseNetease"
             @refresh-membership="refreshNeteaseMembership()"
             @play="play"
@@ -802,10 +811,10 @@ onUnmounted(() => {
               <button
                 v-if="filteredTracks.length"
                 class="primary-button compact"
-                @click="play(filteredTracks[0]!.id)"
+                :disabled="playlistStarting" @click="activeProvider === 'netease' && selectedPlaylistId ? playWholePlaylist(selectedPlaylistId) : play(filteredTracks[0]!.id)"
               >
                 <Play :size="14" fill="currentColor" />{{
-                  activeProvider ? '播放首曲' : '从头播放'
+                  activeProvider === 'netease' ? (playlistStarting ? '读取完整歌单…' : '播放全部') : activeProvider ? '播放首曲' : '从头播放'
                 }}
               </button>
             </div>

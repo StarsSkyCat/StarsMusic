@@ -71,6 +71,7 @@ const api: DesktopApi = Object.freeze({
     loadPlaylists: () => invokeNetease(neteaseChannels.loadPlaylists),
     loadPlaylist: (id: string, offset: number) => invokeNetease(neteaseChannels.loadPlaylist, id, offset),
     async playTrack(id: string): Promise<void> { await ipcRenderer.invoke(neteaseChannels.playTrack, id); },
+    async playPlaylist(id: string): Promise<void> { await ipcRenderer.invoke(neteaseChannels.playPlaylist, id); },
     async enqueueNext(id: string): Promise<void> { await ipcRenderer.invoke(neteaseChannels.enqueueNext, id); },
     onStateChanged(listener: (state: ReturnType<typeof parseNeteaseSnapshot>) => void) {
       if (typeof listener !== 'function') throw new Error('监听器无效');

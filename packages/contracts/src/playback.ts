@@ -63,7 +63,7 @@ export function playbackNumber(value: unknown, maximum = Number.MAX_SAFE_INTEGER
 
 export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
   const input = record(value, 'playback');
-  if (!Array.isArray(input.queue)) throw new ContractValidationError('playback.queue');
+  if (!Array.isArray(input.queue) || input.queue.length > 10000) throw new ContractValidationError('playback.queue');
   const queue = input.queue.map((value: unknown) => {
     const item = record(value, 'playback.queue.item');
     return Object.freeze({ id: text(item.id, 'playback.queue.id'), title: text(item.title, 'playback.queue.title'),

@@ -80,6 +80,7 @@ export class NeteaseService {
   #artworkCache = new Map<string, string | null>();
   #artworkPending = new Map<string, Promise<string | null>>();
   #artworkAbort = new AbortController();
+  #queueAbort: AbortController | undefined;
   #membershipBusy = false;
   #membershipTimer: ReturnType<typeof setTimeout> | undefined;
   #listBusy = false;
@@ -100,6 +101,7 @@ export class NeteaseService {
     for (const listener of this.#listeners) listener(this.#state);
   }
   #clearCatalog(): void {
+    this.#queueAbort?.abort(); this.#queueAbort = undefined;
     this.#artworkAbort.abort(); this.#artworkAbort = new AbortController();
     this.#playlistCovers.clear(); this.#artworkCache.clear(); this.#artworkPending.clear();
     this.#catalogView++; this.#catalogAbort?.abort(); this.#catalogAbort = undefined;
@@ -434,6 +436,38 @@ export class NeteaseService {
       const album = raw && typeof raw === 'object' ? record(raw, 'netease.album') : {};
       this.#albums.set(id, { ...(typeof album.name === 'string' ? { name: album.name.slice(0, 500) } : {}), ...(typeof album.picUrl === 'string' ? { cover: album.picUrl } : {}) });
     }
+  }
+  async preparePlaylist(id: string): Promise<readonly NeteaseTrack[]> {
+    const { lease, transport } = this.#connected();
+    if (!this.#knownPlaylists.has(neteaseId(id)) && !this.#publicPlaylists.has(id)) throw new DomainError('invalid-input');
+    this.#queueAbort?.abort(); const controller = new AbortController(); this.#queueAbort = controller;
+    const signal = AbortSignal.any([controller.signal, lease.signal]);
+    const body = success(await transport.call('playlist', { id, n: 1000, s: 0 }, signal));
+    const playlist = record(body.playlist, 'netease.queue.playlist');
+    if (apiId(playlist.id) !== id || !Array.isArray(playlist.trackIds)) throw new DomainError('invalid-response');
+    if (playlist.trackIds.length > 10000) throw new DomainError('unsupported');
+    const ids = [...new Set(playlist.trackIds.map(value => apiId(record(value, 'netease.queue.id').id)))];
+    if (!ids.length) throw new DomainError('unavailable');
+    const found = new Map<string, NeteaseTrack>(); const originals: unknown[] = [];
+    let offset = 0;
+    const read = async (): Promise<void> => {
+      while (offset < ids.length) {
+        const page = ids.slice(offset, offset + 1000); offset += 1000;
+        signal.throwIfAborted();
+        const detail = success(await transport.call('songs', { c: JSON.stringify(page.map(id => ({ id }))) }, signal));
+        const tracks = parseTracks(detail.songs, detail.privileges);
+        for (const track of tracks) if (page.includes(track.id)) found.set(track.id, track);
+        originals.push(...detail.songs as unknown[]);
+      }
+    };
+    try { await Promise.all([read(), read()]); }
+    catch (error: unknown) { controller.abort(); throw error; }
+    signal.throwIfAborted(); if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
+    if (ids.some(id => !found.has(id))) throw new DomainError('unavailable');
+    const tracks = ids.map(id => found.get(id)!);
+    for (const track of tracks) this.#knownTracks.set(track.id, track);
+    this.#rememberAlbums(originals);
+    return tracks;
   }
   async getPresentation(id: string, generation: number): Promise<PresentationContent> {
     const { lease, transport } = this.#connected();

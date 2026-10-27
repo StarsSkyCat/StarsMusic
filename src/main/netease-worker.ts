@@ -18,6 +18,7 @@ port.on('message', (event) => {
       const operation = text(message.operation, 'provider.operation');
       let result: unknown;
       if (operation === 'getState') result = service.snapshot();
+      else if (operation === 'preparePlaylist') result = await service.preparePlaylist(neteaseId(message.id));
       else if (operation === 'getArtwork') result = await service.getArtwork(parseNeteaseArtworkRequest(message.artwork));
       else if (operation === 'refreshMembership') result = await service.refreshMembership();
       else if (operation === 'browse') result = await service.browse(parseCatalogRequest(message.catalog));
