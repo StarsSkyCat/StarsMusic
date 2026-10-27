@@ -38,6 +38,7 @@ import GlassScene from './GlassScene.vue';
 import LibrarySearch from './LibrarySearch.vue';
 import AppearancePanel from './AppearancePanel.vue';
 import DesktopPanel from './DesktopPanel.vue';
+import WindowControls from './WindowControls.vue';
 import type { NeteaseMutation } from '../../../packages/contracts/src/netease-library';
 import NeteaseTrackActions from './NeteaseTrackActions.vue';
 import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
@@ -607,6 +608,7 @@ onUnmounted(() => {
           <span class="avatar"><Headphones :size="17" /></span
           ><span>{{ connectedCount ? `${connectedCount} 个账号已连接` : '连接音乐账号' }}</span>
         </button>
+        <WindowControls />
       </header>
       <div
         class="content"

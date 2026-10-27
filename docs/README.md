@@ -57,3 +57,5 @@
 - [酷狗文件名格式误拒](validation/2026-10-28-kugou-filename.md)
 
 - [酷狗官方授权取链与内部文件名](validation/2026-10-28-kugou-authorized-playback.md)
+
+- [跨平台窗口控制与 Linux 验证](validation/2026-10-28-window-controls.md)

@@ -26,6 +26,14 @@ for (const backend of backends) {
     await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
     const packaged = await desktop.evaluate(({ app, BrowserWindow }) => ({ packaged: app.isPackaged, name: app.getName(), sandbox: BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox }));
     if (!packaged.packaged || !packaged.sandbox || packaged.name !== 'StarsMusic') throw new Error('Packaged identity or sandbox check failed');
+    await expect(page.getByRole('button', { name: '关闭窗口', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '最大化窗口', exact: true }).click();
+    await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
+    await page.getByRole('button', { name: '还原窗口', exact: true }).click();
+    await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(false);
+    await page.getByRole('button', { name: '最小化窗口', exact: true }).click();
+    await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMinimized())).toBe(true);
+    await desktop.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; win.restore(); win.show(); win.focus(); });
     const state = () => page.evaluate(() => window.starsMusic.playback.getState());
     const accounts = await page.evaluate(async () => ({ netease: (await window.starsMusic.netease.getState()).status, kugou: (await window.starsMusic.kugou.getState()).status, queue: (await window.starsMusic.playback.getState()).queue.length }));
     if (accounts.netease !== 'signed-out' || accounts.kugou !== 'signed-out' || accounts.queue !== 0) throw new Error('Isolated package must start without account or queue data');
@@ -50,7 +58,10 @@ for (const backend of backends) {
     if ((await state()).queue.length !== 1) throw new Error('Second instance changed the queue');
     await page.screenshot({ path: path.join(root, `artifacts/packaged-${backend}.png`), animations: 'disabled' });
     if (errors.length) throw new Error('Packaged renderer reported an error');
-    console.log(`Packaged ${backend}: identity/sandbox, anonymous workers, system audio=${output}, MPRIS Pause/Play, single instance passed; tray=${system.tray.state}.`);
+    const closed = desktop.waitForEvent('close');
+    await page.getByRole('button', { name: '关闭窗口', exact: true }).click();
+    await closed;
+    console.log(`Packaged ${backend}: identity/sandbox, window controls, anonymous workers, system audio=${output}, MPRIS Pause/Play, single instance passed; tray=${system.tray.state}.`);
   } finally {
     bus?.disconnect(); await desktop?.close(); await rm(profile, { recursive: true, force: true });
   }

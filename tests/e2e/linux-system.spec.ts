@@ -35,7 +35,7 @@ test('实际 Electron / 独立总线合成宿主：托盘注册、portal 确认�
     await page.getByText('快捷键与媒体键', { exact: true }).click();
     await desktop.evaluate(({ BrowserWindow }) => { const contents = BrowserWindow.getAllWindows()[0]!.webContents; contents.focus(); for (const keyCode of ['O', 'M']) { contents.sendInputEvent({ type: 'keyDown', keyCode, modifiers: ['control', 'alt'] }); contents.sendInputEvent({ type: 'keyUp', keyCode, modifiers: ['control', 'alt'] }); } }); await expect.poll(async () => (await playback()).muted).toBe(false);
     await page.getByRole('checkbox', { name: /关闭窗口后留在托盘/ }).check();
-    await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+    await page.getByRole('button', { name: '关闭窗口', exact: true }).click();
     await expect.poll(async () => desktop!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isVisible())).toBe(false);
     // 真实 Electron StatusNotifierItem 的 D-BusMenu，合成宿主不在真实桌面显示图标。
     const item = server.watcher.items.at(-1)!; const slash = item.indexOf('/'); const itemName = slash < 0 ? item : item.slice(0, slash); const itemPath = slash < 0 ? '/StatusNotifierItem' : item.slice(slash);

@@ -404,12 +404,21 @@ main:focus {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  background: var(--canvas);
+  -webkit-app-region: drag;
+  user-select: none;
   height: 65px;
   display: flex;
   align-items: center;
   gap: 20px;
   padding: 0 27px;
 }
+
+.topbar button, .topbar input, .topbar form, .topbar label, .topbar a { -webkit-app-region: no-drag; }
+.topbar input { user-select: text; }
 
 .breadcrumb {
   display: flex;

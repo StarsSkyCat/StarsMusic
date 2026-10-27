@@ -3,6 +3,7 @@ import { parseNeteaseMutation, type NeteaseMutation } from '../../packages/contr
 import { parseNeteaseArtwork, parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { parsePresentationSnapshot, presentationChannels } from '../../packages/contracts/src/presentation';
 import { contextBridge, ipcRenderer } from 'electron';
+import { windowChannels, parseWindowSnapshot } from '../../packages/contracts/src/window';
 import { desktopChannels, parseAppInfo, type DesktopApi } from '../../packages/contracts/src/desktop';
 import { credentialChannels, credentialProviderIds, parseCredentialStatus, type CredentialProvider } from '../../packages/contracts/src/credentials';
 import { playbackChannels, parsePlaybackSnapshot, type LoopMode, type PlaybackMode } from '../../packages/contracts/src/playback';
@@ -37,6 +38,18 @@ const api: DesktopApi = Object.freeze({
     const response: unknown = await ipcRenderer.invoke(desktopChannels.getAppInfo);
     return parseAppInfo(response);
   },
+  window: Object.freeze({
+    getState: async () => parseWindowSnapshot(await ipcRenderer.invoke(windowChannels.getState)),
+    minimize: async () => parseWindowSnapshot(await ipcRenderer.invoke(windowChannels.minimize)),
+    toggleMaximize: async () => parseWindowSnapshot(await ipcRenderer.invoke(windowChannels.toggleMaximize)),
+    async close() { await ipcRenderer.invoke(windowChannels.close); },
+    onChanged(listener: (state: ReturnType<typeof parseWindowSnapshot>) => void) {
+      if (typeof listener !== 'function') throw new Error('监听器无效');
+      const receive = (_event: unknown, value: unknown) => listener(parseWindowSnapshot(value));
+      ipcRenderer.on(windowChannels.changed, receive);
+      return () => ipcRenderer.removeListener(windowChannels.changed, receive);
+    },
+  }),
   system: Object.freeze({
     getState: async () => parseSystemSnapshot(await ipcRenderer.invoke(systemChannels.getState)),
     refresh: async () => parseSystemSnapshot(await ipcRenderer.invoke(systemChannels.refresh)),
