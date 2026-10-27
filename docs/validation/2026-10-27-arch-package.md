@@ -27,4 +27,10 @@
 
 ## 系统安装
 
-安装后的包版本、文件归属、沙箱 helper 权限及真实安装路径的同项验证，完成后补记。当前仅验证本机源码构建，不代表发行渠道已发布；真实账号/会员矩阵继续按原验证记录保留待验收。
+已通过系统 Polkit 授权执行 pacman -U，安装 `starsmusic 0.0.0.r54.gc0b4dd5b-1`。安装包由干净的源码提交 `c0b4dd5b5a45d966a62bef2d20ccced988a607dd` 生成，SHA-256 为 `da2c5a78fe87880fcddbff4b0bd82120e723818bd1059797de60e07588aada4b`，实际归档路径检查和校验和均通过。
+
+`pacman -Qk starsmusic` 报告 5615 个文件、0 个缺失；入口、程序和桌面文件均归属于该包。实际宿主系统核对 chrome-sandbox 为 root:root / 4755，启动器为 root:root / 755（隔离工具内部可能把宿主 root 映射为 nobody，因此以宿主只读核对为准）。pacman 已运行图标与桌面 MIME 缓存更新钩子。
+
+再次对 `/opt/starsmusic/starsmusic` 执行 `pnpm test:package`：Wayland/X11、实际 PipeWire 输出、两个未登录后台、MPRIS Pause/Play、单实例与 renderer 均通过；运行不依赖源码目录的 node_modules。应用菜单可搜索 StarsMusic，终端命令为 starsmusic。测试使用临时 userData，未读取或改动用户原登录/队列。
+
+仅完成本机 Arch 安装验证，没有发布到发行渠道；当前 niri 托盘仍为 unknown，全局快捷键、其他发行版及真实账号/会员矩阵继续保留待验收。
