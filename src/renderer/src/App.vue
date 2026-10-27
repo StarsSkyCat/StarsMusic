@@ -42,6 +42,10 @@ import NeteaseTrackActions from './NeteaseTrackActions.vue';
 import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
 import NeteaseExplore from './NeteaseExplore.vue';
 import NeteaseArtwork from './NeteaseArtwork.vue';
+import KugouArtwork from './KugouArtwork.vue';
+import KugouExplore from './KugouExplore.vue';
+import type { KugouSnapshot } from '../../../packages/contracts/src/kugou';
+import type { KugouCatalogRequest } from '../../../packages/contracts/src/kugou-catalog';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import type { CatalogRequest } from '../../../packages/contracts/src/netease-catalog';
 import {
@@ -67,12 +71,14 @@ const queueDialog = ref<HTMLDialogElement>();
 const nowPlayingOpen = ref(false);
 const selectedPlaylistId = ref<string>();
 const playlistStarting = ref(false);
-async function playWholePlaylist(id: string): Promise<void> {
+async function playWholePlaylist(id: string, provider: Provider = 'netease', source: 'public' | 'owned' = 'owned'): Promise<void> {
   if (playlistStarting.value) return;
   playlistStarting.value = true;
-  try { await providers.netease.run(() => window.starsMusic!.netease.playPlaylist(id)); }
+  try { await providers[provider].run(() => provider === 'netease' ? window.starsMusic!.netease.playPlaylist(id) : window.starsMusic!.kugou.playPlaylist(id, source)); }
   finally { playlistStarting.value = false; }
 }
+const kugouTab = ref<'playlists' | 'search' | 'owned'>('playlists');
+const kugouState = computed(() => providers.kugou.state.value as KugouSnapshot);
 const neteaseTab = ref<'hot' | 'playlists' | 'search' | 'owned'>('hot');
 const neteaseState = computed(() => providers.netease.state.value as NeteaseSnapshot);
 const addDialog = ref<HTMLDialogElement>();
@@ -339,17 +345,21 @@ function selectAll(): void {
 async function openPlaylist(provider: Provider, id: string): Promise<void> {
   navigate(provider);
   if (provider === 'netease') neteaseTab.value = 'owned';
+  else kugouTab.value = 'owned';
   selectedPlaylistId.value = id;
   await providers[provider].run((api) => api.loadPlaylist(id, 0));
 }
 async function browseNetease(request: CatalogRequest): Promise<void> {
   await providers.netease.run(() => window.starsMusic!.netease.browse(request));
 }
-async function enqueueCatalog(ids: string[]): Promise<void> {
-  const generation = neteaseState.value.generation;
+async function browseKugou(request: KugouCatalogRequest): Promise<void> {
+  await providers.kugou.run(() => window.starsMusic!.kugou.browse(request));
+}
+async function enqueueCatalog(ids: string[], provider: Provider = 'netease'): Promise<void> {
+  const generation = providers[provider].state.value.generation;
   let count = 0;
-  for (const id of ids) {
-    if (view.value !== 'netease' || neteaseState.value.generation !== generation) break;
+  for (const id of [...ids].reverse()) {
+    if (view.value !== provider || providers[provider].state.value.generation !== generation) break;
     if (!(await addNext(id, true))) break;
     count++;
   }
@@ -393,8 +403,9 @@ function shortcuts(event: KeyboardEvent): void {
   }
   if (event.key === '/' && view.value !== 'settings' && !nowPlayingOpen.value) {
     event.preventDefault();
-    if (view.value === 'netease' && !selectedPlaylistId.value) {
-      neteaseTab.value = 'search';
+    if ((view.value === 'netease' || view.value === 'kugou') && !selectedPlaylistId.value) {
+      if (view.value === 'netease') neteaseTab.value = 'search';
+      else kugouTab.value = 'search';
       void nextTick(() => mainPane.value?.querySelector<HTMLInputElement>('.catalog-search input')?.focus());
       return;
     }
@@ -528,7 +539,7 @@ onUnmounted(() => {
           <span>{{ nowPlayingOpen ? '聆听空间' : '我的音乐' }}</span
           ><ChevronRight :size="13" /><strong>{{ title }}</strong>
         </div>
-        <label v-if="view !== 'settings' && (view !== 'netease' || selectedPlaylistId) && !nowPlayingOpen" class="search-field"
+        <label v-if="view !== 'settings' && ((view !== 'netease' && view !== 'kugou') || selectedPlaylistId) && !nowPlayingOpen" class="search-field"
           ><Search :size="17" /><input
             ref="queryInput"
             v-model="query"
@@ -659,7 +670,7 @@ onUnmounted(() => {
               </button>
             </div>
           </section>
-          <div v-if="view !== 'library' && view !== 'netease' && !selectedPlaylistId" class="page-heading">
+          <div v-if="view === 'local' && !selectedPlaylistId" class="page-heading">
             <div>
               <span class="eyebrow">{{
                 view === 'local' ? 'ON YOUR DEVICE' : 'CONNECTED TO YOUR MUSIC'
@@ -684,7 +695,7 @@ onUnmounted(() => {
               <ChevronRight class="back-chevron" :size="15" />返回全部歌单
             </button>
             <div class="playlist-detail-summary">
-              <span class="playlist-detail-art"><NeteaseArtwork v-if="activeProvider === 'netease'" :id="selectedPlaylistId" kind="playlist" :generation="neteaseState.generation" :name="playlistTitle ?? '歌单'" /><ListMusic v-else :size="38" /></span>
+              <span class="playlist-detail-art"><NeteaseArtwork v-if="activeProvider === 'netease'" :id="selectedPlaylistId" kind="playlist" :generation="neteaseState.generation" :name="playlistTitle ?? '歌单'" /><KugouArtwork v-else :id="selectedPlaylistId" kind="playlist" :generation="kugouState.generation" :name="playlistTitle ?? '歌单'" /></span>
               <div>
                 <span class="eyebrow">{{ providerNames[activeProvider] }} · 歌单</span>
                 <h1>{{ playlistTitle ?? '正在读取歌单…' }}</h1>
@@ -708,46 +719,34 @@ onUnmounted(() => {
             @add-to-playlist="openAddToPlaylist"
             @subscribe="subscribeNetease"
             @refresh-library="refreshNeteaseLibrary"
-            @play-playlist="playWholePlaylist"
+            @play-playlist="id => playWholePlaylist(id)"
             @browse="browseNetease"
             @refresh-membership="refreshNeteaseMembership()"
             @play="play"
             @next="addNext"
-            @enqueue="enqueueCatalog"
+            @enqueue="ids => enqueueCatalog(ids)"
             @open-owned="id => openPlaylist('netease', id)"
             @load-owned="providers.netease.run(api => api.loadPlaylists())"
             @manage="navigate('settings')"
           />
-          <div
-            v-if="activeProvider === 'kugou' && providerState && providerState.status !== 'connected'"
-            class="provider-onboarding"
-          >
-            <ProviderAccount
-              @refresh-membership="refreshNeteaseMembership()"
-              :provider="activeProvider"
-              :state="providerState"
-              :credentials="credentials.status.value"
-              :saving="credentials.busy[activeProvider]"
-              @remember="(value) => credentials.setRemember(activeProvider!, value)"
-              :error="providers[activeProvider].error.value"
-              @login="providers[activeProvider].run((api) => api.startLogin())"
-              @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
-              @logout="providers[activeProvider].run((api) => api.logout())"
-            />
-            <aside class="provider-guide" aria-label="扫码连接步骤">
-              <Headphones :size="30" :stroke-width="1.4" aria-hidden="true" />
-              <span class="eyebrow">BRING YOUR FAVORITES</span>
-              <h2>熟悉的收藏，<br />新的声场。</h2>
-              <ol>
-                <li><span>01</span>打开{{ activeProvider === 'kugou' ? '标准版酷狗音乐' : '网易云音乐' }} App</li>
-                <li><span>02</span>扫描登录区域的二维码</li>
-                <li><span>03</span>在官方 App 中确认授权</li>
-              </ol>
-              <p>无需输入密码。两个平台的账号分别连接。</p>
-            </aside>
-          </div>
+          <KugouExplore
+            v-if="view === 'kugou' && !selectedPlaylistId"
+            v-model:tab="kugouTab"
+            :state="kugouState"
+            :current-id="currentTrack?.provider === 'kugou' ? currentTrack.sourceId : undefined"
+            :error="providers.kugou.error.value"
+            :starting="playlistStarting"
+            @browse="browseKugou"
+            @play="play"
+            @next="addNext"
+            @enqueue="ids => enqueueCatalog(ids, 'kugou')"
+            @play-playlist="id => playWholePlaylist(id, 'kugou', 'public')"
+            @open-owned="id => openPlaylist('kugou', id)"
+            @load-owned="providers.kugou.run(api => api.loadPlaylists())"
+            @manage="navigate('settings')"
+          />
           <section
-            v-if="view !== 'local' && view !== 'netease' && !selectedPlaylistId"
+            v-if="view === 'library' && !selectedPlaylistId"
             class="playlist-section"
             aria-labelledby="playlists-title"
           >
@@ -801,7 +800,7 @@ onUnmounted(() => {
                 @click="openPlaylist(playlist.provider, playlist.id)"
               >
                 <span class="playlist-art"
-                  ><NeteaseArtwork v-if="playlist.provider === 'netease'" :id="playlist.id" kind="playlist" :generation="neteaseState.generation" :name="playlist.name" /><ListMusic v-else :size="32" /><span class="playlist-play"
+                  ><NeteaseArtwork v-if="playlist.provider === 'netease'" :id="playlist.id" kind="playlist" :generation="neteaseState.generation" :name="playlist.name" /><KugouArtwork v-else :id="playlist.id" kind="playlist" :generation="kugouState.generation" :name="playlist.name" /><span class="playlist-play"
                     ><Play :size="17" fill="currentColor" /></span
                   ><span class="playlist-provider">{{
                     playlist.provider === 'netease' ? '网易云' : '酷狗'
@@ -844,10 +843,10 @@ onUnmounted(() => {
               <button
                 v-if="filteredTracks.length"
                 class="primary-button compact"
-                :disabled="playlistStarting" @click="activeProvider === 'netease' && selectedPlaylistId ? playWholePlaylist(selectedPlaylistId) : play(filteredTracks[0]!.id)"
+                :disabled="playlistStarting" @click="activeProvider && selectedPlaylistId ? playWholePlaylist(selectedPlaylistId, activeProvider) : play(filteredTracks[0]!.id)"
               >
                 <Play :size="14" fill="currentColor" />{{
-                  activeProvider === 'netease' ? (playlistStarting ? '读取完整歌单…' : '播放全部') : activeProvider ? '播放首曲' : '从头播放'
+                  activeProvider ? (playlistStarting ? '读取完整歌单…' : '播放全部') : '从头播放'
                 }}
               </button>
             </div>
@@ -877,6 +876,7 @@ onUnmounted(() => {
               @remove="(id) => control((api) => api.removeTrack(id))"
             >
               <template v-if="activeProvider === 'netease'" #artwork="{ track }"><NeteaseArtwork :id="track.id" kind="track" :generation="neteaseState.generation" :name="track.title" /></template>
+              <template v-else-if="activeProvider === 'kugou'" #artwork="{ track }"><KugouArtwork :id="track.id" kind="track" :generation="kugouState.generation" :name="track.title" /></template>
               <template #actions="{ track }"><NeteaseTrackActions v-if="activeProvider === 'netease'" :id="track.id" :title="track.title" :liked="likedNeteaseIds.has(track.id)" :likes-ready="neteaseState.library.likesStatus === 'ready'" :busy="neteaseState.library.busy" :removable="currentNeteasePlaylist?.editable === true" @like="likeNetease" @add="openAddToPlaylist" @remove="removeFromNeteasePlaylist" /></template>
             </TrackTable>
             <div v-else class="empty-library">
@@ -994,7 +994,7 @@ onUnmounted(() => {
             </section>
           </details>
           <p class="settings-footnote">
-            StarsMusic · Linux 开发预览 / 本地目录扫描与酷狗搜索仍在规划中。
+            StarsMusic · Linux 开发预览 / 本地目录扫描和更多平台功能仍在规划中。
           </p>
         </template>
       </div>

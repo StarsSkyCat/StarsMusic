@@ -364,10 +364,11 @@ test('歌单详情直接展示曲目，往返播放页保留筛选且不显示�
     await expect(search).toHaveValue('合成展示');
     await expect(page.getByRole('heading', { level: 1, name: '合成歌单一', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '返回全部歌单', exact: true }).click();
-    await expect(search).toHaveValue('');
+    await expect(search).toHaveCount(0);
     await page.screenshot({ path: 'artifacts/liquid-glass-synthetic-playlists.png', animations: 'disabled' });
     await page.getByRole('button', { name: /合成歌单二/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: '合成歌单二', exact: true })).toBeVisible();
+    await expect(search).toHaveValue('');
     await expect(page.getByRole('button', { name: '播放 合成展示曲目', exact: true })).toHaveCount(0);
   } finally { await desktop.close(); await rm(profile, { recursive: true, force: true }); }
 });
