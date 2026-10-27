@@ -1,3 +1,4 @@
+import { parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from './netease-artwork.ts';
 import { parseAppError, type AppError } from './errors.ts';
 import { choice, ContractValidationError, nonNegativeInteger, record, text } from './validation.ts';
 import { initialCatalog, parseCatalog, parseCatalogRequest, type CatalogRequest, type NeteaseCatalog } from './netease-catalog.ts';
@@ -6,7 +7,7 @@ export const neteaseChannels = {
   getState: 'starsmusic:netease:get-state', startLogin: 'starsmusic:netease:start-login',
   cancelLogin: 'starsmusic:netease:cancel-login', logout: 'starsmusic:netease:logout',
   loadPlaylists: 'starsmusic:netease:load-playlists', loadPlaylist: 'starsmusic:netease:load-playlist',
-  browse: 'starsmusic:netease:browse',
+  browse: 'starsmusic:netease:browse', getArtwork: 'starsmusic:netease:get-artwork',
   enqueueNext: 'starsmusic:netease:enqueue-next', playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
 } as const;
 export interface NeteasePlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
@@ -36,6 +37,7 @@ export interface NeteaseApi {
   loadPlaylists(): Promise<NeteaseSnapshot>;
   loadPlaylist(id: string, offset: number): Promise<NeteaseSnapshot>;
   browse(request: CatalogRequest): Promise<NeteaseSnapshot>;
+  getArtwork(request: NeteaseArtworkRequest): Promise<string | null>;
   playTrack(id: string): Promise<void>;
   enqueueNext(id: string): Promise<void>;
   onStateChanged(listener: (state: NeteaseSnapshot) => void): () => void;
@@ -85,7 +87,8 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
 export function initialNeteaseSnapshot(): NeteaseSnapshot {
   return parseNeteaseSnapshot({ revision: 0, generation: 0, status: 'signed-out', playlists: [], tracks: [], playlistsMore: false, tracksMore: false, nextTrackOffset: 0, busy: false });
 }
-export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number; catalog?: CatalogRequest } {
+export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number; catalog?: CatalogRequest; artwork?: NeteaseArtworkRequest } {
+  if (channel === neteaseChannels.getArtwork && args.length === 1) return { artwork: parseNeteaseArtworkRequest(args[0]) };
   if (channel === neteaseChannels.browse && args.length === 1) return { catalog: parseCatalogRequest(args[0]) };
   if ((channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext) && args.length === 1) return { id: neteaseId(args[0]) };
   if (channel === neteaseChannels.loadPlaylist && args.length === 2) {

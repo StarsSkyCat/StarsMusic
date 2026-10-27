@@ -13,7 +13,7 @@ function page(value: unknown): unknown[] {
   return value;
 }
 
-export async function fetchCatalog(request: CatalogRequest, previous: NeteaseCatalog, registered: ReadonlyMap<string, CatalogPlaylist>, transport: NeteaseTransport, signal: AbortSignal): Promise<{ catalog: NeteaseCatalog; originals: readonly unknown[] }> {
+export async function fetchCatalog(request: CatalogRequest, previous: NeteaseCatalog, registered: ReadonlyMap<string, CatalogPlaylist>, transport: NeteaseTransport, signal: AbortSignal): Promise<{ catalog: NeteaseCatalog; originals: readonly unknown[]; playlistOriginals?: readonly unknown[] }> {
   const base = { ...previous, kind: request.kind, offset: request.offset, status: 'ready', tracks: [], playlists: [], more: false, total: 0, playlist: undefined, error: undefined };
   if (request.kind === 'search') {
     const body = success(await transport.call('search', { s: request.query, type: request.searchType === 'songs' ? 1 : 1000, limit: catalogPageSize, offset: request.offset, total: true }, signal));
@@ -22,14 +22,14 @@ export async function fetchCatalog(request: CatalogRequest, previous: NeteaseCat
     const items = page(result[request.searchType === 'songs' ? 'songs' : 'playlists'] ?? []);
     const more = items.length > 0 && request.offset + items.length < total && request.offset < 3000;
     return { catalog: parseCatalog({ ...base, query: request.query, searchType: request.searchType, total, more,
-      ...(request.searchType === 'songs' ? { tracks: parseTracks(items) } : { playlists: items.map(playlist) }) }), originals: request.searchType === 'songs' ? items : [] };
+      ...(request.searchType === 'songs' ? { tracks: parseTracks(items) } : { playlists: items.map(playlist) }) }), originals: request.searchType === 'songs' ? items : [], playlistOriginals: request.searchType === 'playlists' ? items : [] };
   }
   if (request.kind === 'playlists') {
     const body = success(await transport.call('publicPlaylists', { cat: request.category, order: request.order, limit: catalogPageSize, offset: request.offset, total: true }, signal));
     const items = page(body.playlists);
     if (typeof body.more !== 'boolean') throw new DomainError('invalid-response');
     return { catalog: parseCatalog({ ...base, category: request.category, order: request.order,
-      playlists: items.map(playlist), more: body.more && items.length > 0 && request.offset < 3000, total: body.total ?? 0 }), originals: [] };
+      playlists: items.map(playlist), more: body.more && items.length > 0 && request.offset < 3000, total: body.total ?? 0 }), originals: [], playlistOriginals: items };
   }
   let selected: CatalogPlaylist;
   if (request.kind === 'hot') {
@@ -55,5 +55,5 @@ export async function fetchCatalog(request: CatalogRequest, previous: NeteaseCat
   const tracks = new Map(parseTracks(originals).map(track => [track.id, track]));
   return { catalog: parseCatalog({ ...base, playlist: { ...selected, trackCount: detail.trackIds.length },
     tracks: ids.flatMap(id => tracks.has(id) ? [tracks.get(id)!] : []), total: detail.trackIds.length,
-    more: request.offset + ids.length < detail.trackIds.length && ids.length > 0 && request.offset < 3000 }), originals };
+    more: request.offset + ids.length < detail.trackIds.length && ids.length > 0 && request.offset < 3000 }), originals, playlistOriginals: [detail] };
 }

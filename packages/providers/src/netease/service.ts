@@ -1,4 +1,6 @@
 import { parseLrc } from '../lyrics.ts';
+import { parseNeteaseArtwork, parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from '../../../contracts/src/netease-artwork.ts';
+import { artworkUrl } from '../artwork.ts';
 import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
 import { loadArtwork, type LoadArtwork } from '../artwork.ts';
 import QRCode from 'qrcode';
@@ -74,6 +76,10 @@ export class NeteaseService {
   #knownPlaylists = new Set<string>();
   #knownTracks = new Map<string, NeteaseTrack>();
   #albums = new Map<string, { name?: string; cover?: string }>();
+  #playlistCovers = new Map<string, string>();
+  #artworkCache = new Map<string, string | null>();
+  #artworkPending = new Map<string, Promise<string | null>>();
+  #artworkAbort = new AbortController();
   #listBusy = false;
   #catalogView = 0;
   #catalogAbort: AbortController | undefined;
@@ -92,6 +98,8 @@ export class NeteaseService {
     for (const listener of this.#listeners) listener(this.#state);
   }
   #clearCatalog(): void {
+    this.#artworkAbort.abort(); this.#artworkAbort = new AbortController();
+    this.#playlistCovers.clear(); this.#artworkCache.clear(); this.#artworkPending.clear();
     this.#catalogView++; this.#catalogAbort?.abort(); this.#catalogAbort = undefined;
     if (this.#guestTransport !== this.#transport) this.#guestTransport?.clear();
     this.#guestTransport = undefined; this.#publicPlaylists.clear();
@@ -257,6 +265,7 @@ export class NeteaseService {
       this.#sessions.commit(lease, () => {
         this.#playlistOffset += items.length;
         for (const item of items) this.#knownPlaylists.add(item.id);
+        this.#rememberPlaylistCovers(body.playlist as unknown[]);
         const merged = new Map([...this.#state.playlists, ...items].map((item) => [item.id, item]));
         this.#update({ playlists: [...merged.values()], playlistsMore: body.more as boolean, busy: false });
       });
@@ -320,6 +329,7 @@ export class NeteaseService {
       if (result.catalog.playlist) this.#publicPlaylists.set(result.catalog.playlist.id, result.catalog.playlist);
       for (const track of result.catalog.tracks) this.#knownTracks.set(track.id, track);
       this.#rememberAlbums(result.originals);
+      this.#rememberPlaylistCovers(result.playlistOriginals ?? []);
       this.#update({ catalog: result.catalog });
     } catch (error: unknown) {
       if (current()) {
@@ -329,6 +339,39 @@ export class NeteaseService {
       }
     }
     return this.#state;
+  }
+  #rememberPlaylistCovers(items: readonly unknown[]): void {
+    for (const value of items) {
+      const item = record(value, 'netease.playlist.cover');
+      const id = apiId(item.id);
+      if (!this.#publicPlaylists.has(id) && !this.#knownPlaylists.has(id)) continue;
+      if (typeof item.coverImgUrl === 'string') this.#playlistCovers.set(id, item.coverImgUrl);
+    }
+  }
+  async getArtwork(input: NeteaseArtworkRequest): Promise<string | null> {
+    const { kind, id, generation } = parseNeteaseArtworkRequest(input);
+    if (generation !== this.#state.generation) throw new DomainError('stale-operation');
+    if (kind === 'track' ? !this.#knownTracks.has(id) : !this.#knownPlaylists.has(id) && !this.#publicPlaylists.has(id)) throw new DomainError('invalid-input');
+    const key = `${kind}:${id}`;
+    if (this.#artworkCache.has(key)) return this.#artworkCache.get(key)!;
+    const pending = this.#artworkPending.get(key);
+    if (pending) return pending;
+    if (this.#artworkPending.size >= 4) throw new DomainError('unavailable');
+    const cover = kind === 'track' ? this.#albums.get(id)?.cover : this.#playlistCovers.get(id);
+    if (!cover) return null;
+    // 只使用平台返回的白名单图片，去掉原查询参数；凭据与远程地址不进入页面。
+    const url = artworkUrl(cover, 'netease'); url.search = '?param=400y400';
+    const signal = this.#artworkAbort.signal;
+    const operation = (async () => {
+      const artwork = parseNeteaseArtwork(await (this.#options.artwork ?? loadArtwork)(url.href, 'netease', signal));
+      if (signal.aborted || generation !== this.#state.generation) throw new DomainError('stale-operation');
+      this.#artworkCache.set(key, artwork);
+      while (this.#artworkCache.size > 32) this.#artworkCache.delete(this.#artworkCache.keys().next().value!);
+      return artwork;
+    })();
+    this.#artworkPending.set(key, operation);
+    try { return await operation; }
+    finally { if (this.#artworkPending.get(key) === operation) this.#artworkPending.delete(key); }
   }
   #rememberAlbums(songs: readonly unknown[]): void {
     for (const value of songs) {

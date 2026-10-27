@@ -1,3 +1,5 @@
+import { loadArtwork, artworkUrl } from '../packages/providers/src/artwork.ts';
+import { record } from '../packages/contracts/src/validation.ts';
 import { DirectNeteaseTransport } from '../packages/providers/src/netease/transport.ts';
 import { fetchCatalog } from '../packages/providers/src/netease/catalog.ts';
 import { initialCatalog, type CatalogRequest } from '../packages/contracts/src/netease-catalog.ts';
@@ -19,6 +21,11 @@ for (const request of requests) {
     if (request.kind === 'playlists' && result.catalog.playlists[0]) {
       const selected = result.catalog.playlists[0];
       const detail = await fetchCatalog({ kind: 'playlist', id: selected.id, offset: 0 }, result.catalog, new Map([[selected.id, selected]]), transport, AbortSignal.timeout(15000));
+      const raw = record(result.playlistOriginals?.[0], 'probe.playlist');
+      const image = artworkUrl(raw.coverImgUrl, 'netease'); image.search = '?param=400y400';
+      const artwork = await loadArtwork(image.href, 'netease', AbortSignal.timeout(15000));
+      if (!artwork.startsWith('data:image/')) throw new Error('artwork failed');
+      console.log('匿名真实歌单封面下载与格式校验通过。');
       console.log(`匿名公开歌单详情通过：曲目 ${detail.catalog.tracks.length}，后续 ${detail.catalog.more}。`);
     }
   } catch (error: unknown) {

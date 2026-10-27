@@ -66,3 +66,6 @@ appearance.ts 定义 system / light / dark 三种 ThemePreference。appearance.g
 netease.browse 接受固定 CatalogRequest 联合：hot / playlists（分类、hot/new、偏移）、search（关键词、songs/playlists、偏移）、playlist（已登记的纯数字字符串 ID、偏移）。拒绝额外字段、URL、空白/超长/含控制字符的关键词、非 30 整数倍偏移与超过 3000 的偏移。主进程仍检查可信主文档，preload 与 worker 复核请求，不暴露任意端点。
 
 NeteaseSnapshot.catalog 独立显示公开浏览状态、分页元数据、每页最多 30 项曲目/歌单以及归一化错误；不携带图片原地址、Cookie 或播放地址。未登录可浏览公开元数据，不代表已登录；私人 playlists/tracks 仍在非连接状态下清空。登录/退出和换账号取消旧发现操作并清空登记；已登录搜索/榜单/公开歌单曲目沿用同一 ID 注册、播放解析和歌词读取规则。
+
+
+网易云封面提供具体 `getArtwork({ kind: 'track' | 'playlist', id, generation })` 方法；请求拒绝任意 URL 和额外字段。资源须在后台已登记，响应仅允许 null 或有长度限制的 PNG/JPEG/WebP data URI，复用 presentation 图片投影规则。图片单独按需请求，不膨胀整个账号状态快照。

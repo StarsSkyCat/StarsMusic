@@ -1,3 +1,4 @@
+import { parseNeteaseArtwork, parseNeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DomainError } from '../../packages/contracts/src/errors.ts';
@@ -284,5 +285,57 @@ test('已登录搜索结果可按登记 ID 解析和取歌词，切账号清空�
     instance.logout(); await connect(instance);
     assert.deepEqual(instance.snapshot().catalog, initialCatalog());
     await assert.rejects(instance.resolveTrack('7', instance.snapshot().generation));
+  } finally { instance.dispose(); }
+});
+
+
+test('封面桥接仅接受具体资源 ID/种类/代次，响应只允许有界栅格数据', () => {
+  const request = { kind: 'playlist', id: '99', generation: 1 };
+  assert.deepEqual(parseNeteaseArguments(neteaseChannels.getArtwork, [request]).artwork, request);
+  for (const value of [{ ...request, url: 'https://example.invalid' }, { ...request, kind: 'url' }, { ...request, id: '../x' }, { ...request, generation: -1 }]) assert.throws(() => parseNeteaseArtworkRequest(value));
+  for (const value of [undefined, 'https://p1.music.126.net/x', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:image/png;base64,' + 'x'.repeat(750000)]) assert.throws(() => parseNeteaseArtwork(value));
+  assert.equal(parseNeteaseArtwork(null), null);
+});
+
+test('匿名歌单/搜索曲目封面按登记 ID 获取、去查询参数、复用下载且不暴露远程地址', async () => {
+  const transport = new FakeTransport(); const urls: string[] = [];
+  transport.handlers.set('publicPlaylists', async () => ({ code: 200, more: false, playlists: [{ id: 99, name: '合成封面歌单', trackCount: 1, coverImgUrl: 'http://p1.music.126.net/synthetic.jpg?tracking=synthetic' }, { id: 98, name: '合成无图歌单', trackCount: 0 }, { id: 97, name: '合成越界图片', trackCount: 0, coverImgUrl: 'https://example.invalid/image.jpg' }] }));
+  transport.handlers.set('search', async () => ({ code: 200, result: { songCount: 1, songs: [{ id: 7, name: '合成歌曲', ar: [], dt: 1000, al: { picUrl: 'https://p2.music.126.net/track.jpg' } }] } }));
+  const instance = new NeteaseService({ transport: () => transport, artwork: async url => { urls.push(url); return 'data:image/jpeg;base64,/9j/AQ=='; } });
+  try {
+    await instance.browse({ kind: 'playlists', category: '全部', order: 'hot', offset: 0 });
+    const generation = instance.snapshot().generation;
+    assert.equal(JSON.stringify(instance.snapshot()).includes('music.126.net'), false);
+    const request = { kind: 'playlist' as const, id: '99', generation };
+    await Promise.all([instance.getArtwork(request), instance.getArtwork(request)]);
+    await instance.getArtwork(request);
+    assert.deepEqual(urls, ['https://p1.music.126.net/synthetic.jpg?param=400y400']);
+    assert.equal(await instance.getArtwork({ ...request, id: '98' }), null);
+    await assert.rejects(instance.getArtwork({ ...request, id: '97' }));
+    await assert.rejects(instance.getArtwork({ ...request, id: '666' }));
+    await instance.browse({ kind: 'search', query: '合成', searchType: 'songs', offset: 0 });
+    assert.match((await instance.getArtwork({ kind: 'track', id: '7', generation }))!, /^data:image/);
+    assert.equal(urls.length, 2);
+    instance.logout();
+    await assert.rejects(instance.getArtwork(request));
+    await assert.rejects(instance.getArtwork({ ...request, generation: instance.snapshot().generation }));
+  } finally { instance.dispose(); }
+});
+
+test('封面限制并发，退出取消下载且拒绝迟到图片；私人歌单也能读取图片', async () => {
+  const transport = new FakeTransport(); const pending = deferred<string>(); let signal: AbortSignal | undefined;
+  transport.handlers.set('publicPlaylists', async () => ({ code: 200, more: false, playlists: Array.from({ length: 5 }, (_, index) => ({ id: index + 1, name: '合成歌单', trackCount: 1, coverImgUrl: `https://p1.music.126.net/${index}.jpg` })) }));
+  transport.handlers.set('playlists', async () => ({ code: 200, more: false, playlist: [{ id: 10, name: '合成私人歌单', trackCount: 1, coverImgUrl: 'https://p1.music.126.net/private.jpg' }] }));
+  const instance = new NeteaseService({ transport: () => transport, autoPoll: false, encodeQr: async () => fakePng, artwork: async (_url, _provider, current) => { signal = current; return pending.promise; } });
+  try {
+    await instance.browse({ kind: 'playlists', category: '全部', order: 'hot', offset: 0 });
+    const generation = instance.snapshot().generation;
+    const operations = [1,2,3,4].map(id => instance.getArtwork({ kind: 'playlist', id: String(id), generation }));
+    await assert.rejects(instance.getArtwork({ kind: 'playlist', id: '5', generation }));
+    instance.logout(); assert.equal(signal?.aborted, true);
+    pending.resolve('data:image/jpeg;base64,/9j/AQ==');
+    assert.equal((await Promise.allSettled(operations)).every(value => value.status === 'rejected'), true);
+    await connect(instance); await instance.loadPlaylists();
+    assert.match((await instance.getArtwork({ kind: 'playlist', id: '10', generation: instance.snapshot().generation }))!, /^data:image/);
   } finally { instance.dispose(); }
 });

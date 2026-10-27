@@ -1,3 +1,4 @@
+import { parseNeteaseArtwork, type NeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { parsePresentationContent, type PresentationContent } from '../../packages/contracts/src/presentation';
 import { utilityProcess, type UtilityProcess } from 'electron';
 import { DomainError, normalizeError, parseAppError } from '../../packages/contracts/src/errors';
@@ -10,7 +11,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation';
+type Operation = 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;
@@ -91,7 +92,7 @@ export class NeteaseClient {
       worker.postMessage({ operation, requestId, ...args });
     });
   }
-  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
+  async command(operation: Exclude<Operation, 'resolveTrack' | 'getPresentation' | 'getArtwork'>, args: Record<string, unknown> = {}): Promise<NeteaseSnapshot> {
     const generation = this.#state.generation;
     try { this.#publish(await this.#request(operation, args)); }
     catch (error: unknown) {
@@ -112,6 +113,12 @@ export class NeteaseClient {
     const bundle = parseCredentialBundle(value);
     if (bundle.provider !== 'netease') throw new DomainError('invalid-response');
     return bundle;
+  }
+  async getArtwork(request: NeteaseArtworkRequest): Promise<string | null> {
+    if (this.#state.generation !== request.generation) throw new DomainError('stale-operation');
+    const value = await this.#request('getArtwork', { artwork: { ...request, generation: this.#workerGeneration } });
+    if (this.#state.generation !== request.generation) throw new DomainError('stale-operation');
+    return parseNeteaseArtwork(value);
   }
   async getPresentation(id: string, generation: number, signal: AbortSignal): Promise<PresentationContent> {
     signal.throwIfAborted();

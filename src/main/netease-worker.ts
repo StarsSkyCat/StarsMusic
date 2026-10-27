@@ -1,3 +1,4 @@
+import { parseNeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { NeteaseService } from '../../packages/providers/src/netease/service';
 import { normalizeError } from '../../packages/contracts/src/errors';
 import { record, text, nonNegativeInteger } from '../../packages/contracts/src/validation';
@@ -17,6 +18,7 @@ port.on('message', (event) => {
       const operation = text(message.operation, 'provider.operation');
       let result: unknown;
       if (operation === 'getState') result = service.snapshot();
+      else if (operation === 'getArtwork') result = await service.getArtwork(parseNeteaseArtworkRequest(message.artwork));
       else if (operation === 'browse') result = await service.browse(parseCatalogRequest(message.catalog));
       else if (operation === 'startLogin') result = await service.startLogin();
       else if (operation === 'cancelLogin') result = service.cancelLogin();
