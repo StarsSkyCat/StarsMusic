@@ -26,13 +26,28 @@ for (const backend of backends) {
     await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
     const packaged = await desktop.evaluate(({ app, BrowserWindow }) => ({ packaged: app.isPackaged, name: app.getName(), sandbox: BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox }));
     if (!packaged.packaged || !packaged.sandbox || packaged.name !== 'StarsMusic') throw new Error('Packaged identity or sandbox check failed');
+    const windowLimitations = [];
+    async function checkWindowState(method, nativeAction) {
+      const read = () => desktop.evaluate(({ BrowserWindow }, key) => BrowserWindow.getAllWindows()[0][key](), method);
+      try { await expect.poll(read, { timeout: 2000 }).toBe(true); return true; }
+      catch (error) {
+        if (backend !== 'x11') throw error;
+        // niri/XWayland 可能不处理窗口状态请求。直接调用原生接口对照，不能把 UI
+        // 没接通误报为宿主限制；原生也拒绝时单独报告，仍必须验证关闭和其他功能。
+        await desktop.evaluate(({ BrowserWindow }, action) => BrowserWindow.getAllWindows()[0][action](), nativeAction);
+        try { await expect.poll(read, { timeout: 1000 }).toBe(true); }
+        catch { windowLimitations.push(nativeAction); return false; }
+        throw error;
+      }
+    }
     await expect(page.getByRole('button', { name: '关闭窗口', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '最大化窗口', exact: true }).click();
-    await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(true);
-    await page.getByRole('button', { name: '还原窗口', exact: true }).click();
-    await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(false);
+    if (await checkWindowState('isMaximized', 'maximize')) {
+      await page.getByRole('button', { name: '还原窗口', exact: true }).click();
+      await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMaximized())).toBe(false);
+    } else await expect(page.getByRole('button', { name: '最大化窗口', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '最小化窗口', exact: true }).click();
-    await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMinimized())).toBe(true);
+    await checkWindowState('isMinimized', 'minimize');
     await desktop.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; win.restore(); win.show(); win.focus(); });
     const state = () => page.evaluate(() => window.starsMusic.playback.getState());
     const accounts = await page.evaluate(async () => ({ netease: (await window.starsMusic.netease.getState()).status, kugou: (await window.starsMusic.kugou.getState()).status, queue: (await window.starsMusic.playback.getState()).queue.length }));
@@ -61,7 +76,7 @@ for (const backend of backends) {
     const closed = desktop.waitForEvent('close');
     await page.getByRole('button', { name: '关闭窗口', exact: true }).click();
     await closed;
-    console.log(`Packaged ${backend}: identity/sandbox, window controls, anonymous workers, system audio=${output}, MPRIS Pause/Play, single instance passed; tray=${system.tray.state}.`);
+    console.log(`Packaged ${backend}: identity/sandbox, close button, anonymous workers, system audio=${output}, MPRIS Pause/Play, single instance passed; window state=${windowLimitations.length ? `native host ignored ${windowLimitations.join('/')}` : 'minimize/maximize/restore passed'}; tray=${system.tray.state}.`);
   } finally {
     bus?.disconnect(); await desktop?.close(); await rm(profile, { recursive: true, force: true });
   }
