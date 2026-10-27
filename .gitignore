@@ -28,6 +28,21 @@ playwright-report/
 .cache/
 artifacts/
 
+# Raw account exports, network captures, and local Electron profiles
+credentials.json
+credentials.*.json
+cookie.json
+cookies.json
+cookies.txt
+token.json
+tokens.json
+login-session.json
+playback-session.json
+*.har
+userData/
+user-data/
+.user-data/
+
 # Machine-specific agent and cloud configuration
 .agents/
 .codex/

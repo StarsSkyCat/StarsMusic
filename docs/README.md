@@ -49,3 +49,5 @@
 - [双平台搜索框、账号昵称与酷狗权益](validation/2026-10-27-platform-search-rights.md)
 
 - [音乐库全来源搜索与酷狗收藏排序](validation/2026-10-27-library-search-order.md)
+
+- [main 合并前的数据检查](validation/2026-10-27-main-merge-audit.md)
