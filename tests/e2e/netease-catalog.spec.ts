@@ -27,7 +27,15 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
       const calls: Record<string, unknown>[] = [];
       Reflect.set(globalThis, '__starsMusicCatalogCalls', calls);
       const publish = () => { BrowserWindow.getAllWindows()[0]!.webContents.send(channels.stateChanged, state); return state; };
-      for (const channel of [channels.browse, channels.loadPlaylists, channels.loadPlaylist, channels.playTrack, channels.enqueueNext]) ipcMain.removeHandler(channel);
+      for (const channel of [channels.browse, channels.loadPlaylists, channels.loadPlaylist, channels.playTrack, channels.enqueueNext, channels.getArtwork]) ipcMain.removeHandler(channel);
+      const artworkCalls: Record<string, unknown>[] = [];
+      Reflect.set(globalThis, '__starsMusicArtworkCalls', artworkCalls);
+      ipcMain.handle(channels.getArtwork, (_event, request: { kind: string; id: string; generation: number }) => {
+        artworkCalls.push(request);
+        if (request.id === '2') return null;
+        if (request.id === '3') throw new Error('synthetic image failure');
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+      });
       ipcMain.handle(channels.loadPlaylists, () => publish());
       ipcMain.handle(channels.loadPlaylist, (_event, id: string) => {
         state = { ...state, revision: state.revision + 1, playlistId: id, tracks: [{ id: '700', name: '合成私藏歌曲', artists: ['合成歌手'], durationMs: 30000 }] } as typeof state;
@@ -55,14 +63,20 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     const calls = () => desktop.evaluate(() => Reflect.get(globalThis, '__starsMusicCatalogCalls') as Record<string, unknown>[]);
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
     const explore = page.getByRole('region', { name: '网易云音乐发现', exact: true });
-    await expect(explore.getByRole('heading', { name: '云音乐热歌榜', exact: true })).toBeVisible();
+    await expect(explore.getByRole('heading', { name: /^云音乐热歌榜/ })).toBeVisible();
     await expect(explore.locator('.song-list li')).toHaveCount(30);
+    await expect(explore.locator('.ne-chart-lead img')).toBeVisible();
+    await expect(explore.locator('.ne-chart-feature .netease-artwork.artwork-missing')).toHaveCount(2);
+    const initialArtworkCalls = await desktop.evaluate(() => Reflect.get(globalThis, '__starsMusicArtworkCalls') as { id: string; generation: number }[]);
+    expect(initialArtworkCalls.some(request => request.id === '30')).toBe(false);
+    expect(initialArtworkCalls.every(request => request.generation === 50)).toBe(true);
     await explore.getByRole('button', { name: '下一页', exact: true }).click();
     await expect(explore.getByRole('button', { name: '播放 合成热歌 31', exact: true })).toBeVisible();
     await expect(explore.getByRole('button', { name: '下一页', exact: true })).toBeDisabled();
     await explore.getByRole('button', { name: '上一页', exact: true }).click();
     await explore.getByRole('button', { name: '发现歌单', exact: true }).click();
     await expect(explore.getByRole('button', { name: /合成全部歌单/ })).toBeVisible();
+    await expect(explore.locator('.ne-cover-card img')).toBeVisible();
     expect((await calls()).at(-1)).toMatchObject({ kind: 'playlists' });
     await page.getByRole('combobox', { name: '歌单分类', exact: true }).selectOption('华语');
     await page.getByRole('combobox', { name: '歌单排序', exact: true }).selectOption('new');
@@ -76,6 +90,7 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     const search = page.getByRole('searchbox', { name: '搜索网易云歌曲或歌单', exact: true });
     await search.fill('合成关键词'); await search.press('Enter');
     await expect(explore.getByRole('button', { name: '播放 合成搜索歌曲', exact: true })).toBeVisible();
+    await expect(explore.locator('.song-list img')).toBeVisible();
     await explore.getByRole('button', { name: '播放 合成搜索歌曲', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'play', id: '501' });
     await explore.getByRole('checkbox', { name: '选择 合成搜索歌曲', exact: true }).check();
@@ -99,6 +114,7 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await expect(page.getByRole('heading', { level: 1, name: '合成私人歌单', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '返回全部歌单', exact: true }).click();
     await expect(explore.getByRole('button', { name: /合成私人歌单/ })).toBeVisible();
+    await expect(explore.locator('.ne-cover-card img')).toBeVisible();
     await page.setViewportSize({ width: 960, height: 640 });
     expect(await page.locator('main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await page.screenshot({ path: 'artifacts/netease-synthetic-owned-minimum.png', animations: 'disabled' });

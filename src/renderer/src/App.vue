@@ -37,6 +37,7 @@ import NowPlayingPage from './NowPlayingPage.vue';
 import GlassScene from './GlassScene.vue';
 import AppearancePanel from './AppearancePanel.vue';
 import NeteaseExplore from './NeteaseExplore.vue';
+import NeteaseArtwork from './NeteaseArtwork.vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import type { CatalogRequest } from '../../../packages/contracts/src/netease-catalog';
 import {
@@ -619,19 +620,17 @@ onUnmounted(() => {
               </button>
             </div>
           </section>
-          <div v-if="view !== 'library' && !selectedPlaylistId" class="page-heading" :class="{ 'netease-heading': view === 'netease' }">
+          <div v-if="view !== 'library' && view !== 'netease' && !selectedPlaylistId" class="page-heading">
             <div>
               <span class="eyebrow">{{
-                view === 'local' ? 'ON YOUR DEVICE' : view === 'netease' ? 'EXPLORE NETEASE MUSIC' : 'CONNECTED TO YOUR MUSIC'
+                view === 'local' ? 'ON YOUR DEVICE' : 'CONNECTED TO YOUR MUSIC'
               }}</span>
               <h1>{{ title }}</h1>
               <p>
                 {{
                   view === 'local'
                     ? '把收藏的声音，留在身边。本次导入仅保留在当前会话。'
-                    : view === 'netease'
-                      ? '热歌榜、发现歌单，搜索下一首喜欢的。'
-                      : '熟悉的歌单，新的聆听方式。'
+                    : '熟悉的歌单，新的聆听方式。'
                 }}
               </p>
             </div>
@@ -646,7 +645,7 @@ onUnmounted(() => {
               <ChevronRight class="back-chevron" :size="15" />返回全部歌单
             </button>
             <div class="playlist-detail-summary">
-              <span class="playlist-detail-art"><ListMusic :size="38" /></span>
+              <span class="playlist-detail-art"><NeteaseArtwork v-if="activeProvider === 'netease'" :id="selectedPlaylistId" kind="playlist" :generation="neteaseState.generation" :name="playlistTitle ?? '歌单'" /><ListMusic v-else :size="38" /></span>
               <div>
                 <span class="eyebrow">{{ providerNames[activeProvider] }} · 歌单</span>
                 <h1>{{ playlistTitle ?? '正在读取歌单…' }}</h1>
@@ -754,7 +753,7 @@ onUnmounted(() => {
                 @click="openPlaylist(playlist.provider, playlist.id)"
               >
                 <span class="playlist-art"
-                  ><ListMusic :size="32" /><span class="playlist-play"
+                  ><NeteaseArtwork v-if="playlist.provider === 'netease'" :id="playlist.id" kind="playlist" :generation="neteaseState.generation" :name="playlist.name" /><ListMusic v-else :size="32" /><span class="playlist-play"
                     ><Play :size="17" fill="currentColor" /></span
                   ><span class="playlist-provider">{{
                     playlist.provider === 'netease' ? '网易云' : '酷狗'

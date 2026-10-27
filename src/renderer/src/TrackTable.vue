@@ -60,7 +60,7 @@ defineEmits<{
           :aria-current="track.id === currentId ? 'true' : undefined"
           @click="$emit('play', track.id)"
         >
-          <span class="song-tile" aria-hidden="true"><AudioLines v-if="track.id === currentId" :size="19" /><Music2 v-else :size="19" /></span>
+          <span class="song-tile" aria-hidden="true"><slot name="artwork" :track="track"><AudioLines v-if="track.id === currentId" :size="19" /><Music2 v-else :size="19" /></slot></span>
           <span class="song-copy"><strong>{{ track.title }}</strong
           ><small>{{
             track.artist || (track.provider === 'local' ? '本地音频' : '未知歌手')
