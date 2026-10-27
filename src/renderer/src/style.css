@@ -462,6 +462,14 @@ main:focus {
   outline: none;
 }
 
+.library-global-search { width: min(430px, 45%); padding: 4px 6px 4px 15px; gap: 9px; }
+.library-global-search > svg { flex-shrink: 0; }
+.library-global-search input { min-width: 0; height: 34px; appearance: none; }
+.library-global-search input::-webkit-search-cancel-button, .library-global-search input::-webkit-search-decoration { appearance: none; }
+.library-global-search button { display: grid; place-items: center; padding: 0; width: 32px; height: 32px; min-width: 32px; border-radius: 50%; box-shadow: none; border: 0; }
+.library-global-search .library-search-clear { color: var(--muted); background: transparent; }
+.library-global-search .library-search-submit { color: var(--accent-ink); background: var(--accent); }
+
 .search-field kbd {
   font-size: 10px;
   border: 1px solid #b6dcf12c;

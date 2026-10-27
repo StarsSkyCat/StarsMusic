@@ -35,6 +35,7 @@ import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
 import GlassScene from './GlassScene.vue';
+import LibrarySearch from './LibrarySearch.vue';
 import AppearancePanel from './AppearancePanel.vue';
 import DesktopPanel from './DesktopPanel.vue';
 import type { NeteaseMutation } from '../../../packages/contracts/src/netease-library';
@@ -66,6 +67,55 @@ function refreshNeteaseMembership(): void {
 const providerIds: Provider[] = ['netease', 'kugou'];
 const view = ref<'library' | 'local' | 'settings' | Provider>('library');
 const query = ref('');
+const libraryQuery = ref('');
+const librarySearchType = ref<'songs' | 'playlists'>('songs');
+const libraryRequest = ref({ query: '', searchType: 'songs' as 'songs' | 'playlists', revision: 0 });
+const libraryOpening = ref<Provider>();
+const libraryOpenErrors = ref<Record<Provider, string>>({ netease: '', kugou: '' });
+const libraryErrors = computed(() => ({ netease: libraryOpenErrors.value.netease || providers.netease.error.value, kugou: libraryOpenErrors.value.kugou || providers.kugou.error.value }));
+let libraryOperation = 0;
+function submitLibrarySearch(searchType = librarySearchType.value): void {
+  libraryOperation++; libraryOpening.value = undefined; libraryOpenErrors.value = { netease: '', kugou: '' };
+  librarySearchType.value = searchType;
+  libraryRequest.value = { query: libraryQuery.value.trim(), searchType, revision: libraryRequest.value.revision + 1 };
+  void nextTick(() => mainPane.value?.scrollTo({ top: 0 }));
+}
+function clearLibrarySearch(): void { libraryQuery.value = ''; submitLibrarySearch(); void nextTick(() => queryInput.value?.focus()); }
+watch(libraryQuery, value => { if (!value.trim() && libraryRequest.value.query) submitLibrarySearch(); });
+function requestLibrarySource(provider: Provider, offset: number): void {
+  libraryOpenErrors.value[provider] = '';
+  const { query, searchType } = libraryRequest.value;
+  if (query) void providers[provider].run(api => api.browse({ kind: 'search', query, searchType, offset }));
+}
+async function openLibraryPublic(provider: Provider, id: string): Promise<void> {
+  const operation = ++libraryOperation;
+  libraryOpening.value = provider; libraryOpenErrors.value[provider] = '';
+  await providers[provider].run(api => api.browse({ kind: 'playlist', id, offset: 0 }));
+  if (operation !== libraryOperation || view.value !== 'library') return;
+  libraryOpening.value = undefined;
+  const catalog = providers[provider].state.value.catalog;
+  if (catalog.kind === 'playlist' && catalog.status === 'ready' && catalog.playlist?.id === id) {
+    if (provider === 'netease') neteaseTab.value = 'search'; else kugouTab.value = 'search';
+    navigate(provider);
+  } else libraryOpenErrors.value[provider] = catalog.error?.message || '暂时无法打开歌单，请重试搜索。';
+}
+async function playLibraryTrack(provider: Provider | 'local', id: string, next = false): Promise<boolean> {
+  const ok = provider === 'local' ? await control(api => next ? api.moveNext(id) : api.playTrack(id))
+    : await providers[provider].run(api => next ? api.enqueueNext(id) : api.playTrack(id));
+  return ok;
+}
+async function enqueueLibraryTracks(provider: Provider | 'local', ids: string[]): Promise<void> {
+  const revision = libraryRequest.value.revision;
+  const generation = provider === 'local' ? playback.value.generation : providers[provider].state.value.generation;
+  let count = 0;
+  for (const id of [...ids].reverse()) {
+    if (view.value !== 'library' || revision !== libraryRequest.value.revision || generation !== (provider === 'local' ? playback.value.generation : providers[provider].state.value.generation)) break;
+    if (!(await playLibraryTrack(provider, id, true))) break;
+    count++;
+  }
+  if (count) notify(`已将 ${count} 首歌曲加入下一首播放`);
+}
+
 const selected = ref<string[]>([]);
 const queueDialog = ref<HTMLDialogElement>();
 const nowPlayingOpen = ref(false);
@@ -233,6 +283,7 @@ function matches(text: string): boolean {
   return text.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase());
 }
 function navigate(to: typeof view.value): void {
+  libraryOperation++; libraryOpening.value = undefined;
   nowPlayingOpen.value = false;
   selectedPlaylistId.value = undefined;
   view.value = to;
@@ -539,7 +590,12 @@ onUnmounted(() => {
           <span>{{ nowPlayingOpen ? '聆听空间' : '我的音乐' }}</span
           ><ChevronRight :size="13" /><strong>{{ title }}</strong>
         </div>
-        <label v-if="view !== 'settings' && ((view !== 'netease' && view !== 'kugou') || selectedPlaylistId) && !nowPlayingOpen" class="search-field"
+        <form v-if="view === 'library' && !nowPlayingOpen" class="search-field library-global-search" role="search" aria-label="音乐库全平台搜索" @submit.prevent="submitLibrarySearch()">
+          <Search :size="17" aria-hidden="true" /><input ref="queryInput" v-model="libraryQuery" type="search" maxlength="100" aria-label="搜索全部音乐来源" placeholder="搜索网易云、酷狗和本地音乐" autocomplete="off" spellcheck="false" />
+          <button v-if="libraryQuery" class="library-search-clear" type="button" aria-label="清空全部来源搜索" @click="clearLibrarySearch"><X :size="14" /></button>
+          <button class="library-search-submit" type="submit" :disabled="!libraryQuery.trim()" aria-label="搜索全部来源"><ArrowRight :size="16" /></button>
+        </form>
+        <label v-else-if="view !== 'settings' && ((view !== 'netease' && view !== 'kugou') || selectedPlaylistId) && !nowPlayingOpen" class="search-field"
           ><Search :size="17" /><input
             ref="queryInput"
             v-model="query"
@@ -572,8 +628,9 @@ onUnmounted(() => {
           @queue="showQueue"
         />
         <template v-else-if="view !== 'settings'">
+          <LibrarySearch v-if="view === 'library' && libraryRequest.query" :query="libraryRequest.query" :search-type="libraryRequest.searchType" :request-id="libraryRequest.revision" :netease="neteaseState" :kugou="kugouState" :errors="libraryErrors" :opening="libraryOpening" :local-tracks="localTracks" :playlists="playlists" :current-track="currentTrack" @request="requestLibrarySource" @type="submitLibrarySearch" @play="playLibraryTrack" @enqueue="enqueueLibraryTracks" @open="openLibraryPublic" @open-owned="openPlaylist" @manage="navigate('settings')" />
           <section
-            v-if="view === 'library' && !query"
+            v-if="view === 'library' && !libraryRequest.query"
             class="library-overview"
             aria-labelledby="library-title"
           >
@@ -617,7 +674,7 @@ onUnmounted(() => {
             </div>
           </section>
           <section
-            v-if="view === 'library' && !query"
+            v-if="view === 'library' && !libraryRequest.query"
             class="source-section"
             aria-labelledby="sources-title"
           >
@@ -747,7 +804,7 @@ onUnmounted(() => {
             @manage="navigate('settings')"
           />
           <section
-            v-if="view === 'library' && !selectedPlaylistId"
+            v-if="view === 'library' && !selectedPlaylistId && !libraryRequest.query"
             class="playlist-section"
             aria-labelledby="playlists-title"
           >
@@ -832,7 +889,7 @@ onUnmounted(() => {
             </div>
           </section>
           <section
-            v-if="tracks.length || view === 'local' || selectedPlaylistId"
+            v-if="view === 'local' || selectedPlaylistId"
             class="songs-section"
             aria-labelledby="songs-title"
           >

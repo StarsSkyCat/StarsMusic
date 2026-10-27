@@ -47,3 +47,5 @@
 - [网易云会员兼容、整单播放与收藏编辑](validation/2026-10-27-netease-library.md)
 
 - [双平台搜索框、账号昵称与酷狗权益](validation/2026-10-27-platform-search-rights.md)
+
+- [音乐库全来源搜索与酷狗收藏排序](validation/2026-10-27-library-search-order.md)

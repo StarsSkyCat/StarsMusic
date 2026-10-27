@@ -68,7 +68,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 
 新增固定端点为 gateway.kugou.com 的 `/v2/search/song`、`/v1/search/special`、`/v2/special_recommend` 和 `/pubsongs/v2/get_other_list_file_nofilt`，路由及实测依据见 [搜索接入记录](validation/2026-10-27-kugou-discovery.md)。图片白名单另加入实测的 c1.kgimg.com，仅允许 HTTPS、公网 DNS、受限栅格格式与大小，不放行其他 kgimg 子域、不转发凭据、不跟随图片跳转。
 
-收藏歌单、喜欢歌曲、创建/编辑歌单、榜单和更细的分类筛选尚未实现。本次未增加跨平台聚合搜索，也不改变原资源权限与编码身份约束。
+收藏歌单、喜欢歌曲、创建/编辑歌单、榜单和更细的分类筛选尚未实现。音乐库已接入跨平台歌曲/歌单搜索，各来源独立失败和重试；原资源权限与编码身份约束保持有效。
 
 ## 媒体网关
 
