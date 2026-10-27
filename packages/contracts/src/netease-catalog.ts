@@ -1,10 +1,11 @@
+import { parseNeteaseTrackRights, type NeteaseTrackRights } from './netease-rights.ts';
 import { parseAppError, type AppError } from './errors.ts';
 import { choice, ContractValidationError, nonNegativeInteger, record, text } from './validation.ts';
 
 export const catalogPageSize = 30;
 export const neteaseCategories = ['全部', '华语', '欧美', '日语', '韩语', '流行', '摇滚', '民谣', '电子', '轻音乐', '古风', 'ACG'] as const;
 export type NeteaseCategory = typeof neteaseCategories[number];
-export interface CatalogTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number }
+export interface CatalogTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number; readonly rights?: NeteaseTrackRights }
 export interface CatalogPlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
 export interface NeteaseCatalog {
   readonly kind: 'hot' | 'playlists' | 'search' | 'playlist';
@@ -76,7 +77,7 @@ export function parseCatalog(value: unknown): NeteaseCatalog {
         const artist = text(value, 'netease.catalog.artist');
         if (artist.length > 500) throw new ContractValidationError('netease.catalog.artist');
         return artist;
-      })), durationMs: nonNegativeInteger(track.durationMs, 'netease.catalog.duration') });
+      })), durationMs: nonNegativeInteger(track.durationMs, 'netease.catalog.duration'), ...(track.rights === undefined ? {} : { rights: parseNeteaseTrackRights(track.rights) }) });
     })),
     ...(input.playlist === undefined ? {} : { playlist: parseCatalogPlaylist(input.playlist) }),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),

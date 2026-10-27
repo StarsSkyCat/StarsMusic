@@ -1,3 +1,4 @@
+import { initialNeteaseMembership, parseNeteaseMembership, parseNeteaseTrackRights, type NeteaseMembership, type NeteaseTrackRights } from './netease-rights.ts';
 import { parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from './netease-artwork.ts';
 import { parseAppError, type AppError } from './errors.ts';
 import { choice, ContractValidationError, nonNegativeInteger, record, text } from './validation.ts';
@@ -7,11 +8,12 @@ export const neteaseChannels = {
   getState: 'starsmusic:netease:get-state', startLogin: 'starsmusic:netease:start-login',
   cancelLogin: 'starsmusic:netease:cancel-login', logout: 'starsmusic:netease:logout',
   loadPlaylists: 'starsmusic:netease:load-playlists', loadPlaylist: 'starsmusic:netease:load-playlist',
+  refreshMembership: 'starsmusic:netease:refresh-membership',
   browse: 'starsmusic:netease:browse', getArtwork: 'starsmusic:netease:get-artwork',
   enqueueNext: 'starsmusic:netease:enqueue-next', playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
 } as const;
 export interface NeteasePlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
-export interface NeteaseTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number }
+export interface NeteaseTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number; readonly rights?: NeteaseTrackRights }
 export interface NeteaseSnapshot {
   readonly revision: number;
   readonly generation: number;
@@ -28,9 +30,11 @@ export interface NeteaseSnapshot {
   readonly busy: boolean;
   readonly error?: AppError;
   readonly catalog: NeteaseCatalog;
+  readonly membership: NeteaseMembership;
 }
 export interface NeteaseApi {
   getState(): Promise<NeteaseSnapshot>;
+  refreshMembership(): Promise<NeteaseSnapshot>;
   startLogin(): Promise<NeteaseSnapshot>;
   cancelLogin(): Promise<NeteaseSnapshot>;
   logout(): Promise<NeteaseSnapshot>;
@@ -65,7 +69,7 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
   const tracks = status === 'connected' ? input.tracks.map((value: unknown) => {
     const item = record(value, 'netease.track');
     if (!Array.isArray(item.artists)) throw new ContractValidationError('netease.artists');
-    return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.track.name'), artists: Object.freeze(item.artists.map((artist: unknown) => text(artist, 'netease.artist'))), durationMs: nonNegativeInteger(item.durationMs, 'netease.duration') });
+    return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.track.name'), artists: Object.freeze(item.artists.map((artist: unknown) => text(artist, 'netease.artist'))), durationMs: nonNegativeInteger(item.durationMs, 'netease.duration'), ...(item.rights === undefined ? {} : { rights: parseNeteaseTrackRights(item.rights) }) });
   }) : [];
   const qrAllowed = status === 'waiting-scan' || status === 'awaiting-confirmation';
   if (qrAllowed && (typeof input.qrImage !== 'string' || input.qrImage.length > 500_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(input.qrImage))) {
@@ -80,6 +84,7 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
     nextTrackOffset: status === 'connected' ? nonNegativeInteger(input.nextTrackOffset, 'netease.nextTrackOffset') : 0,
     ...(status === 'connected' && input.playlistId !== undefined ? { playlistId: neteaseId(input.playlistId) } : {}),
     busy: input.busy,
+    membership: status === 'connected' && input.membership !== undefined ? parseNeteaseMembership(input.membership) : initialNeteaseMembership(),
     catalog: input.catalog === undefined ? initialCatalog() : parseCatalog(input.catalog),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),
   });
@@ -96,7 +101,7 @@ export function parseNeteaseArguments(channel: string, args: readonly unknown[])
     if (offset > 100000 || offset % 50 !== 0) throw new ContractValidationError('netease.offset');
     return { id: neteaseId(args[0]), offset };
   }
-  const empty: readonly string[] = [neteaseChannels.getState, neteaseChannels.startLogin, neteaseChannels.cancelLogin, neteaseChannels.logout, neteaseChannels.loadPlaylists];
+  const empty: readonly string[] = [neteaseChannels.getState, neteaseChannels.startLogin, neteaseChannels.cancelLogin, neteaseChannels.logout, neteaseChannels.loadPlaylists, neteaseChannels.refreshMembership];
   if (empty.includes(channel) && args.length === 0) return {};
   throw new ContractValidationError('netease.command');
 }

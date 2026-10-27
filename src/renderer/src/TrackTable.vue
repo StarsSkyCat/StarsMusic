@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TrackRights from './TrackRights.vue';
 import { AudioLines, ListPlus, Music2, Play, X } from '@lucide/vue';
 import { formatTime, type DisplayTrack } from './music-ui';
 import { providerNames } from './useProvider';
@@ -64,7 +65,7 @@ defineEmits<{
           <span class="song-copy"><strong>{{ track.title }}</strong
           ><small>{{
             track.artist || (track.provider === 'local' ? '本地音频' : '未知歌手')
-          }}</small></span>
+          }}</small><TrackRights v-if="track.provider === 'netease'" :rights="track.rights" /></span>
         </button>
         <span class="source-column"
           ><span class="source-badge" :class="track.provider">{{

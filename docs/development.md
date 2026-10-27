@@ -2,7 +2,7 @@
 
 ## 当前能运行什么
 
-已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/热歌榜/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；真实账号跨重启恢复、目录扫描、音乐库数据库、MPRIS 和安装包尚未验证或实现。
+已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/热歌榜/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加官方会员套餐同步与单曲收费/取链权限标记，真实会员账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库、MPRIS 和安装包尚未验证或实现。
 
 领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)，登录保存见 [凭据持久化](credentials.md)。默认关闭“记住登录”时，应用关闭后不保留网易云或酷狗登录，需要重新扫码。
 

@@ -19,6 +19,7 @@ port.on('message', (event) => {
       let result: unknown;
       if (operation === 'getState') result = service.snapshot();
       else if (operation === 'getArtwork') result = await service.getArtwork(parseNeteaseArtworkRequest(message.artwork));
+      else if (operation === 'refreshMembership') result = await service.refreshMembership();
       else if (operation === 'browse') result = await service.browse(parseCatalogRequest(message.catalog));
       else if (operation === 'startLogin') result = await service.startLogin();
       else if (operation === 'cancelLogin') result = service.cancelLogin();

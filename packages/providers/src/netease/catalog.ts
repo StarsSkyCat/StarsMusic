@@ -22,7 +22,7 @@ export async function fetchCatalog(request: CatalogRequest, previous: NeteaseCat
     const items = page(result[request.searchType === 'songs' ? 'songs' : 'playlists'] ?? []);
     const more = items.length > 0 && request.offset + items.length < total && request.offset < 3000;
     return { catalog: parseCatalog({ ...base, query: request.query, searchType: request.searchType, total, more,
-      ...(request.searchType === 'songs' ? { tracks: parseTracks(items) } : { playlists: items.map(playlist) }) }), originals: request.searchType === 'songs' ? items : [], playlistOriginals: request.searchType === 'playlists' ? items : [] };
+      ...(request.searchType === 'songs' ? { tracks: parseTracks(items, result.privileges) } : { playlists: items.map(playlist) }) }), originals: request.searchType === 'songs' ? items : [], playlistOriginals: request.searchType === 'playlists' ? items : [] };
   }
   if (request.kind === 'playlists') {
     const body = success(await transport.call('publicPlaylists', { cat: request.category, order: request.order, limit: catalogPageSize, offset: request.offset, total: true }, signal));
@@ -50,9 +50,9 @@ export async function fetchCatalog(request: CatalogRequest, previous: NeteaseCat
   const detail = record(body.playlist, 'netease.public.playlist');
   if (apiId(detail.id) !== selected.id || !Array.isArray(detail.trackIds)) throw new DomainError('invalid-response');
   const ids = detail.trackIds.slice(request.offset, request.offset + catalogPageSize).map(value => apiId(record(value, 'netease.trackId').id));
-  const songs = ids.length ? success(await transport.call('songs', { c: JSON.stringify(ids.map(id => ({ id }))) }, signal)) : { songs: [] };
+  const songs = ids.length ? success(await transport.call('songs', { c: JSON.stringify(ids.map(id => ({ id }))) }, signal)) : { songs: [], privileges: undefined };
   const originals = page(songs.songs);
-  const tracks = new Map(parseTracks(originals).map(track => [track.id, track]));
+  const tracks = new Map(parseTracks(originals, songs.privileges).map(track => [track.id, track]));
   return { catalog: parseCatalog({ ...base, playlist: { ...selected, trackCount: detail.trackIds.length },
     tracks: ids.flatMap(id => tracks.has(id) ? [tracks.get(id)!] : []), total: detail.trackIds.length,
     more: request.offset + ids.length < detail.trackIds.length && ids.length > 0 && request.offset < 3000 }), originals, playlistOriginals: [detail] };

@@ -10,7 +10,7 @@ export const endpoints = {
   playlist: ['/api/v6/playlist/detail', 'eapi'], songs: ['/api/v3/song/detail', 'weapi'],
   stream: ['/api/song/enhance/player/url', 'eapi'], lyric: ['/api/song/lyric', 'weapi'],
   search: ['/api/cloudsearch/pc', 'weapi'], publicPlaylists: ['/api/playlist/list', 'weapi'],
-  toplists: ['/api/toplist', 'weapi'],
+  toplists: ['/api/toplist', 'weapi'], vip: ['/api/music-vip-membership/front/vip/info', 'weapi'],
 } as const;
 export type NeteaseEndpoint = keyof typeof endpoints;
 export interface NeteaseTransportSession {

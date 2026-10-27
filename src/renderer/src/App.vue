@@ -52,6 +52,9 @@ const providers = {
   netease: useProvider('netease'),
   kugou: useProvider('kugou'),
 };
+function refreshNeteaseMembership(): void {
+  void providers.netease.run(() => window.starsMusic!.netease.refreshMembership());
+}
 const providerIds: Provider[] = ['netease', 'kugou'];
 const view = ref<'library' | 'local' | 'settings' | Provider>('library');
 const query = ref('');
@@ -161,6 +164,7 @@ const tracks = computed<readonly DisplayTrack[]>(() => {
       artist: t.artists.join('、'),
       provider: activeProvider.value!,
       durationSeconds: t.durationMs / 1000,
+      ...('rights' in t && t.rights ? { rights: t.rights } : {}),
     }));
   }
   const list = view.value === 'local' ? localTracks.value : playback.value.queue;
@@ -664,6 +668,7 @@ onUnmounted(() => {
             :current-id="currentTrack?.provider === 'netease' ? currentTrack.sourceId : undefined"
             :error="providers.netease.error.value"
             @browse="browseNetease"
+            @refresh-membership="refreshNeteaseMembership()"
             @play="play"
             @next="addNext"
             @enqueue="enqueueCatalog"
@@ -676,6 +681,7 @@ onUnmounted(() => {
             class="provider-onboarding"
           >
             <ProviderAccount
+              @refresh-membership="refreshNeteaseMembership()"
               :provider="activeProvider"
               :state="providerState"
               :credentials="credentials.status.value"
@@ -892,6 +898,7 @@ onUnmounted(() => {
           <AppearancePanel />
           <div class="accounts-grid">
             <ProviderAccount
+              @refresh-membership="refreshNeteaseMembership()"
               v-for="id in providerIds"
               :key="id"
               :provider="id"

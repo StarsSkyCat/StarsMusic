@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, Flame, Headphon
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
 import TrackTable from './TrackTable.vue';
+import NeteaseMembership from './NeteaseMembership.vue';
+import TrackRights from './TrackRights.vue';
 import GlassSelect from './GlassSelect.vue';
 import NeteaseArtwork from './NeteaseArtwork.vue';
 import './netease.css';
@@ -13,7 +15,7 @@ const props = defineProps<{ state: NeteaseSnapshot; currentId: string | undefine
 const tab = defineModel<'hot' | 'playlists' | 'search' | 'owned'>('tab', { default: 'hot' });
 const emit = defineEmits<{
   browse: [request: CatalogRequest]; play: [id: string]; next: [id: string]; enqueue: [ids: string[]];
-  openOwned: [id: string]; loadOwned: []; manage: [];
+  refreshMembership: []; openOwned: [id: string]; loadOwned: []; manage: [];
 }>();
 const tabs = [{ id: 'hot', label: '热歌榜', icon: Flame }, { id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const;
 const catalog = computed(() => props.state.catalog);
@@ -26,7 +28,7 @@ const actionError = ref('');
 const detail = ref(catalog.value.kind === 'playlist');
 const relevant = computed(() => catalog.value.kind === (detail.value ? 'playlist' : tab.value));
 const loading = computed(() => catalog.value.status === 'loading');
-const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'netease', durationSeconds: track.durationMs / 1000 })));
+const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'netease', durationSeconds: track.durationMs / 1000, ...(track.rights ? { rights: track.rights } : {}) })));
 const featured = computed(() => catalog.value.kind === 'hot' && catalog.value.offset === 0 ? catalog.value.tracks.slice(0, 3) : []);
 const title = computed(() => tab.value === 'hot' ? '此刻，正流行。' : tab.value === 'playlists' ? '给心情，换张封面。' : tab.value === 'search' ? '下一次心动，从这里开始。' : '你的收藏，自成宇宙。');
 const subtitle = computed(() => tab.value === 'hot' ? '听见正在被喜欢的声音。' : tab.value === 'playlists' ? '一张封面，一段新的音乐旅程。' : tab.value === 'search' ? '歌曲、歌手、歌单。让好音乐与你相遇。' : '熟悉的歌单，随时回到喜欢的声音。');
@@ -79,6 +81,7 @@ onMounted(() => {
     <nav class="catalog-tabs" aria-label="网易云浏览">
       <button v-for="(item, index) in tabs" :key="item.id" :aria-pressed="tab === item.id" :class="{ active: tab === item.id }" @click="switchTab(item.id)"><component :is="item.icon" :size="17" /><span>{{ item.label }}</span><small aria-hidden="true">0{{ index + 1 }}</small></button>
     </nav>
+    <NeteaseMembership v-if="state.status === 'connected'" :membership="state.membership" @refresh="$emit('refreshMembership')" />
     <template v-if="tab === 'owned'">
       <div class="ne-section-heading"><div><span class="ne-kicker">YOUR COLLECTION</span><h2>我的网易云歌单<span>{{ state.playlists.length.toString().padStart(2, '0') }}</span></h2></div><button v-if="state.status === 'connected' && (state.playlistsMore || !state.playlists.length)" class="subtle-button" :disabled="state.busy" @click="$emit('loadOwned')">{{ state.busy ? '读取中…' : state.playlistsMore ? '加载更多歌单' : '读取歌单' }}</button></div>
       <div v-if="state.playlists.length" class="ne-cover-grid">
@@ -107,7 +110,7 @@ onMounted(() => {
       <div v-if="tab === 'hot' && !detail && relevant && catalog.status === 'ready' && featured.length" class="ne-chart-stage" aria-label="热歌前三名">
         <button v-for="(track, index) in featured" :key="track.id" class="ne-chart-feature" :class="{ 'ne-chart-lead': index === 0 }" :aria-label="`播放热榜第${index + 1}名 ${track.name}`" @click="play(track.id)">
           <span class="ne-chart-cover"><NeteaseArtwork :id="track.id" kind="track" :generation="state.generation" :name="track.name" /><span class="ne-cover-play"><Play :size="18" fill="currentColor" /></span></span>
-          <span class="ne-chart-copy"><span class="ne-kicker">{{ index === 0 ? 'ON REPEAT / 热榜首位' : 'IN THE SPOTLIGHT' }}</span><strong>{{ track.name }}</strong><small>{{ track.artists.join(' / ') || '未知歌手' }}</small><span v-if="index === 0" class="ne-chart-listen"><Headphones :size="15" />听听这首<ArrowUpRight :size="15" /></span></span>
+          <span class="ne-chart-copy"><span class="ne-kicker">{{ index === 0 ? 'ON REPEAT / 热榜首位' : 'IN THE SPOTLIGHT' }}</span><strong>{{ track.name }}</strong><small>{{ track.artists.join(' / ') || '未知歌手' }}</small><TrackRights :rights="track.rights" /><span v-if="index === 0" class="ne-chart-listen"><Headphones :size="15" />听听这首<ArrowUpRight :size="15" /></span></span>
           <span class="ne-chart-number" aria-hidden="true">0{{ index + 1 }}</span>
         </button>
       </div>

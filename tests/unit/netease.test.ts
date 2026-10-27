@@ -339,3 +339,110 @@ test('封面限制并发，退出取消下载且拒绝迟到图片；私人歌�
     assert.match((await instance.getArtwork({ kind: 'playlist', id: '10', generation: instance.snapshot().generation }))!, /^data:image/);
   } finally { instance.dispose(); }
 });
+
+test('官方 fee 分类与独立 privilege 按 ID 归并，缺数据不误标免费或完整播放', async () => {
+  const { parseTracks } = await import('../../packages/providers/src/netease/response.ts');
+  const rows = [0, 1, 4, 8, 99].map((fee, index) => ({ id: index + 1, name: '合成权限曲目', ar: [], dt: 30000, fee }));
+  const result = parseTracks(rows, [{ id: 2, pl: 999000, st: 0, cookie: 'synthetic' }, { id: 1, pl: 0, st: -200 }]);
+  assert.deepEqual(result.map(track => track.rights?.fee), ['none', 'vip', 'album', 'vip-quality', 'unknown']);
+  assert.equal(result[0]?.rights?.playback, 'unavailable');
+  assert.equal(result[1]?.rights?.playback, 'unknown'); // pl 不是完整播放授权证明
+  assert.equal(result[1]?.rights?.maxBitrate, 999000);
+  assert.equal(JSON.stringify(result).includes('cookie'), false);
+  assert.equal(parseTracks([{ id: 9, name: '合成缺权限', ar: [], dt: 1000 }])[0]?.rights, undefined);
+  assert.throws(() => parseTracks([{ id: 9, name: '合成错配', ar: [], dt: 1000, privilege: { id: 8 } }]));
+});
+
+test('会员投影只认官方套餐有效期和账号，过期/缺字段/额外数据不制造 VIP', async () => {
+  const { parseMembershipResponse } = await import('../../packages/providers/src/netease/response.ts');
+  const { parseNeteaseTrackRights } = await import('../../packages/contracts/src/netease-rights.ts');
+  const reply = { code: 200, data: { userId: 42, redVipLevel: 7, associator: { vipCode: 100, expireTime: 2000 }, musicPackage: { vipCode: 230, expireTime: 500 }, redplus: { vipCode: 300, expireTime: 3000 }, token: 'synthetic-secret' } };
+  const member = parseMembershipResponse(reply, '42', 1000);
+  assert.deepEqual(member.benefits, [{ kind: 'vip', expiresAt: 2000 }, { kind: 'svip', expiresAt: 3000 }]);
+  assert.equal(JSON.stringify(member).includes('secret'), false);
+  assert.equal(parseMembershipResponse(reply, '42', 4000).benefits.length, 0);
+  assert.throws(() => parseMembershipResponse({ code: 200, data: { userId: 42, associator: null } }, '42', 1000));
+  assert.equal(parseMembershipResponse({ code: 200, data: { userId: 42, associator: null, musicPackage: null } }, '42', 1000).benefits.length, 0);
+  assert.throws(() => parseMembershipResponse(reply, '43', 1000));
+  assert.throws(() => parseMembershipResponse({ code: 200, data: { userId: 42, redVipLevel: 7 } }, '42', 1000));
+  assert.throws(() => parseNeteaseTrackRights({ fee: 'free', playback: 'full' }));
+  assert.deepEqual(parseNeteaseArguments(neteaseChannels.refreshMembership, []), {});
+  assert.throws(() => parseNeteaseArguments(neteaseChannels.refreshMembership, ['42']));
+  assert.deepEqual(parseNeteaseSnapshot({ ...initialNeteaseSnapshot(), membership: member }).membership.benefits, []);
+});
+
+test('登录与恢复后同步当前账号官方 VIP，失败只显示未知；旧账号响应不能回写', async () => {
+  const first = new FakeTransport(); const second = new FakeTransport(); second.account = 43;
+  const pending = deferred<unknown>(); let oldSignal: AbortSignal | undefined;
+  first.handlers.set('vip', async (data, signal) => { assert.equal(data.userId, '42'); oldSignal = signal; return pending.promise; });
+  second.handlers.set('vip', async data => { assert.equal(data.userId, '43'); return { code: 200, data: { userId: 43, associator: { vipCode: 100, expireTime: 5000 }, musicPackage: null } }; });
+  let count = 0; const instance = service(() => count++ === 0 ? first : second);
+  try {
+    await connect(instance); assert.equal(instance.snapshot().membership.status, 'loading');
+    instance.logout(); assert.equal(oldSignal?.aborted, true);
+    await connect(instance); await new Promise(done => setImmediate(done));
+    assert.equal(instance.snapshot().membership.benefits[0]?.kind, 'vip');
+    pending.resolve({ code: 200, data: { userId: 42, associator: null } });
+    await new Promise(done => setImmediate(done));
+    assert.equal(instance.snapshot().account?.id, '43'); assert.equal(instance.snapshot().membership.benefits[0]?.kind, 'vip');
+    const bundle = instance.exportCredentials()!;
+    instance.logout(); assert.equal(instance.snapshot().membership.status, 'idle');
+    await instance.restoreCredentials(bundle); await new Promise(done => setImmediate(done));
+    assert.equal(instance.snapshot().membership.benefits[0]?.kind, 'vip');
+    second.handlers.set('vip', async () => { throw new DomainError('network'); });
+    await instance.refreshMembership();
+    assert.equal(instance.snapshot().status, 'connected'); assert.equal(instance.snapshot().membership.status, 'error');
+    assert.equal(instance.snapshot().membership.benefits.length, 0);
+  } finally { pending.resolve({ code: 500 }); instance.dispose(); }
+});
+
+test('实际取链沿用官方登录权限并请求最高既有码率，VIP/付费标签不冒充整曲', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  transport.handlers.set('vip', async () => ({ code: 200, data: { userId: 42, associator: { vipCode: 100, expireTime: 5000 } } }));
+  transport.handlers.set('search', async () => ({ code: 200, result: { songCount: 1, songs: [{ id: 7, name: '合成 VIP 歌曲', ar: [], dt: 30000, fee: 1 }] } }));
+  let preview = true;
+  transport.handlers.set('stream', async data => {
+    assert.equal(transport.identity, true); assert.equal(data.ids, '["7"]'); assert.equal(data.br, 999000);
+    return { code: 200, data: [{ id: 7, code: 200, url: 'https://m1.music.126.net/synthetic', br: preview ? 128000 : 900000, type: preview ? 'mp3' : 'flac', freeTrialInfo: preview ? { start: 10, end: 40 } : null }] };
+  });
+  try {
+    await connect(instance); await new Promise(done => setImmediate(done));
+    await instance.browse({ kind: 'search', query: '合成', searchType: 'songs', offset: 0 });
+    assert.equal(instance.snapshot().catalog.tracks[0]?.rights?.playback, 'unknown');
+    const trial = await instance.resolveTrack('7', instance.snapshot().generation);
+    assert.equal(trial.access.kind, 'preview'); assert.equal(instance.snapshot().catalog.tracks[0]?.rights?.playback, 'preview');
+    preview = false;
+    const full = await instance.resolveTrack('7', instance.snapshot().generation);
+    assert.equal(full.access.kind, 'full'); assert.equal(full.quality.level, 'lossless');
+    assert.deepEqual(instance.snapshot().catalog.tracks[0]?.rights, { fee: 'vip', playback: 'full' });
+    transport.handlers.set('stream', async () => ({ code: 200, data: [{ id: 7, code: 403 }] }));
+    await assert.rejects(instance.resolveTrack('7', instance.snapshot().generation));
+    assert.equal(instance.snapshot().catalog.tracks[0]?.rights?.playback, 'unavailable');
+    assert.equal(instance.snapshot().membership.benefits[0]?.kind, 'vip'); // 有会员不等于所有单曲均可播
+  } finally { instance.dispose(); }
+});
+
+test('同步权益刷新当前单曲权限，迟到详情不覆盖新搜索；单曲刷新失败保留已核验会员', async () => {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  transport.handlers.set('vip', async () => ({ code: 200, data: { userId: 42, associator: { vipCode: 100, expireTime: 5000 } } }));
+  transport.handlers.set('search', async data => ({ code: 200, result: { songCount: 1, songs: [{ id: data.s === '旧' ? 7 : 8, name: String(data.s), ar: [], dt: 30000, fee: 1 }] } }));
+  try {
+    await connect(instance); await new Promise(done => setImmediate(done));
+    await instance.browse({ kind: 'search', query: '旧', searchType: 'songs', offset: 0 });
+    const pending = deferred<unknown>(); let requested = false;
+    transport.handlers.set('songs', async () => { requested = true; return pending.promise; });
+    const refresh = instance.refreshMembership(); await new Promise(done => setImmediate(done)); assert.equal(requested, true);
+    await instance.browse({ kind: 'search', query: '新', searchType: 'songs', offset: 0 });
+    pending.resolve({ code: 200, songs: [{ id: 7, name: '迟到旧详情', ar: [], dt: 30000, fee: 1 }], privileges: [{ id: 7, pl: 999000, st: 0 }] });
+    await refresh;
+    assert.equal(instance.snapshot().catalog.tracks[0]?.name, '新');
+    transport.handlers.set('songs', async () => ({ code: 200, songs: [{ id: 8, name: '新', ar: [], dt: 30000, fee: 4 }], privileges: [{ id: 8, pl: 0, st: -200 }] }));
+    await instance.refreshMembership();
+    assert.equal(instance.snapshot().catalog.tracks[0]?.rights?.fee, 'album');
+    assert.equal(instance.snapshot().catalog.tracks[0]?.rights?.playback, 'unavailable');
+    transport.handlers.set('songs', async () => { throw new DomainError('network'); });
+    await instance.refreshMembership();
+    assert.equal(instance.snapshot().membership.status, 'ready'); assert.equal(instance.snapshot().membership.benefits[0]?.kind, 'vip');
+    assert.equal(instance.snapshot().membership.error?.code, 'network');
+  } finally { instance.dispose(); }
+});

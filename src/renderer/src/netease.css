@@ -59,9 +59,9 @@
 .ne-cover-copy > small { display: block; color: var(--muted); font-size: 7px; letter-spacing: 1.2px; font-weight: 400; }
 .ne-cover-copy strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 500; font-size: 12px; line-height: 1.8; margin-top: 7px; min-height: 43px; }
 .catalog-filters { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 13px; margin-bottom: 28px; }
-.ne-genres { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.ne-genres { display: flex; gap: 2px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .catalog-filters > .glass-select { align-self: flex-start; margin-left: auto; }
-.ne-genres button { padding: 10px 12px; font-size: 11px; min-height: 44px; box-shadow: none; background: transparent; border-color: transparent; border-radius: 12px; color: var(--muted); }
+.ne-genres button { padding: 10px 10px; font-size: 11px; min-height: 44px; box-shadow: none; background: transparent; border-color: transparent; border-radius: 12px; color: var(--muted); }
 .ne-genres button[aria-pressed='true'] { border-color: var(--ne-edge); background: var(--ne-tint); color: var(--ne-accent); }
 /* 搜索是一条明确的主轴，结果继续使用可多选的曲目表。 */
 .catalog-search { margin-bottom: 29px; }

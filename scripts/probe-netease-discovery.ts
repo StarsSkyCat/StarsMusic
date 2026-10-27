@@ -18,6 +18,14 @@ for (const request of requests) {
   try {
     const result = await fetchCatalog(request, initialCatalog(), new Map(), transport, AbortSignal.timeout(15000));
     console.log(`匿名发现通过：${request.kind}${request.kind === 'search' ? `/${request.searchType}` : ''}，偏移 ${request.offset}，曲目 ${result.catalog.tracks.length}，歌单 ${result.catalog.playlists.length}，后续 ${result.catalog.more}。`);
+    if (result.catalog.tracks.length) {
+      const known = result.catalog.tracks.filter(track => track.rights && track.rights.fee !== 'unknown').length;
+      if (!known) throw new Error('missing public rights metadata');
+      const vip = result.catalog.tracks.filter(track => track.rights?.fee === 'vip').length;
+      const album = result.catalog.tracks.filter(track => track.rights?.fee === 'album').length;
+      const quality = result.catalog.tracks.filter(track => track.rights?.fee === 'vip-quality').length;
+      console.log(`匿名官方收费标记通过：已知 ${known}，VIP ${vip}，付费专辑 ${album}，VIP 音质 ${quality}。不代表当前账号播放权限。`);
+    }
     if (request.kind === 'playlists' && result.catalog.playlists[0]) {
       const selected = result.catalog.playlists[0];
       const detail = await fetchCatalog({ kind: 'playlist', id: selected.id, offset: 0 }, result.catalog, new Map([[selected.id, selected]]), transport, AbortSignal.timeout(15000));

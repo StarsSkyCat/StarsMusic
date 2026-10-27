@@ -69,3 +69,6 @@ NeteaseSnapshot.catalog 独立显示公开浏览状态、分页元数据、每�
 
 
 网易云封面提供具体 `getArtwork({ kind: 'track' | 'playlist', id, generation })` 方法；请求拒绝任意 URL 和额外字段。资源须在后台已登记，响应仅允许 null 或有长度限制的 PNG/JPEG/WebP data URI，复用 presentation 图片投影规则。图片单独按需请求，不膨胀整个账号状态快照。
+
+
+网易云快照新增会员状态 membership（idle/loading/ready/error、有效套餐种类、到期日、同步时间及归一化错误）。refreshMembership 无参数，只同步当前已登录账号，不接受任意账号 ID。歌曲 rights 仅投影收费种类、完整/试听/不可用/未知和可选码率元数据；权限按账号代次隔离，公开访客列表不从 fee 推导当前账号可播。

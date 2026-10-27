@@ -61,6 +61,7 @@ const api: DesktopApi = Object.freeze({
     },
   }),
   netease: Object.freeze({
+    refreshMembership: () => invokeNetease(neteaseChannels.refreshMembership),
     async getArtwork(request: NeteaseArtworkRequest) { return parseNeteaseArtwork(await ipcRenderer.invoke(neteaseChannels.getArtwork, parseNeteaseArtworkRequest(request))); },
     browse: (request: CatalogRequest) => invokeNetease(neteaseChannels.browse, parseCatalogRequest(request)),
     getState: () => invokeNetease(neteaseChannels.getState),

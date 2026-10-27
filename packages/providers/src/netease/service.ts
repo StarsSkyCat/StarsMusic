@@ -4,7 +4,7 @@ import { artworkUrl } from '../artwork.ts';
 import { parsePresentationContent, type PresentationContent } from '../../../contracts/src/presentation.ts';
 import { loadArtwork, type LoadArtwork } from '../artwork.ts';
 import QRCode from 'qrcode';
-import { apiId, success, parseTracks } from './response.ts';
+import { apiId, success, parseTracks, parseMembershipResponse } from './response.ts';
 export { apiId, parseTracks } from './response.ts';
 import { fetchCatalog } from './catalog.ts';
 import { parseCatalog, parseCatalogRequest, type CatalogRequest, type CatalogPlaylist } from '../../../contracts/src/netease-catalog.ts';
@@ -40,7 +40,7 @@ export function parseNeteaseStream(value: unknown, id: string, now: number): Str
     access = { kind: 'preview', startMs: 0, durationMs: (end - start) * 1000 };
   }
   const level = raw.level === 'standard' ? 'standard' : raw.level === 'exhigh' || raw.level === 'higher' ? 'high'
-    : raw.level === 'lossless' ? 'lossless' : raw.level === 'hires' ? 'hi-res' : 'unknown';
+    : raw.level === 'lossless' ? 'lossless' : raw.level === 'hires' ? 'hi-res' : raw.type === 'flac' ? 'lossless' : typeof raw.br === 'number' && raw.br >= 256000 ? 'high' : typeof raw.br === 'number' && raw.br > 0 && raw.br <= 192000 ? 'standard' : 'unknown';
   return parseStreamResolution({
     track: { provider: 'netease', id }, source: {
       kind: 'remote', url: url.href, headers: {},
@@ -80,6 +80,8 @@ export class NeteaseService {
   #artworkCache = new Map<string, string | null>();
   #artworkPending = new Map<string, Promise<string | null>>();
   #artworkAbort = new AbortController();
+  #membershipBusy = false;
+  #membershipTimer: ReturnType<typeof setTimeout> | undefined;
   #listBusy = false;
   #catalogView = 0;
   #catalogAbort: AbortController | undefined;
@@ -106,6 +108,7 @@ export class NeteaseService {
   }
   #clear(): void {
     this.#clearCatalog();
+    clearTimeout(this.#membershipTimer); this.#membershipTimer = undefined; this.#membershipBusy = false;
     clearTimeout(this.#timer); this.#timer = undefined;
     this.#transport?.clear(); this.#transport = undefined; this.#key = '';
     this.#knownTracks.clear(); this.#albums.clear(); this.#knownPlaylists.clear(); this.#playlistOffset = 0; this.#listBusy = false; this.#view++;
@@ -178,6 +181,7 @@ export class NeteaseService {
         this.#lease = connected; this.#key = ''; clearTimeout(this.#timer);
         this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, catalog: initialNeteaseSnapshot().catalog, error: undefined });
         this.#emitCredentials();
+        void this.refreshMembership();
       } else throw new DomainError('invalid-response');
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
@@ -236,11 +240,53 @@ export class NeteaseService {
       this.#lease = connected;
       this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, catalog: initialNeteaseSnapshot().catalog, error: undefined });
       this.#emitCredentials();
+      void this.refreshMembership();
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
         const safe = normalizeError(error);
         const invalid = ['session-expired', 'unauthenticated', 'permission-denied', 'invalid-response'].includes(safe.code);
         this.#end(invalid ? 'expired' : 'failed', safe);
+      }
+    }
+    return this.#state;
+  }
+  async refreshMembership(): Promise<NeteaseSnapshot> {
+    const { lease, transport } = this.#connected();
+    if (this.#membershipBusy) return this.#state;
+    this.#membershipBusy = true;
+    clearTimeout(this.#membershipTimer);
+    let verifiedMembership: NeteaseSnapshot['membership'] | undefined;
+    const reset = (track: NeteaseTrack): NeteaseTrack => track.rights ? { ...track, rights: { ...track.rights, playback: 'unknown' } } : track;
+    this.#update({ tracks: this.#state.tracks.map(reset), catalog: { ...this.#state.catalog, tracks: this.#state.catalog.tracks.map(reset) }, membership: { status: 'loading', benefits: [] } });
+    try {
+      const membership = parseMembershipResponse(await transport.call('vip', { userId: lease.context.accountId }, lease.signal), lease.context.accountId!, this.#now());
+      if (!this.#sessions.isCurrent(lease)) return this.#state;
+      verifiedMembership = membership;
+      // 手动/周期同步同时刷新当前页单曲权限，避免开通会员后沿用旧页面权限。
+      const catalogView = this.#catalogView; const playlistView = this.#view;
+      const ids = [...new Set([...this.#state.tracks, ...this.#state.catalog.tracks].map(track => track.id))].slice(-1000);
+      if (ids.length) {
+        const body = success(await transport.call('songs', { c: JSON.stringify(ids.map(id => ({ id }))) }, lease.signal));
+        const found = new Map(parseTracks(body.songs, body.privileges).filter(track => ids.includes(track.id)).map(track => [track.id, track]));
+        if (!this.#sessions.isCurrent(lease)) return this.#state;
+        const catalog = this.#state.catalog;
+        const tracks = playlistView === this.#view ? this.#state.tracks.map(track => found.get(track.id) ?? track) : this.#state.tracks;
+        const catalogTracks = catalogView === this.#catalogView ? catalog.tracks.map(track => found.get(track.id) ?? track) : catalog.tracks;
+        for (const track of [...tracks, ...catalogTracks]) this.#knownTracks.set(track.id, track);
+        this.#update({ tracks, catalog: { ...catalog, tracks: catalogTracks } });
+      }
+      this.#update({ membership });
+    } catch (error: unknown) {
+      if (this.#sessions.isCurrent(lease)) {
+        const safe = normalizeError(error);
+        if (safe.code === 'session-expired') this.#end('expired', safe);
+        else this.#update({ membership: verifiedMembership ? { ...verifiedMembership, error: safe } : { status: 'error', benefits: [], error: safe } });
+      }
+    } finally {
+      if (this.#sessions.isCurrent(lease)) {
+        this.#membershipBusy = false;
+        this.#membershipTimer = setTimeout(() => { void this.refreshMembership(); }, 300_000);
+        this.#membershipTimer.unref();
       }
     }
     return this.#state;
@@ -284,8 +330,8 @@ export class NeteaseService {
       const playlist = record(body.playlist, 'netease.playlist');
       if (apiId(playlist.id) !== id || !Array.isArray(playlist.trackIds)) throw new DomainError('invalid-response');
       const ids = playlist.trackIds.slice(offset, offset + 50).map((value: unknown) => apiId(record(value, 'netease.trackId').id));
-      const detail = ids.length ? success(await transport.call('songs', { c: JSON.stringify(ids.map((id) => ({ id }))) }, lease.signal)) : { songs: [] };
-      const found = new Map(parseTracks(detail.songs).map((track) => [track.id, track]));
+      const detail = ids.length ? success(await transport.call('songs', { c: JSON.stringify(ids.map((id) => ({ id }))) }, lease.signal)) : { songs: [], privileges: undefined };
+      const found = new Map(parseTracks(detail.songs, detail.privileges).map((track) => [track.id, track]));
       const originals = new Map((detail.songs as unknown[]).map(value => {
         const row = record(value, 'netease.song');
         return [apiId(row.id), row] as const;
@@ -402,13 +448,25 @@ export class NeteaseService {
       ...(artwork.status === 'rejected' ? { artworkError: normalizeError(artwork.reason) } : {}),
     });
   }
+  #recordPlaybackAccess(id: string, playback: 'full' | 'preview' | 'unavailable'): void {
+    const previous = this.#knownTracks.get(id);
+    if (!previous) return;
+    const next = { ...previous, rights: { ...previous.rights, fee: previous.rights?.fee ?? 'unknown' as const, playback } };
+    this.#knownTracks.set(id, next);
+    this.#update({ tracks: this.#state.tracks.map(track => track.id === id ? next : track), catalog: { ...this.#state.catalog, tracks: this.#state.catalog.tracks.map(track => track.id === id ? next : track) } });
+  }
   async resolveTrack(id: string, generation: number): Promise<StreamResolution> {
     const { lease, transport } = this.#connected();
     if (generation !== this.#state.generation || !this.#knownTracks.has(neteaseId(id))) throw new DomainError('stale-operation');
     try {
-      const value = await transport.call('stream', { ids: JSON.stringify([id]), br: 128000 }, lease.signal);
+      const value = await transport.call('stream', { ids: JSON.stringify([id]), br: 999000 }, lease.signal);
       if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
-      return parseNeteaseStream(value, id, this.#now());
-    } catch (error: unknown) { this.#operationError(lease, error); throw error; }
+      const result = parseNeteaseStream(value, id, this.#now());
+      this.#recordPlaybackAccess(id, result.access.kind === 'preview' ? 'preview' : 'full');
+      return result;
+    } catch (error: unknown) {
+      if (this.#sessions.isCurrent(lease) && error instanceof DomainError && ['permission-denied', 'unavailable'].includes(error.code)) this.#recordPlaybackAccess(id, 'unavailable');
+      this.#operationError(lease, error); throw error;
+    }
   }
 }

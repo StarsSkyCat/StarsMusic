@@ -19,15 +19,16 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
     // 明确标识的合成 UI 数据及命令捕获：不调用平台、不认证、不模拟音频成功。
     const fixture = { ...initialNeteaseSnapshot(), revision: 100, generation: 50, status: 'connected' as const,
+      membership: { status: 'ready' as const, benefits: [{ kind: 'vip' as const, expiresAt: Date.now() + 86400000 }], syncedAt: Date.now() },
       account: { id: '4242', nickname: '合成展示账号' }, playlists: [{ id: '900', name: '合成私人歌单', trackCount: 1 }],
       catalog: { ...initialNeteaseSnapshot().catalog, status: 'ready' as const, total: 32, more: true,
-        tracks: Array.from({ length: 30 }, (_, index) => ({ id: String(index + 1), name: `合成热歌 ${index + 1}`, artists: ['合成歌手'], durationMs: 30000 })) } };
+        tracks: Array.from({ length: 30 }, (_, index) => ({ id: String(index + 1), name: `合成热歌 ${index + 1}`, artists: ['合成歌手'], durationMs: 30000, rights: { fee: (index === 0 ? 'vip' : index === 1 ? 'album' : index === 2 ? 'vip-quality' : 'none') as 'vip' | 'album' | 'vip-quality' | 'none', playback: 'unknown' as const } })) } };
     await desktop.evaluate(({ ipcMain, BrowserWindow }, { channels, fixture }) => {
       let state = fixture;
       const calls: Record<string, unknown>[] = [];
       Reflect.set(globalThis, '__starsMusicCatalogCalls', calls);
       const publish = () => { BrowserWindow.getAllWindows()[0]!.webContents.send(channels.stateChanged, state); return state; };
-      for (const channel of [channels.browse, channels.loadPlaylists, channels.loadPlaylist, channels.playTrack, channels.enqueueNext, channels.getArtwork]) ipcMain.removeHandler(channel);
+      for (const channel of [channels.browse, channels.loadPlaylists, channels.loadPlaylist, channels.playTrack, channels.enqueueNext, channels.getArtwork, channels.refreshMembership]) ipcMain.removeHandler(channel);
       const artworkCalls: Record<string, unknown>[] = [];
       Reflect.set(globalThis, '__starsMusicArtworkCalls', artworkCalls);
       ipcMain.handle(channels.getArtwork, (_event, request: { kind: string; id: string; generation: number }) => {
@@ -36,12 +37,22 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
         if (request.id === '3') throw new Error('synthetic image failure');
         return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
       });
-      ipcMain.handle(channels.loadPlaylists, () => publish());
-      ipcMain.handle(channels.loadPlaylist, (_event, id: string) => {
-        state = { ...state, revision: state.revision + 1, playlistId: id, tracks: [{ id: '700', name: '合成私藏歌曲', artists: ['合成歌手'], durationMs: 30000 }] } as typeof state;
+      ipcMain.handle(channels.refreshMembership, () => {
+        calls.push({ operation: 'membership' });
+        state = { ...state, revision: state.revision + 1, membership: { status: 'ready', benefits: [{ kind: 'vip', expiresAt: Date.now() + 86400000 }], syncedAt: Date.now() } };
         return publish();
       });
-      ipcMain.handle(channels.playTrack, (_event, id: string) => { calls.push({ operation: 'play', id }); });
+      ipcMain.handle(channels.loadPlaylists, () => publish());
+      ipcMain.handle(channels.loadPlaylist, (_event, id: string) => {
+        state = { ...state, revision: state.revision + 1, playlistId: id, tracks: [{ id: '700', name: '合成私藏歌曲', artists: ['合成歌手'], durationMs: 30000, rights: { fee: 'album', playback: 'unavailable' } }] } as typeof state;
+        return publish();
+      });
+      ipcMain.handle(channels.playTrack, (_event, id: string) => {
+        calls.push({ operation: 'play', id });
+        // 合成权限投影回归：不解析真实音频，也不改变播放器状态。
+        state = { ...state, revision: state.revision + 1, catalog: { ...state.catalog, tracks: state.catalog.tracks.map(track => track.id === id ? { ...track, rights: { fee: 'vip', playback: 'preview' } } : track) } } as typeof state;
+        publish();
+      });
       ipcMain.handle(channels.enqueueNext, (_event, id: string) => { calls.push({ operation: 'next', id }); });
       ipcMain.handle(channels.browse, (_event, request: CatalogRequest) => {
         calls.push({ operation: 'browse', ...request });
@@ -66,6 +77,12 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await expect(explore.getByRole('heading', { name: /^云音乐热歌榜/ })).toBeVisible();
     await expect(explore.locator('.song-list li')).toHaveCount(30);
     await expect(explore.locator('.ne-chart-lead img')).toBeVisible();
+    await expect(explore.getByLabel('网易云官方会员权益')).toContainText('黑胶 VIP');
+    await explore.getByRole('button', { name: '同步权益', exact: true }).click();
+    expect((await calls()).at(-1)).toMatchObject({ operation: 'membership' });
+    await expect(explore.locator('.song-list li').nth(0).locator('.track-fee')).toHaveText('VIP');
+    await expect(explore.locator('.song-list li').nth(1).locator('.track-fee')).toHaveText('付费专辑');
+    await expect(explore.locator('.song-list li').nth(2).locator('.track-fee')).toHaveText('VIP 音质');
     await expect(explore.locator('.ne-chart-feature .netease-artwork.artwork-missing')).toHaveCount(2);
     const initialArtworkCalls = await desktop.evaluate(() => Reflect.get(globalThis, '__starsMusicArtworkCalls') as { id: string; generation: number }[]);
     expect(initialArtworkCalls.some(request => request.id === '30')).toBe(false);
@@ -105,6 +122,7 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await expect(explore.locator('.song-list img')).toBeVisible();
     await explore.getByRole('button', { name: '播放 合成搜索歌曲', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'play', id: '501' });
+    await expect(explore.locator('.song-list .track-access')).toHaveText('试听');
     await explore.getByRole('checkbox', { name: '选择 合成搜索歌曲', exact: true }).check();
     await explore.getByRole('button', { name: '下一首播放', exact: true }).click();
     await expect.poll(async () => (await calls()).at(-1)).toMatchObject({ operation: 'next', id: '501' });
@@ -124,6 +142,8 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await explore.getByRole('button', { name: '我的歌单', exact: true }).click();
     await explore.getByRole('button', { name: /合成私人歌单/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: '合成私人歌单', exact: true })).toBeVisible();
+    await expect(page.locator('.song-list .track-fee')).toHaveText('付费专辑');
+    await expect(page.locator('.song-list .track-access')).toHaveText('暂不可用');
     await page.getByRole('button', { name: '返回全部歌单', exact: true }).click();
     await expect(explore.getByRole('button', { name: /合成私人歌单/ })).toBeVisible();
     await expect(explore.locator('.ne-cover-card img')).toBeVisible();

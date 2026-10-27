@@ -1,5 +1,7 @@
+import type { NeteaseTrackRights } from '../../../packages/contracts/src/netease-rights';
 import type { QueueTrack } from '../../../packages/contracts/src/playback';
 export interface DisplayTrack extends QueueTrack {
+  readonly rights?: NeteaseTrackRights;
   readonly durationSeconds?: number;
 }
 export function formatTime(seconds: number): string {

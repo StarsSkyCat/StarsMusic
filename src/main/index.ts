@@ -235,6 +235,7 @@ void app.whenReady().then(async () => {
         return snapshot;
       }
       if (channel === neteaseChannels.getArtwork) return netease.getArtwork(argument.artwork!);
+      if (channel === neteaseChannels.refreshMembership) return netease.command('refreshMembership');
       if (channel === neteaseChannels.loadPlaylists) return netease.command('loadPlaylists');
       if (channel === neteaseChannels.browse) return netease.command('browse', { catalog: argument.catalog });
       if (channel === neteaseChannels.loadPlaylist) return netease.command('loadPlaylist', { id: argument.id, offset: argument.offset });

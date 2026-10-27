@@ -47,7 +47,7 @@ onUnmounted(() => { window.removeEventListener('resize', dismiss); document.remo
 .glass-select .glass-select-trigger:hover:not(:disabled) { color: var(--text); background: var(--hover); }
 .glass-select-trigger svg { transition: transform .18s; }
 .glass-select-trigger svg.rotated { transform: rotate(180deg); }
-.glass-select-menu { position: fixed; inset: auto; margin: 0; width: 156px; padding: 6px; border: 1px solid var(--glass-edge); border-radius: 17px; color: var(--text); background: var(--floating-glass); backdrop-filter: blur(30px) saturate(1.3); box-shadow: 0 14px 40px #0003, inset 0 1px 0 #ffffff20; }
+.glass-select-menu { position: fixed; inset: auto; margin: 0; width: 156px; padding: 6px; border: 1px solid var(--glass-edge); border-radius: 17px; color: var(--text); background: color-mix(in srgb, var(--floating-glass) 85%, transparent); backdrop-filter: blur(30px) saturate(1.3); box-shadow: 0 14px 40px #0003, inset 0 1px 0 #ffffff20; }
 .glass-select-menu::backdrop { background: transparent; }
 .glass-select-menu button { display: flex; width: 100%; justify-content: space-between; min-height: 44px; padding: 11px 13px; border: 0; border-radius: 11px; box-shadow: none; background: transparent; font-size: 12px; color: var(--muted); }
 .glass-select-menu button[aria-checked='true'] { color: var(--accent); background: var(--active); }

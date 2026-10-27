@@ -40,3 +40,5 @@
 文档中的“计划”和待办不等于已实现；任务进度以路线图和相应验证记录为准。
 
 - [网易云发现页重设计与真实封面](validation/2026-10-27-netease-redesign.md)
+
+- [网易云筛选菜单与会员权限](validation/2026-10-27-netease-rights.md)
