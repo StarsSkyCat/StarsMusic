@@ -36,6 +36,7 @@ import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
 import GlassScene from './GlassScene.vue';
 import AppearancePanel from './AppearancePanel.vue';
+import DesktopPanel from './DesktopPanel.vue';
 import type { NeteaseMutation } from '../../../packages/contracts/src/netease-library';
 import NeteaseTrackActions from './NeteaseTrackActions.vue';
 import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
@@ -939,6 +940,7 @@ onUnmounted(() => {
             <span class="page-heading-symbol" aria-hidden="true"><Settings2 :size="42" :stroke-width="1.2" /></span>
           </div>
           <AppearancePanel />
+          <DesktopPanel />
           <div class="accounts-grid">
             <ProviderAccount
               @refresh-membership="refreshNeteaseMembership()"

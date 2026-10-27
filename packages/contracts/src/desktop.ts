@@ -1,3 +1,4 @@
+import type { SystemApi } from './system.ts';
 import type { PresentationApi } from './presentation.ts';
 import type { PlaybackApi } from './playback.ts';
 import type { CredentialsApi } from './credentials.ts';
@@ -27,6 +28,7 @@ export interface DesktopApi {
   readonly kugou: KugouApi;
   readonly credentials: CredentialsApi;
   readonly appearance: AppearanceApi;
+  readonly system: SystemApi;
 }
 
 export function parseAppInfo(value: unknown): AppInfo {

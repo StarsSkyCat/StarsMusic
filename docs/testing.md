@@ -7,6 +7,7 @@ pnpm check
 pnpm typecheck
 pnpm test
 pnpm test:playback
+pnpm test:desktop
 pnpm test:e2e
 ```
 
@@ -16,7 +17,7 @@ typecheck 使用 tsc 与 vue-tsc 检查全部应用及测试源码。test 使用
 
 当前单元/边界测试（数量以执行输出为准）：原有 IPC、领域契约、会话守卫和播放快照，加上网易云数据投影/大整数/扫码与账号验证/旧账号与旧页面响应丢弃/取消与到期/媒体网关，酷狗具体 IPC、扫码与账号一致性、过期、SSA、旧响应丢弃、歌单视图隔离、大页/字符串字段容错、hash-only 取链、试听文件名匹配、流主机和试听边界，以及凭据 bundle 白名单、保险库保存/读取/删除/锁定/权限、两个平台导出与恢复。全部使用明确标识的合成响应，不调用真实登录。
 
-test:playback 有 4 项实际 mpv 场景，使用 null 输出与合成 WAV，检查原有本地行为和经 loopback 网关的真实 HTTP 解码、试听长度限制、旧解析取消、本地切换与网关清理；其中包含合成酷狗资源与跨平台媒体主机隔离。这证明控制和解码链路，不等同于扬声器出声或发行包兼容性。
+test:playback 有 7 项实际 mpv 场景，使用 null 输出与合成 WAV，检查原有本地行为和经 loopback 网关的真实 HTTP 解码、试听长度限制、旧解析取消、本地切换与网关清理；其中包含合成酷狗资源与跨平台媒体主机隔离。这证明控制和解码链路，不等同于扬声器出声或发行包兼容性。
 
 test:e2e 先构建，再启动实际 Electron，检查桥接/沙箱、弹窗与导航、960×640 布局以及本地选择/播放/暂停/定位。只替代原生选择器交互，使用实际 mpv 和默认系统音频输出，拒绝 null 输出；关闭应用后验证 mpv PID 已退出。需要 Linux、mpv、可用的图形和音频会话。Playwright 显式启用 chromiumSandbox；通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs。临时配置和合成文件会清理，截图留在 Git 忽略的 artifacts/；不需要下载 Playwright 浏览器。
 
@@ -58,3 +59,5 @@ CI 执行文档、冻结安装、类型、合成契约、mpv null 集成测试�
 登录保存现已改为本地随机密钥 + SQLite；当前共 71 项单元回归，包含 SQLite 事务失败回滚检查，数量以执行结果为准。凭据测试使用真实 SQLite 与 AES-GCM 验证双平台跨实例恢复、密钥丢失/替换、数据篡改与旧加密 JSON 转换，不依赖系统密钥库。桌面 E2E 显式指定 basic 密码库，验证记住开关可用和实际 Electron 重启后设置保留；不自动向平台提交真实或合成账号。参见 [SQLite 记录](validation/2026-10-26-sqlite-credentials.md)。
 
 2026-10-27 页面回归扩展为 3 项桌面测试：独立播放页无 dialog、空队列入口、暂停定位与再次进入当前歌词行、Esc 先关闭队列再返回列表、音频 generation 不变、筛选保留、歌单详情隐藏卡片网格、旧曲目不显示到新歌单及 960×640 无横向滚动。歌单/二维码渲染测试明确使用合成只读 UI 投影，不把它当作平台请求成功。见 [页面记录](validation/2026-10-27-listening-pages.md)。
+
+2026-10-27 Linux 桌面集成：`test:desktop` 在隔离 session bus 中验证真实 MPRIS/mpv，以及明确标识的合成通知/portal/宿主协议。桌面 E2E 新建独立 dbus-daemon，验证实际 Electron StatusNotifier 注册与 D-BusMenu 操作、窗口内键、合成 portal 授权、关闭到托盘/恢复、通知点击、宿主丢失和重启设置。合成服务不会注册到用户真实总线。相关单元检查覆盖具体 system IPC、设置保存/损坏和 X11 逐项注册失败；X11 注册使用合成 runtime，不替代实机键盘验证。定位测试等待实际 mpv seek/playback-restart，检查实际位置；暂停音频缓冲可能使位置与目标相差少量时间，歌词用行中位置而非时间标签边界验收。完整范围见 [Linux 验证](validation/2026-10-27-linux-desktop.md)。

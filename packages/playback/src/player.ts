@@ -38,6 +38,9 @@ export class MusicPlayer {
   #previewSeconds: number | undefined;
   #disposed = false;
   #tail: Promise<void> = Promise.resolve();
+  #seekSerial = 0;
+  #seekTail: Promise<unknown> = Promise.resolve();
+  #pendingSeek: { generation: number; seen: boolean; done: (restarted: boolean) => void } | undefined;
   #seekListeners = new Set<(seconds: number) => void>();
   #listeners = new Set<(state: PlaybackSnapshot) => void>();
   #options: PlayerOptions;
@@ -216,6 +219,7 @@ export class MusicPlayer {
     if (!track) return Promise.resolve(this.#state);
     const bookmark = restore && this.#bookmark?.id === track.id ? this.#bookmark : undefined;
     if (!restore) this.#bookmark = undefined;
+    this.#pendingSeek?.done(false); this.#pendingSeek = undefined; this.#seekSerial++;
     const generation = this.#state.generation + 1;
     this.#abort.abort(); this.#abort = new AbortController();
     const signal = this.#abort.signal;
@@ -289,11 +293,16 @@ export class MusicPlayer {
 
   #event(event: Record<string, unknown>): void {
     if (this.#disposed) return;
-    if (event.event === 'file-loaded') {
+    if (event.event === 'seek') {
+      if (this.#pendingSeek?.generation === this.#state.generation) this.#pendingSeek.seen = true;
+    } else if (event.event === 'playback-restart') {
+      if (this.#pendingSeek?.generation === this.#state.generation && this.#pendingSeek.seen) this.#pendingSeek.done(true);
+    } else if (event.event === 'file-loaded') {
       this.#loaded = true; this.#bookmark = undefined;
       this.#update({ status: this.#paused ? 'paused' : 'playing' });
       void this.setVolume(this.#desiredVolume, false);
     } else if (event.event === 'end-file') {
+      this.#pendingSeek?.done(false); this.#pendingSeek = undefined;
       this.#loaded = false;
       if (event.reason === 'eof') {
         const next = (this.#state.currentIndex ?? -1) + 1;
@@ -344,18 +353,29 @@ export class MusicPlayer {
       for (const listener of this.#seekListeners) listener(positionSeconds);
       return this.#state;
     }
-    const engine = this.#engine; const generation = this.#state.generation;
+    const engine = this.#engine; const generation = this.#state.generation; const serial = ++this.#seekSerial;
     if (this.#disposed || !this.#loaded || !engine || this.#engineGeneration !== generation) return this.#state;
-    try {
-      await engine.command(['seek', Math.min(seconds, this.#state.durationSeconds), 'absolute+exact']);
-      const actual: unknown = await engine.command(['get_property', 'time-pos']);
-      if (!this.#disposed && this.#loaded && generation === this.#state.generation && typeof actual === 'number' && Number.isFinite(actual) && actual >= 0) {
-        const positionSeconds = Math.min(actual, this.#previewSeconds ?? Infinity);
-        this.#update({ positionSeconds });
-        for (const listener of this.#seekListeners) listener(positionSeconds);
-      }
-    } catch (error: unknown) { if (generation === this.#state.generation && !this.#disposed) this.reportError(normalizeError(error)); }
-    return this.#state;
+    const pending = this.#seekTail.catch(() => undefined).then(async () => {
+      if (this.#disposed || serial !== this.#seekSerial || generation !== this.#state.generation || !this.#loaded) return;
+      let resolve!: () => void; let restarted = false; let finished = false;
+      const ready = new Promise<void>(done => { resolve = done; });
+      const timer = setTimeout(() => finish(false), 3000);
+      const finish = (success: boolean): void => { if (finished) return; finished = true; restarted = success; clearTimeout(timer); resolve(); };
+      const request = { generation, seen: false, done: finish }; this.#pendingSeek = request;
+      try {
+        await engine.command(['seek', Math.min(seconds, this.#state.durationSeconds), 'absolute+exact']);
+        await ready; // mpv 的命令回执早于实际定位；等待 seek/playback-restart 后再读位置。
+        if (!restarted || this.#disposed || serial !== this.#seekSerial || generation !== this.#state.generation || !this.#loaded) return;
+        const actual: unknown = await engine.command(['get_property', 'time-pos']);
+        if (!this.#disposed && this.#loaded && serial === this.#seekSerial && generation === this.#state.generation && typeof actual === 'number' && Number.isFinite(actual) && actual >= 0) {
+          const positionSeconds = Math.min(actual, this.#previewSeconds ?? Infinity);
+          this.#update({ positionSeconds });
+          for (const listener of this.#seekListeners) listener(positionSeconds);
+        }
+      } catch (error: unknown) { if (serial === this.#seekSerial && generation === this.#state.generation && !this.#disposed) this.reportError(normalizeError(error)); }
+      finally { finish(false); if (this.#pendingSeek === request) this.#pendingSeek = undefined; }
+    });
+    this.#seekTail = pending; await pending; return this.#state;
   }
   async #flushVolume(): Promise<void> {
     if (this.#volumeWrite) return this.#volumeWrite;
@@ -386,6 +406,7 @@ export class MusicPlayer {
   }
 
   stop(): Promise<PlaybackSnapshot> {
+    this.#pendingSeek?.done(false); this.#pendingSeek = undefined; this.#seekSerial++;
     this.#bookmark = undefined;
     this.#abort.abort();
     this.#loaded = false;

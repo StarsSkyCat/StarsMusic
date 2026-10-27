@@ -18,6 +18,7 @@ const definitions = {
   'credential-unavailable': ['本地登录存储或密钥不可用，本次登录不会保存', false],
   'credential-locked': ['已保存的登录无法解密，请重新登录或清除保存', false],
   'credential-save-failed': ['保存登录失败，请检查本地存储和文件权限', true],
+  'desktop-save-failed': ['桌面设置保存失败，请检查本地存储和文件权限', true],
   'unsupported': ['暂不支持此操作', false],
   'internal': ['操作失败，请稍后重试', false],
   'engine-unavailable': ['无法启动 mpv，请确认已安装并可运行', false],

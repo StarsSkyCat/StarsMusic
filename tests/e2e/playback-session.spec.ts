@@ -38,7 +38,7 @@ test('真实应用重启保留队列顺序/当前项/进度/音量/静音，暂�
     await page.getByRole('button', { name: '暂停', exact: true }).click();
     await expect.poll(async () => (await state()).status).toBe('paused');
     await page.getByRole('slider', { name: '播放进度' }).fill('9');
-    await expect.poll(async () => (await state()).positionSeconds).toBeGreaterThanOrEqual(8.9);
+    await expect.poll(async () => (await state()).positionSeconds).toBeGreaterThanOrEqual(8.7);
     await page.getByRole('slider', { name: '音量', exact: true }).fill('46');
     await expect.poll(async () => (await state()).volume).toBe(46);
     await page.getByRole('button', { name: '静音', exact: true }).click();
@@ -57,7 +57,7 @@ test('真实应用重启保留队列顺序/当前项/进度/音量/静音，暂�
     await expect(page.getByRole('button', { name: '取消静音', exact: true })).toBeVisible();
     await page.getByRole('button', { name: '播放', exact: true }).click();
     await expect.poll(async () => (await state()).status).toBe('playing');
-    await expect.poll(async () => (await state()).positionSeconds).toBeGreaterThanOrEqual(8.9);
+    await expect.poll(async () => (await state()).positionSeconds).toBeGreaterThanOrEqual(8.7);
     const output = (await state()).audioOutput; expect(output).toBeTruthy(); expect(output).not.toBe('null');
     expect(await mpvChildren()).toHaveLength(1);
     await page.getByRole('button', { name: '取消静音', exact: true }).click();

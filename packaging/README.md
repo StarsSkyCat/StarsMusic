@@ -5,3 +5,5 @@
 原生包需声明并验证 mpv 依赖；便携包需记录 mpv/FFmpeg 构建、运行库与许可。安装后必须验证音频、MPRIS 和退出清理，不能仅凭构建通过宣称兼容。
 
 实施顺序见 [开发路线图](../docs/roadmap.md)。
+
+Linux 桌面入口模板为 `linux/org.starsmusic.StarsMusic.desktop.in`，与程序的 DesktopEntry / portal 身份一致。它只是分发源模板，尚未安装到系统；发行时需提供对应 starsmusic 可执行入口与同名图标，不能据此宣称全局快捷键已获桌面授权。

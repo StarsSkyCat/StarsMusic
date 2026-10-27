@@ -1,5 +1,8 @@
-import { LinuxServices } from '../../packages/desktop/src/linux/services';
-import type { PlatformIntegration } from '../../packages/desktop/src/platform';
+import { DesktopController } from '../../packages/desktop/src/controller';
+import { DesktopSettings } from '../../packages/desktop/src/settings';
+import { electronDesktopRuntime } from '../../packages/desktop/src/linux/electron-runtime';
+import { desktopId } from '../../packages/desktop/src/linux/mpris';
+import { systemChannels, parseSystemArguments } from '../../packages/contracts/src/system';
 import { PlaybackSession } from './playback-session';
 import { PlaybackSessionStoreClient } from './playback-session-client';
 import type { StoredRemoteTrack } from '../../packages/contracts/src/playback-session';
@@ -29,6 +32,7 @@ import { appearanceChannels, parseAppearanceArguments } from '../../packages/con
 import { AppearanceStore } from './appearance-store';
 
 app.setName('StarsMusic');
+if (process.platform === 'linux') app.setDesktopName(`${desktopId}.desktop`);
 app.enableSandbox();
 
 const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
@@ -46,7 +50,7 @@ const presentation = new PresentationController(async (track, signal) => {
   if (saved && saved.kind !== 'local') await client.ensureRestoredTrack(saved, generation, signal);
   return client.getPresentation(track.sourceId, generation, signal);
 });
-let desktopServices: PlatformIntegration | undefined;
+let desktopIntegration: DesktopController | undefined;
 function showMainWindow(): void {
   if (quitting) return;
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
@@ -95,6 +99,10 @@ function createWindow(): void {
     },
   });
   mainWindow = window;
+  window.webContents.on('before-input-event', (event, input) => { if (desktopIntegration?.handleInput(input)) event.preventDefault(); });
+  window.on('close', (event) => {
+    if (!quitting && desktopIntegration?.shouldHideOnClose()) { event.preventDefault(); window.hide(); }
+  });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.on('will-frame-navigate', (event) => event.preventDefault());
@@ -388,11 +396,30 @@ void app.whenReady().then(async () => {
       return player.snapshot();
     });
   }
-  createWindow();
-  if (process.platform === 'linux') {
-    desktopServices = new LinuxServices(player, { show: showMainWindow, quit: () => app.quit() });
-    void desktopServices.initialize();
+  desktopIntegration = new DesktopController(player, presentation, electronDesktopRuntime({
+    show: showMainWindow, hide: () => mainWindow?.hide(), quit: () => app.quit(),
+    isVisible: () => !!mainWindow?.isVisible() && !mainWindow.isMinimized(),
+  }), new DesktopSettings(path.join(profile, 'desktop.json')));
+  desktopIntegration.subscribe(snapshot => {
+    const contents = mainWindow?.webContents;
+    if (contents && !contents.isDestroyed()) contents.send(systemChannels.changed, snapshot);
+  });
+  for (const channel of Object.values(systemChannels)) {
+    if (channel === systemChannels.changed) continue;
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      const contents = mainWindow?.webContents;
+      assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
+      const argument = parseSystemArguments(channel, args);
+      if (quitting) return desktopIntegration!.snapshot();
+      if (channel === systemChannels.quit) { setImmediate(() => app.quit()); return; }
+      if (channel === systemChannels.refresh) return desktopIntegration!.refresh();
+      if (channel === systemChannels.setPreference && argument) return desktopIntegration!.setPreference(argument.key, argument.enabled);
+      if (channel === systemChannels.testNotification) return desktopIntegration!.testNotification();
+      return desktopIntegration!.snapshot();
+    });
   }
+  createWindow();
+  void desktopIntegration.initialize();
   void restoreSavedCredentials();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }).catch(() => {
@@ -400,7 +427,7 @@ void app.whenReady().then(async () => {
   app.exit(1);
 });
 
-// 当前没有托盘与后台播放，关闭窗口直接退出，避免留下不可恢复的后台进程。
+// 默认关闭窗口退出；用户明确启用且托盘宿主仍可用时，由窗口 close 钩子隐藏。
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', (event) => {
   if (quitting) return;
@@ -409,13 +436,14 @@ app.on('before-quit', (event) => {
   presentation.dispose();
   selectionGeneration++;
   void (async () => {
-    await desktopServices?.dispose();
+    try { await desktopIntegration?.dispose(); } catch { /* 桌面服务故障不能阻止播放记录和音频进程清理。 */ }
     try { await playbackSession?.close(); } catch { /* 原记录保留；退出仍清理子进程。 */ }
     await Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose(), vault?.close()]);
     app.quit();
   })();
 });
 app.on('will-quit', () => {
+  for (const channel of Object.values(systemChannels)) if (channel !== systemChannels.changed) ipcMain.removeHandler(channel);
   ipcMain.removeHandler(desktopChannels.getAppInfo);
   ipcMain.removeHandler(presentationChannels.getState);
   for (const channel of Object.values(credentialChannels)) {

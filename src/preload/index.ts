@@ -1,3 +1,4 @@
+import { systemChannels, parseSystemSnapshot, parseSystemArguments, type SystemPreferenceKey } from '../../packages/contracts/src/system';
 import { parseNeteaseMutation, type NeteaseMutation } from '../../packages/contracts/src/netease-library';
 import { parseNeteaseArtwork, parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { parsePresentationSnapshot, presentationChannels } from '../../packages/contracts/src/presentation';
@@ -34,6 +35,22 @@ const api: DesktopApi = Object.freeze({
     const response: unknown = await ipcRenderer.invoke(desktopChannels.getAppInfo);
     return parseAppInfo(response);
   },
+  system: Object.freeze({
+    getState: async () => parseSystemSnapshot(await ipcRenderer.invoke(systemChannels.getState)),
+    refresh: async () => parseSystemSnapshot(await ipcRenderer.invoke(systemChannels.refresh)),
+    testNotification: async () => parseSystemSnapshot(await ipcRenderer.invoke(systemChannels.testNotification)),
+    async quit() { await ipcRenderer.invoke(systemChannels.quit); },
+    async setPreference(key: SystemPreferenceKey, enabled: boolean) {
+      parseSystemArguments(systemChannels.setPreference, [key, enabled]);
+      return parseSystemSnapshot(await ipcRenderer.invoke(systemChannels.setPreference, key, enabled));
+    },
+    onChanged(listener: (state: ReturnType<typeof parseSystemSnapshot>) => void) {
+      if (typeof listener !== 'function') throw new Error('监听器无效');
+      const receive = (_event: unknown, value: unknown) => listener(parseSystemSnapshot(value));
+      ipcRenderer.on(systemChannels.changed, receive);
+      return () => { ipcRenderer.removeListener(systemChannels.changed, receive); };
+    },
+  }),
   appearance: Object.freeze({
     async getPreference() {
       return parseThemePreference(await ipcRenderer.invoke(appearanceChannels.getPreference));

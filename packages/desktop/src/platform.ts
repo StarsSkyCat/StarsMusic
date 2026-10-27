@@ -1,12 +1,12 @@
 import type { PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import type { PresentationSnapshot } from '../../contracts/src/presentation.ts';
 
-export type CapabilityState = 'available' | 'unavailable' | 'unknown' | 'pending' | 'disabled';
-export interface Capability { state: CapabilityState; detail: string }
+import type { CapabilityState, Capability } from '../../contracts/src/system.ts';
+export type { CapabilityState, Capability } from '../../contracts/src/system.ts';
 export interface DesktopServices {
   session: 'wayland' | 'x11' | 'unknown'; desktop: string;
   bus: Capability; mpris: Capability; notifications: Capability; trayHost: Capability; portal: Capability; globalShortcuts: Capability;
-  mprisName?: string | undefined; portalVersion?: number | undefined;
+  mprisName?: string | undefined; portalVersion?: number | undefined; portalOwner?: string | undefined; trayRegistered?: boolean | undefined;
 }
 export interface PlaybackPort {
   snapshot(): PlaybackSnapshot;

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=StarsMusic
+Comment=Listen to your local and online music
+Comment[zh_CN]=聆听本地与在线音乐
+Exec=starsmusic
+Icon=org.starsmusic.StarsMusic
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupNotify=true

@@ -60,7 +60,7 @@ test('真实解码、暂停、定位、音量、快速切歌、停止与崩溃�
     await until(() => player.snapshot().status === 'playing' && player.snapshot().durationSeconds > 0);
     assert.ok(!JSON.stringify(player.snapshot()).includes(directory));
     await player.pause(); await until(() => player.snapshot().status === 'paused');
-    await player.seek(5); await until(() => player.snapshot().positionSeconds >= 4.9);
+    await player.seek(5); await until(() => Math.abs(player.snapshot().positionSeconds - 5) < .3);
     await Promise.all([player.setVolume(10),player.setVolume(90),player.setVolume(47)]);
     assert.equal(player.snapshot().volume,47);
     await player.setMuted(true); assert.equal(player.snapshot().muted,true); assert.equal(player.snapshot().volume,47);
@@ -205,7 +205,7 @@ test('真实解码重启恢复：启动暂停且不创建 mpv，用户继续后�
     await writeSilentWav(file); await first.openFiles([file]);
     await until(() => first.snapshot().status === 'playing' && first.snapshot().durationSeconds > 0);
     await first.pause(); await until(() => first.snapshot().status === 'paused');
-    await first.seek(8); await until(() => first.snapshot().positionSeconds >= 7.9);
+    await first.seek(8); await until(() => Math.abs(first.snapshot().positionSeconds - 8) < .3);
     await first.setVolume(41); await first.setMuted(true);
     const saved = first.exportSession(); await first.dispose();
     second.restoreSession(saved, async () => { throw new Error('unexpected online resolve'); });

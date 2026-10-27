@@ -3,6 +3,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [产品设计与技术选型](design-and-architecture.md) | 产品范围、界面草案、技术比较、目标架构 |
+| [Linux 桌面集成](linux-desktop.md) | MPRIS、托盘、通知、快捷键、Wayland 能力与验证边界 |
 | [开发指南](development.md) | 环境、可执行命令、目录边界和日常工作流 |
 | [测试与验收](testing.md) | 当前检查、后续测试分层和 Linux 验收 |
 | [开发路线图](roadmap.md) | 当前状态、P0 任务与完成标准 |

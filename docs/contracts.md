@@ -75,3 +75,7 @@ NeteaseSnapshot.catalog 独立显示公开浏览状态、分页元数据、每�
 
 
 网易云 library 投影包含喜欢 ID、读取状态、写入忙碌、归一化错误和结果未确认标记；退出清空。updateLibrary 是三种固定联合命令（like / playlist-track / subscribe），严格校验键、ID、布尔值及 add/del；不接受任意平台请求。loadLikes 和 refreshLibrary 只针对当前账号。私人歌单仅投影 editable/likedSongs/subscribed 能力标记，所有权仍在写入前由后台重新核验。playPlaylist 仅接收已登记歌单 ID；内部准备完整元数据后，播放器一次接管有界的 10000 首队列，签名音频仍惰性解析。
+
+## 系统能力
+
+system.ts 定义 SystemSnapshot、四个布尔桌面选项和固定快捷键 ID，能力分 available / unavailable / unknown / pending / disabled。preload 只暴露 system.getState、refresh、setPreference、testNotification、quit 和 onChanged；主进程再次校验参数数量、具体设置键、显式布尔值及可信主文档。不允许发送任意通知正文、执行命令、自定义 D-Bus 目标或读取路径。服务总线地址、portal owner/会话和授权请求句柄不投影到 renderer；检测状态按 revision 丢弃迟到结果。Linux 行为见 [桌面集成](linux-desktop.md)。

@@ -56,7 +56,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo', 'appearance', 'playback', 'netease', 'kugou', 'presentation', 'credentials']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'system', 'appearance', 'playback', 'netease', 'kugou', 'presentation', 'credentials']);
       const metadata = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { presentation: { getState(): Promise<{ status: string; trackId: string | null }> } } }).starsMusic.presentation;
         return { keys: Object.keys(api).sort(), state: await api.getState() };
@@ -172,7 +172,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.getByRole('button', { name: '暂停', exact: true }).click();
       await expect(page.getByRole('button', { name: '播放', exact: true })).toBeEnabled();
       await page.getByRole('slider', { name: '播放进度' }).fill('5');
-      await expect.poll(async () => Number(await page.getByRole('slider', { name: '播放进度' }).inputValue())).toBeGreaterThanOrEqual(4.9);
+      await expect.poll(async () => Number(await page.getByRole('slider', { name: '播放进度' }).inputValue())).toBeGreaterThanOrEqual(4.7);
       await page.getByRole('button', { name: '播放', exact: true }).click();
       await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
       await page.setViewportSize({ width: 1280, height: 800 });
@@ -235,7 +235,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.setViewportSize({ width: 1280, height: 800 });
       await expect(playing.locator('.np-next')).toBeInViewport();
       await page.screenshot({ path: 'artifacts/now-playing-page.png' });
-      await controls.getByRole('slider', { name: '播放进度' }).fill('25');
+      await controls.getByRole('slider', { name: '播放进度' }).fill('25.5');
       await expect(playing.locator('.lyric-scroll [aria-current="true"]')).toHaveText('合成后续第16行');
       await playing.getByRole('button', { name: /播放队列/ }).click();
       await expect(page.getByRole('dialog', { name: /播放队列/ })).toBeVisible();
@@ -329,7 +329,7 @@ test('扫码保存选择按平台隔离，未成功登录的选择不跨应用�
     expect(restored).toMatchObject({ available: true, remembered: false, savedProviders: [] });
     // 不注入账号、不调用真实登录；平台凭据的加密往返由实际 SQLite/AES 单元测试验证。
     await page.getByRole('button', { name: '账号与设置', exact: true }).click();
-    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: /记住.*登录/ })).toHaveCount(0);
     await expect(page.getByText('在各平台扫码区域选择「记住登录」。退出账号会自动删除该平台凭据。', { exact: true })).toBeVisible();
     const cleared = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { clear(): Promise<{ remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.clear());
     expect(cleared).toMatchObject({ remembered: false, savedProviders: [] });

@@ -32,7 +32,7 @@ export class LinuxServices implements PlatformIntegration {
     this.#mpris?.dispose(); this.#mpris = undefined;
     try { bus?.disconnect(); } catch { /* 连接已断开。 */ }
     const absent = capability('unavailable', '会话 D-Bus 不可用；音频播放不受影响，可重新检测');
-    this.#publish({ bus: absent, mpris: absent, notifications: absent, trayHost: absent, portal: absent, globalShortcuts: absent, mprisName: undefined, portalVersion: undefined });
+    this.#publish({ bus: absent, mpris: absent, notifications: absent, trayHost: absent, portal: absent, globalShortcuts: absent, mprisName: undefined, portalVersion: undefined, portalOwner: undefined, trayRegistered: false });
   }
   #signal = (message: Message): void => {
     const services = [portalName, watcherName, 'org.freedesktop.Notifications'];
@@ -79,22 +79,30 @@ export class LinuxServices implements PlatformIntegration {
         return capability('available', '通知服务已响应；免打扰或桌面策略仍可能隐藏通知');
       })(),
       (async () => {
-        if (!await owner(bus, watcherName)) return capability('unavailable', '未检测到 StatusNotifier 托盘宿主');
+        if (!await owner(bus, watcherName)) return { trayHost: capability('unavailable', '未检测到 StatusNotifier 托盘宿主'), trayRegistered: false };
         const result = await call(bus, watcherName, '/StatusNotifierWatcher', 'org.freedesktop.DBus.Properties', 'Get', 'ss', [watcherName, 'IsStatusNotifierHostRegistered']);
-        return variant(result[0], 'b') === true ? capability('available', 'StatusNotifier 宿主已注册；仍需实际创建托盘图标') : capability('unavailable', '有托盘 watcher，但没有显示图标的宿主');
+        if (variant(result[0], 'b') !== true) return { trayHost: capability('unavailable', '有托盘 watcher，但没有显示图标的宿主'), trayRegistered: false };
+        const items = await call(bus, watcherName, '/StatusNotifierWatcher', 'org.freedesktop.DBus.Properties', 'Get', 'ss', [watcherName, 'RegisteredStatusNotifierItems']);
+        const registered = variant(items[0], 'as');
+        if (!Array.isArray(registered) || registered.length > 1000 || registered.some(item => typeof item !== 'string')) throw new Error('desktop.tray-items');
+        const names = [...new Set((registered as string[]).map(item => item.split('/')[0]!))].filter(name => /^(?::[0-9]+\.[0-9]+|[A-Za-z_][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)$/.test(name));
+        const pids = await Promise.allSettled(names.map(name => call(bus, dbusName, dbusPath, dbusName, 'GetConnectionUnixProcessID', 's', [name])));
+        const trayRegistered = pids.some(result => result.status === 'fulfilled' && result.value[0] === process.pid);
+        return { trayHost: capability('available', 'StatusNotifier 宿主已注册；图标显示仍由桌面决定'), trayRegistered };
       })(),
       (async () => {
-        if (!await owner(bus, portalName)) return { portal: capability('unavailable', '未检测到桌面 portal 服务'), globalShortcuts: capability('unavailable', 'portal 不可用'), portalVersion: undefined };
+        const portalOwner = await owner(bus, portalName);
+        if (!portalOwner) return { portal: capability('unavailable', '未检测到桌面 portal 服务'), globalShortcuts: capability('unavailable', 'portal 不可用'), portalVersion: undefined, portalOwner: undefined };
         try {
           const result = await call(bus, portalName, portalPath, 'org.freedesktop.DBus.Properties', 'Get', 'ss', ['org.freedesktop.portal.GlobalShortcuts', 'version']);
           const version = variant(result[0], 'u'); if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('desktop.invalid-portal');
-          return { portal: capability('available', '桌面 portal 已响应'), globalShortcuts: capability('unknown', 'GlobalShortcuts 接口存在，需用户申请后确认绑定结果'), portalVersion: version };
-        } catch { return { portal: capability('available', '桌面 portal 已响应'), globalShortcuts: capability('unavailable', '当前 portal 后端未提供可用 GlobalShortcuts 接口'), portalVersion: undefined }; }
+          return { portal: capability('available', '桌面 portal 已响应'), globalShortcuts: capability('unknown', 'GlobalShortcuts 接口存在，需用户申请后确认绑定结果'), portalVersion: version, portalOwner };
+        } catch { return { portal: capability('available', '桌面 portal 已响应'), globalShortcuts: capability('unavailable', '当前 portal 后端未提供可用 GlobalShortcuts 接口'), portalVersion: undefined, portalOwner }; }
       })(),
     ]);
     if (this.#disposed || epoch !== this.#epoch) return this.snapshot();
     this.#publish({ notifications: notifications.status === 'fulfilled' ? notifications.value : capability('unknown', '通知服务未能响应'),
-      trayHost: tray.status === 'fulfilled' ? tray.value : capability('unknown', '无法确认托盘宿主状态'),
+      ...(tray.status === 'fulfilled' ? tray.value : { trayHost: capability('unknown', '无法确认托盘宿主状态'), trayRegistered: undefined }),
       ...(portal.status === 'fulfilled' ? portal.value : { portal: capability('unknown', '无法确认 portal 状态'), globalShortcuts: capability('unknown', '无法确认 portal 快捷键能力'), portalVersion: undefined }) });
     return this.snapshot();
   }

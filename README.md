@@ -7,10 +7,13 @@ Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、�
 - [产品设计与技术选型](docs/design-and-architecture.md)
 - [开发文档索引](docs/README.md)
 - [开发指南与环境](docs/development.md)
+- [Linux 桌面集成与能力状态](docs/linux-desktop.md)
 - [开发路线图](docs/roadmap.md)
 - [协作规则](AGENTS.md) · [贡献流程](CONTRIBUTING.md)
 - 技术路线：Electron + Vue 3 + TypeScript + mpv + SQLite。
 - 第一阶段：验证两个平台的登录、歌单、播放闭环，以及 Linux 打包与桌面集成。
+
+Linux 已通过平台适配层接入 MPRIS、通知、托盘和快捷键；设置页按实际 D-Bus/宿主/portal 响应显示能力，Wayland 全局键需确认绑定，缺失服务时保留窗口和退出路径。范围见 [桌面集成](docs/linux-desktop.md)。
 
 Windows、macOS 保留架构接口，安排在 Linux 版本稳定后实现。
 
@@ -33,6 +36,7 @@ pnpm check
 pnpm typecheck
 pnpm test
 pnpm test:playback
+pnpm test:desktop
 pnpm build
 pnpm start
 pnpm test:e2e
