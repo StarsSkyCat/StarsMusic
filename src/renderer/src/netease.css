@@ -185,3 +185,15 @@
 }
 
 :root[data-theme='light'] .netease-explore button:hover:not(:disabled) { border-color: var(--ne-edge); }
+.ne-subscribe { display: inline-flex; margin-left: 10px; min-height: 44px; font-size: 11px; }
+.ne-add-dialog { width: min(540px, calc(100vw - 40px)); padding: 25px; max-height: calc(100dvh - 50px); overflow: auto; background: var(--floating-glass); backdrop-filter: blur(30px); color: var(--text); border: 1px solid var(--glass-edge); border-radius: 25px; box-shadow: 0 20px 80px #0005, inset 0 1px 0 #fff2; }
+.ne-add-dialog::backdrop { background: #10151e60; backdrop-filter: blur(7px); }
+.ne-add-dialog header { display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.ne-add-dialog h2 { font-size: 23px; margin: 10px 0; }
+.ne-add-dialog p { font-size: 12px; color: var(--muted); line-height: 1.8; }
+.ne-picker-list { display: grid; gap: 10px; max-height: 55dvh; overflow: auto; padding: 5px; }
+.ne-picker-list > button { display: flex; justify-content: flex-start; text-align: left; padding: 12px; gap: 15px; min-width: 0; }
+.ne-picker-list > button > svg { margin-left: auto; }
+.ne-picker-list strong { display: block; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.ne-picker-list small { display: block; font-size: 10px; margin-top: 7px; color: var(--muted); }
+.ne-picker-cover { width: 52px; height: 52px; border-radius: 11px; flex-shrink: 0; overflow: hidden; }

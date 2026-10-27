@@ -75,7 +75,7 @@ defineEmits<{
         <span class="duration-column">{{
           track.durationSeconds ? formatTime(track.durationSeconds) : '—'
         }}</span>
-        <span class="row-actions">
+        <span class="row-actions" @dblclick.stop>
           <button
             class="icon-button"
             :aria-label="`立即播放 ${track.title}`"
@@ -103,6 +103,7 @@ defineEmits<{
           >
             <X :size="15" />
           </button>
+          <slot name="actions" :track="track" />
         </span>
       </li>
     </ol>

@@ -5,6 +5,8 @@ import { encodeEapi, encodeWeapi } from './crypto.ts';
 
 export const neteaseProtocolBaseline = 'api-enhanced@4.41.1/2db6684453297ee86dec0492842f2320b08182d9';
 export const endpoints = {
+  like: ['/api/radio/like', 'weapi'], likes: ['/api/song/like/get', 'eapi'],
+  editTracks: ['/api/playlist/manipulate/tracks', 'eapi'], subscribe: ['/api/playlist/subscribe', 'eapi'], unsubscribe: ['/api/playlist/unsubscribe', 'eapi'],
   qrKey: ['/api/login/qrcode/unikey', 'eapi'], qrPoll: ['/api/login/qrcode/client/login', 'eapi'],
   account: ['/api/nuser/account/get', 'weapi'], playlists: ['/api/user/playlist', 'weapi'],
   playlist: ['/api/v6/playlist/detail', 'eapi'], songs: ['/api/v3/song/detail', 'weapi'],

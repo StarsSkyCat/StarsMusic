@@ -243,6 +243,9 @@ void app.whenReady().then(async () => {
         broadcastCredentials();
         return snapshot;
       }
+      if (channel === neteaseChannels.refreshLibrary) return netease.command('refreshLibrary');
+      if (channel === neteaseChannels.updateLibrary) return netease.command('updateLibrary', { mutation: argument.mutation });
+      if (channel === neteaseChannels.loadLikes) return netease.command('loadLikes');
       if (channel === neteaseChannels.getArtwork) return netease.getArtwork(argument.artwork!);
       if (channel === neteaseChannels.refreshMembership) return netease.command('refreshMembership');
       if (channel === neteaseChannels.loadPlaylists) return netease.command('loadPlaylists');

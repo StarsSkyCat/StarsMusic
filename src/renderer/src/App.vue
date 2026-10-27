@@ -36,6 +36,9 @@ import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
 import GlassScene from './GlassScene.vue';
 import AppearancePanel from './AppearancePanel.vue';
+import type { NeteaseMutation } from '../../../packages/contracts/src/netease-library';
+import NeteaseTrackActions from './NeteaseTrackActions.vue';
+import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
 import NeteaseExplore from './NeteaseExplore.vue';
 import NeteaseArtwork from './NeteaseArtwork.vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
@@ -71,6 +74,32 @@ async function playWholePlaylist(id: string): Promise<void> {
 }
 const neteaseTab = ref<'hot' | 'playlists' | 'search' | 'owned'>('hot');
 const neteaseState = computed(() => providers.netease.state.value as NeteaseSnapshot);
+const addDialog = ref<HTMLDialogElement>();
+const addingTrackId = ref<string>();
+const likedNeteaseIds = computed(() => new Set(neteaseState.value.library.likedIds));
+const editableNeteasePlaylists = computed(() => neteaseState.value.playlists.filter(item => item.editable && !item.likedSongs));
+const currentNeteasePlaylist = computed(() => neteaseState.value.playlists.find(item => item.id === selectedPlaylistId.value));
+async function writeNetease(mutation: NeteaseMutation, message: string): Promise<boolean> {
+  const generation = neteaseState.value.generation;
+  const ok = await providers.netease.run(() => window.starsMusic!.netease.updateLibrary(mutation));
+  if (ok && generation === neteaseState.value.generation && neteaseState.value.status === 'connected') { notify(message); return true; }
+  return false;
+}
+function likeNetease(id: string, liked: boolean): void { void writeNetease({ kind: 'like', id, liked }, liked ? '已添加喜欢' : '已取消喜欢'); }
+function subscribeNetease(id: string, subscribed: boolean): void { void writeNetease({ kind: 'subscribe', id, subscribed }, subscribed ? '已收藏歌单' : '已取消收藏歌单'); }
+async function openAddToPlaylist(id: string): Promise<void> {
+  addingTrackId.value = id; await nextTick(); addDialog.value?.showModal();
+}
+async function addToNeteasePlaylist(playlistId: string): Promise<void> {
+  const trackId = addingTrackId.value; if (!trackId) return;
+  if (await writeNetease({ kind: 'playlist-track', playlistId, trackId, operation: 'add' }, '已保存到歌单')) addDialog.value?.close();
+}
+function removeFromNeteasePlaylist(trackId: string): void {
+  const playlistId = selectedPlaylistId.value; if (!playlistId) return;
+  void writeNetease({ kind: 'playlist-track', playlistId, trackId, operation: 'del' }, '已从歌单移除');
+}
+function refreshNeteaseLibrary(): void { void providers.netease.run(() => window.starsMusic!.netease.refreshLibrary()); }
+watch(() => neteaseState.value.generation, () => { addDialog.value?.close(); addingTrackId.value = undefined; });
 let browsingScroll = 0;
 const backLabel = computed(() =>
   view.value === 'library'
@@ -668,6 +697,7 @@ onUnmounted(() => {
               </div>
             </div>
           </section>
+          <NeteaseLibraryStatus v-if="view === 'netease' && selectedPlaylistId" :library="neteaseState.library" @refresh="refreshNeteaseLibrary" />
           <NeteaseExplore
             v-if="view === 'netease' && !selectedPlaylistId"
             v-model:tab="neteaseTab"
@@ -675,6 +705,10 @@ onUnmounted(() => {
             :current-id="currentTrack?.provider === 'netease' ? currentTrack.sourceId : undefined"
             :error="providers.netease.error.value"
             :starting="playlistStarting"
+            @like="likeNetease"
+            @add-to-playlist="openAddToPlaylist"
+            @subscribe="subscribeNetease"
+            @refresh-library="refreshNeteaseLibrary"
             @play-playlist="playWholePlaylist"
             @browse="browseNetease"
             @refresh-membership="refreshNeteaseMembership()"
@@ -842,7 +876,9 @@ onUnmounted(() => {
               @play="play"
               @next="addNext"
               @remove="(id) => control((api) => api.removeTrack(id))"
-            />
+            >
+              <template #actions="{ track }"><NeteaseTrackActions v-if="activeProvider === 'netease'" :id="track.id" :title="track.title" :liked="likedNeteaseIds.has(track.id)" :likes-ready="neteaseState.library.likesStatus === 'ready'" :busy="neteaseState.library.busy" :removable="currentNeteasePlaylist?.editable === true" @like="likeNetease" @add="openAddToPlaylist" @remove="removeFromNeteasePlaylist" /></template>
+            </TrackTable>
             <div v-else class="empty-library">
               <Music2 :size="32" />
               <h3>
@@ -1090,7 +1126,16 @@ onUnmounted(() => {
           <p>在歌曲旁点击「下一首播放」，<br />音乐会在这里接着响起。</p>
         </div>
       </div>
-      <p class="drawer-footnote">顺序播放 · 会话队列 · 最多 200 首</p>
+      <p class="drawer-footnote">顺序播放 · 会话队列 · 最多 10000 首</p>
+    </dialog>
+    <dialog ref="addDialog" class="ne-add-dialog" aria-labelledby="ne-add-title">
+      <header><div><span class="eyebrow">SAVE TO YOUR COLLECTION</span><h2 id="ne-add-title">添加到自建歌单</h2><p>选择歌单后，将保存到网易云账号。</p></div><button class="icon-button" aria-label="关闭添加到歌单" @click="addDialog?.close()"><X :size="19" /></button></header>
+      <div class="ne-picker-list">
+        <button v-for="playlist in editableNeteasePlaylists" :key="playlist.id" :disabled="neteaseState.library.busy" @click="addToNeteasePlaylist(playlist.id)"><span class="ne-picker-cover"><NeteaseArtwork :id="playlist.id" kind="playlist" :generation="neteaseState.generation" :name="playlist.name" /></span><span><strong>{{ playlist.name }}</strong><small>{{ playlist.trackCount }} 首 · 你创建的歌单</small></span><ListPlus :size="19" /></button>
+        <p v-if="!editableNeteasePlaylists.length">没有已读取的自建歌单，可加载更多，或先在官方 App 创建歌单。</p>
+      </div>
+      <button v-if="neteaseState.playlistsMore" class="text-button" :disabled="neteaseState.busy || neteaseState.library.busy" @click="providers.netease.run(api => api.loadPlaylists())">加载更多歌单</button>
+      <p v-if="neteaseState.library.busy" role="status">正在保存并核对…</p><p v-if="neteaseState.library.error" class="error-message" role="alert">{{ neteaseState.library.unconfirmed ? '写入结果尚未确认，请关闭后刷新收藏核对。' : neteaseState.library.error.message }}</p>
     </dialog>
   </div>
 </template>

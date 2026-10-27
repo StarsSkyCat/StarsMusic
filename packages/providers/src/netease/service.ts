@@ -1,3 +1,5 @@
+import { ownedPlaylist, playlistOwner, playlistTrackIds } from './library.ts';
+import { parseNeteaseMutation, type NeteaseMutation } from '../../../contracts/src/netease-library.ts';
 import { parseLrc } from '../lyrics.ts';
 import { parseNeteaseArtwork, parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from '../../../contracts/src/netease-artwork.ts';
 import { artworkUrl } from '../artwork.ts';
@@ -10,7 +12,7 @@ import { fetchCatalog } from './catalog.ts';
 import { parseCatalog, parseCatalogRequest, type CatalogRequest, type CatalogPlaylist } from '../../../contracts/src/netease-catalog.ts';
 import { DomainError, normalizeError } from '../../../contracts/src/errors.ts';
 import { parseCredentialBundle, type NeteaseCredentialBundle } from '../../../contracts/src/credentials.ts';
-import { initialNeteaseSnapshot, neteaseId, parseNeteaseSnapshot, type NeteaseSnapshot, type NeteaseTrack } from '../../../contracts/src/netease.ts';
+import { initialNeteaseSnapshot, neteaseId, parseNeteaseSnapshot, type NeteaseSnapshot, type NeteasePlaylist, type NeteaseTrack } from '../../../contracts/src/netease.ts';
 import { parseStreamResolution, type StreamResolution } from '../../../contracts/src/music.ts';
 import { nonNegativeInteger, record, text } from '../../../contracts/src/validation.ts';
 import { SessionGeneration, type SessionLease } from '../session-generation.ts';
@@ -80,6 +82,9 @@ export class NeteaseService {
   #artworkCache = new Map<string, string | null>();
   #artworkPending = new Map<string, Promise<string | null>>();
   #artworkAbort = new AbortController();
+  #playlistsView = 0;
+  #likesView = 0;
+  #writeBusy = false;
   #queueAbort: AbortController | undefined;
   #membershipBusy = false;
   #membershipTimer: ReturnType<typeof setTimeout> | undefined;
@@ -109,7 +114,7 @@ export class NeteaseService {
     this.#guestTransport = undefined; this.#publicPlaylists.clear();
   }
   #clear(): void {
-    this.#clearCatalog();
+    this.#clearCatalog(); this.#playlistsView++; this.#likesView++; this.#writeBusy = false;
     clearTimeout(this.#membershipTimer); this.#membershipTimer = undefined; this.#membershipBusy = false;
     clearTimeout(this.#timer); this.#timer = undefined;
     this.#transport?.clear(); this.#transport = undefined; this.#key = '';
@@ -184,6 +189,7 @@ export class NeteaseService {
         this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, catalog: initialNeteaseSnapshot().catalog, error: undefined });
         this.#emitCredentials();
         void this.refreshMembership();
+        void this.loadLikes();
       } else throw new DomainError('invalid-response');
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
@@ -243,6 +249,7 @@ export class NeteaseService {
       this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, catalog: initialNeteaseSnapshot().catalog, error: undefined });
       this.#emitCredentials();
       void this.refreshMembership();
+      void this.loadLikes();
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
         const safe = normalizeError(error);
@@ -305,17 +312,148 @@ export class NeteaseService {
     if (safe.code === 'session-expired') this.#end('expired', safe);
     else this.#update({ busy: false, error: safe });
   }
+  async #readLikes(lease: SessionLease, transport: NeteaseTransport): Promise<string[]> {
+    const body = success(await transport.call('likes', { uid: lease.context.accountId }, lease.signal));
+    if (!Array.isArray(body.ids) || body.ids.length > 50000) throw new DomainError('invalid-response');
+    return [...new Set(body.ids.map(apiId))];
+  }
+  async loadLikes(): Promise<NeteaseSnapshot> {
+    const { lease, transport } = this.#connected(); const view = ++this.#likesView;
+    this.#update({ library: { ...this.#state.library, likesStatus: 'loading', error: undefined } });
+    try {
+      const likedIds = await this.#readLikes(lease, transport);
+      if (this.#sessions.isCurrent(lease) && view === this.#likesView) this.#update({ library: { ...this.#state.library, likesStatus: 'ready', likedIds, error: undefined } });
+    } catch (error: unknown) {
+      if (this.#sessions.isCurrent(lease) && view === this.#likesView) {
+        const safe = normalizeError(error);
+        if (safe.code === 'session-expired') this.#end('expired', safe);
+        else this.#update({ library: { ...this.#state.library, likesStatus: 'error', error: safe } });
+      }
+    }
+    return this.#state;
+  }
+  async #refreshOwned(lease: SessionLease, transport: NeteaseTransport): Promise<readonly NeteasePlaylist[]> {
+    this.#playlistsView++; this.#listBusy = false;
+    const rows: unknown[] = []; let more = true;
+    while (more) {
+      if (rows.length >= 10000) throw new DomainError('unsupported');
+      const body = success(await transport.call('playlists', { uid: lease.context.accountId, limit: 1000, offset: rows.length, includeVideo: false }, lease.signal));
+      if (!Array.isArray(body.playlist) || typeof body.more !== 'boolean' || body.playlist.length > 1000 || (!body.playlist.length && body.more)) throw new DomainError('invalid-response');
+      if (rows.length + body.playlist.length > 10000) throw new DomainError('unsupported');
+      rows.push(...body.playlist); more = body.more;
+      if (!this.#sessions.isCurrent(lease)) throw new DomainError('stale-operation');
+    }
+    const items = rows.map(value => ownedPlaylist(value, lease.context.accountId!));
+    const unique = [...new Map(items.map(item => [item.id, item])).values()];
+    this.#knownPlaylists.clear(); for (const item of unique) this.#knownPlaylists.add(item.id);
+    this.#playlistOffset = rows.length; this.#rememberPlaylistCovers(rows);
+    this.#update({ playlists: unique, playlistsMore: false, busy: false });
+    return unique;
+  }
+  async refreshLibrary(): Promise<NeteaseSnapshot> {
+    const { lease, transport } = this.#connected();
+    if (this.#writeBusy) return this.#state;
+    this.#writeBusy = true; this.#likesView++;
+    this.#update({ library: { ...this.#state.library, busy: true }, error: undefined });
+    try {
+      await this.#refreshOwned(lease, transport);
+      const likedIds = await this.#readLikes(lease, transport);
+      if (this.#sessions.isCurrent(lease)) {
+        const id = this.#state.playlistId;
+        if (id && this.#knownPlaylists.has(id)) await this.loadPlaylist(id, 0);
+        if (this.#sessions.isCurrent(lease)) this.#update({ library: { likesStatus: 'ready', likedIds, busy: false, unconfirmed: false } });
+      }
+    } catch (error: unknown) {
+      if (this.#sessions.isCurrent(lease)) {
+        const safe = normalizeError(error);
+        if (safe.code === 'session-expired') this.#end('expired', safe);
+        else this.#update({ error: safe, library: { ...this.#state.library, error: safe } });
+      }
+    } finally {
+      if (this.#sessions.isCurrent(lease)) { this.#writeBusy = false; this.#update({ library: { ...this.#state.library, busy: false } }); }
+    }
+    return this.#state;
+  }
+  async updateLibrary(input: NeteaseMutation): Promise<NeteaseSnapshot> {
+    const mutation = parseNeteaseMutation(input); const { lease, transport } = this.#connected();
+    if (this.#writeBusy) throw new DomainError('invalid-input');
+    const restartLikes = this.#state.library.likesStatus === 'loading';
+    this.#writeBusy = true; this.#likesView++; this.#playlistsView++; this.#listBusy = false;
+    const privateView = this.#view;
+    let submitted = false;
+    this.#update({ error: undefined, busy: false, library: { ...this.#state.library, likesStatus: restartLikes ? 'idle' : this.#state.library.likesStatus, busy: true, unconfirmed: false, error: undefined } });
+    const current = () => this.#sessions.isCurrent(lease);
+    const readDetail = async (id: string) => playlistTrackIds(success(await transport.call('playlist', { id, n: 1000, s: 0 }, lease.signal)).playlist, id);
+    const setLike = async (id: string, liked: boolean): Promise<void> => {
+      if (!this.#knownTracks.has(id)) throw new DomainError('invalid-input');
+      submitted = true;
+      success(await transport.call('like', { alg: 'itembased', trackId: id, like: liked, time: '3' }, lease.signal));
+      const likedIds = await this.#readLikes(lease, transport);
+      if (!current()) return;
+      if (likedIds.includes(id) !== liked) throw new DomainError('unavailable');
+      this.#update({ playlists: this.#state.playlists.map(item => item.likedSongs ? { ...item, trackCount: likedIds.length } : item), library: { ...this.#state.library, likedIds, likesStatus: 'ready' } });
+      if (!liked && privateView === this.#view && this.#state.playlists.some(item => item.id === this.#state.playlistId && item.likedSongs)) {
+        const removed = this.#state.tracks.some(track => track.id === id);
+        this.#update({ tracks: this.#state.tracks.filter(track => track.id !== id), nextTrackOffset: Math.max(0, this.#state.nextTrackOffset - (removed ? 1 : 0)) });
+      }
+    };
+    try {
+      if (mutation.kind === 'like') await setLike(mutation.id, mutation.liked);
+      else if (mutation.kind === 'playlist-track') {
+        if (!this.#knownPlaylists.has(mutation.playlistId) || !this.#knownTracks.has(mutation.trackId)) throw new DomainError('invalid-input');
+        const before = await readDetail(mutation.playlistId); if (!current()) return this.#state;
+        if (playlistOwner(before.raw) !== lease.context.accountId) throw new DomainError('permission-denied');
+        const liked = before.raw.specialType === 5 || this.#state.playlists.some(item => item.id === mutation.playlistId && item.likedSongs);
+        if (liked) {
+          if (mutation.operation !== 'del') throw new DomainError('invalid-input');
+          await setLike(mutation.trackId, false);
+        } else {
+          const add = mutation.operation === 'add';
+          if (before.ids.includes(mutation.trackId) !== add) {
+            submitted = true;
+            success(await transport.call('editTracks', { op: mutation.operation, pid: mutation.playlistId, trackIds: JSON.stringify([mutation.trackId]), imme: 'true' }, lease.signal));
+          }
+          const after = await readDetail(mutation.playlistId); if (!current()) return this.#state;
+          if (playlistOwner(after.raw) !== lease.context.accountId || after.ids.includes(mutation.trackId) !== add) throw new DomainError('unavailable');
+          this.#update({ playlists: this.#state.playlists.map(item => item.id === mutation.playlistId ? { ...item, trackCount: after.ids.length } : item) });
+          if (privateView === this.#view && this.#state.playlistId === mutation.playlistId) await this.loadPlaylist(mutation.playlistId, 0);
+        }
+      } else {
+        if (!this.#publicPlaylists.has(mutation.id) && !this.#knownPlaylists.has(mutation.id)) throw new DomainError('invalid-input');
+        const before = await this.#refreshOwned(lease, transport); if (!current()) return this.#state;
+        if (before.some(item => item.id === mutation.id && item.editable)) throw new DomainError('permission-denied');
+        if (before.some(item => item.id === mutation.id && item.subscribed) !== mutation.subscribed) {
+          submitted = true;
+          success(await transport.call(mutation.subscribed ? 'subscribe' : 'unsubscribe', { id: mutation.id }, lease.signal));
+        }
+        const after = await this.#refreshOwned(lease, transport); if (!current()) return this.#state;
+        if (after.some(item => item.id === mutation.id && item.subscribed) !== mutation.subscribed) throw new DomainError('unavailable');
+      }
+      if (!current()) return this.#state;
+    } catch (error: unknown) {
+      if (current()) {
+        const safe = normalizeError(error);
+        if (safe.code === 'session-expired') this.#end('expired', safe);
+        else this.#update({ error: safe, library: { ...this.#state.library, error: safe, unconfirmed: submitted && !['permission-denied', 'verification-required', 'invalid-input'].includes(safe.code) } });
+      }
+    } finally {
+      if (current()) {
+        this.#writeBusy = false; this.#update({ library: { ...this.#state.library, busy: false } });
+        if (restartLikes && this.#state.library.likesStatus === 'idle') void this.loadLikes();
+      }
+    }
+    return this.#state;
+  }
   async loadPlaylists(): Promise<NeteaseSnapshot> {
     const { lease, transport } = this.#connected();
-    if (this.#listBusy || (this.#playlistOffset > 0 && !this.#state.playlistsMore)) return this.#state;
+    if (this.#writeBusy || this.#listBusy || (this.#playlistOffset > 0 && !this.#state.playlistsMore)) return this.#state;
+    const view = ++this.#playlistsView;
     this.#listBusy = true; this.#update({ busy: true, error: undefined });
     try {
       const body = success(await transport.call('playlists', { uid: lease.context.accountId, limit: 50, offset: this.#playlistOffset, includeVideo: false }, lease.signal));
       if (!Array.isArray(body.playlist) || typeof body.more !== 'boolean') throw new DomainError('invalid-response');
-      const items = body.playlist.map((value: unknown) => {
-        const item = record(value, 'netease.playlist');
-        return { id: apiId(item.id), name: text(item.name, 'netease.playlist.name'), trackCount: nonNegativeInteger(item.trackCount, 'netease.trackCount') };
-      });
+      const items = body.playlist.map((value: unknown) => ownedPlaylist(value, lease.context.accountId!));
+      if (view !== this.#playlistsView) return this.#state;
       this.#sessions.commit(lease, () => {
         this.#playlistOffset += items.length;
         for (const item of items) this.#knownPlaylists.add(item.id);
@@ -323,8 +461,8 @@ export class NeteaseService {
         const merged = new Map([...this.#state.playlists, ...items].map((item) => [item.id, item]));
         this.#update({ playlists: [...merged.values()], playlistsMore: body.more as boolean, busy: false });
       });
-    } catch (error: unknown) { this.#operationError(lease, error); }
-    finally { if (this.#sessions.isCurrent(lease)) this.#listBusy = false; }
+    } catch (error: unknown) { if (view === this.#playlistsView) this.#operationError(lease, error); }
+    finally { if (this.#sessions.isCurrent(lease) && view === this.#playlistsView) this.#listBusy = false; }
     return this.#state;
   }
   async loadPlaylist(id: string, offset: number): Promise<NeteaseSnapshot> {

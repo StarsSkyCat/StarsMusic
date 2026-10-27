@@ -30,8 +30,9 @@ P0 完成标准：两个平台各有一条可重复的登录—歌单—实际�
 - [x] 云瓷白 / 曜石黑双主题、实时跟随系统与外观偏好跨重启保存，见 [验证](validation/2026-10-27-appearance.md)。
 
 - [x] 账号中心界面与双平台独立会话（真实账号重启恢复仍待验收）。
-- [x] 平台只读歌单、详情、分页与来源标识；导航见 [记录](validation/2026-10-27-listening-pages.md)，全页面 Liquid Glass 重设计见 [界面验证](validation/2026-10-27-liquid-glass.md)，高窗口适配与歌词缩放居中见 [播放舞台验证](validation/2026-10-27-listening-layout.md)。
+- [x] 平台歌单、详情、分页与来源标识（酷狗仍只读）；导航见 [记录](validation/2026-10-27-listening-pages.md)，全页面 Liquid Glass 重设计见 [界面验证](validation/2026-10-27-liquid-glass.md)，高窗口适配与歌词缩放居中见 [播放舞台验证](validation/2026-10-27-listening-layout.md)。
 - [x] 网易云热歌榜、分类公开歌单/详情、歌曲与歌单搜索、分页和播放/下一首接入；匿名真实响应与桌面 UI 验证见 [记录](validation/2026-10-27-netease-discovery.md)，新入口真实账号权限矩阵仍待验收。页面和真实封面重设计见 [记录](validation/2026-10-27-netease-redesign.md)。已增加会员套餐同步与单曲收费/实际播放权限标记，见 [记录](validation/2026-10-27-netease-rights.md)；真实会员账号矩阵待验收。
+- [x] 网易云喜欢、自建歌单单曲添加/移除、收藏发现歌单及整单播放；真实账号写入/安全验证与会员兼容仍待验收，见 [记录](validation/2026-10-27-netease-library.md)。
 - [ ] 酷狗在线搜索与独立失败的跨平台聚合搜索。
 - [ ] 统一队列、循环、随机历史和最近播放（已实现会话队列、多选下一首、移除/清空后续和顺序续播；其余待实现）。
 - [x] 在线当前曲目行级歌词与专辑封面（已实现；酷狗匿名样本、合成回归通过，真实账号矩阵待补测），见 [记录](validation/2026-10-26-presentation.md)。

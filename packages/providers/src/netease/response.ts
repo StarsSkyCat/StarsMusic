@@ -11,6 +11,7 @@ export function success(value: unknown): Record<string, unknown> {
   const body = record(value, 'netease.response');
   if (body.code === 301 || body.code === 302) throw new DomainError('session-expired');
   if (body.code === 403) throw new DomainError('permission-denied');
+  if ([405, 406, 460].includes(body.code as number)) throw new DomainError('verification-required');
   if (body.code === 429) throw new DomainError('rate-limited');
   if (body.code !== 200) throw new DomainError('unavailable');
   return body;

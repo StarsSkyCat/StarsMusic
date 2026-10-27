@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, Flame, Headphon
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
 import TrackTable from './TrackTable.vue';
+import NeteaseTrackActions from './NeteaseTrackActions.vue';
+import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
 import NeteaseMembership from './NeteaseMembership.vue';
 import TrackRights from './TrackRights.vue';
 import GlassSelect from './GlassSelect.vue';
@@ -15,7 +17,7 @@ const props = defineProps<{ state: NeteaseSnapshot; currentId: string | undefine
 const tab = defineModel<'hot' | 'playlists' | 'search' | 'owned'>('tab', { default: 'hot' });
 const emit = defineEmits<{
   browse: [request: CatalogRequest]; play: [id: string]; next: [id: string]; enqueue: [ids: string[]];
-  playPlaylist: [id: string]; refreshMembership: []; openOwned: [id: string]; loadOwned: []; manage: [];
+  like: [id: string, liked: boolean]; addToPlaylist: [id: string]; subscribe: [id: string, subscribed: boolean]; refreshLibrary: []; playPlaylist: [id: string]; refreshMembership: []; openOwned: [id: string]; loadOwned: []; manage: [];
 }>();
 const tabs = [{ id: 'hot', label: '热歌榜', icon: Flame }, { id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const;
 const catalog = computed(() => props.state.catalog);
@@ -23,6 +25,7 @@ const keyword = ref(catalog.value.query);
 const searchType = ref(catalog.value.searchType);
 const category = ref<NeteaseCategory>(catalog.value.category);
 const order = ref(catalog.value.order);
+const likedIds = computed(() => new Set(props.state.library.likedIds));
 const selected = ref<string[]>([]);
 const actionError = ref('');
 const detail = ref(catalog.value.kind === 'playlist');
@@ -86,12 +89,13 @@ onMounted(() => {
       <button v-for="(item, index) in tabs" :key="item.id" :aria-pressed="tab === item.id" :class="{ active: tab === item.id }" @click="switchTab(item.id)"><component :is="item.icon" :size="17" /><span>{{ item.label }}</span><small aria-hidden="true">0{{ index + 1 }}</small></button>
     </nav>
     <NeteaseMembership v-if="state.status === 'connected'" :membership="state.membership" @refresh="$emit('refreshMembership')" />
+    <NeteaseLibraryStatus v-if="state.status === 'connected'" :library="state.library" @refresh="$emit('refreshLibrary')" />
     <template v-if="tab === 'owned'">
       <div class="ne-section-heading"><div><span class="ne-kicker">YOUR COLLECTION</span><h2>我的网易云歌单<span>{{ state.playlists.length.toString().padStart(2, '0') }}</span></h2></div><button v-if="state.status === 'connected' && (state.playlistsMore || !state.playlists.length)" class="subtle-button" :disabled="state.busy" @click="$emit('loadOwned')">{{ state.busy ? '读取中…' : state.playlistsMore ? '加载更多歌单' : '读取歌单' }}</button></div>
       <div v-if="state.playlists.length" class="ne-cover-grid">
         <button v-for="(playlist, index) in state.playlists" :key="playlist.id" class="ne-cover-card" @click="$emit('openOwned', playlist.id)">
           <span class="ne-cover-image"><NeteaseArtwork :id="playlist.id" kind="playlist" :generation="state.generation" :name="playlist.name" /><span class="ne-cover-count"><ListMusic :size="12" />{{ playlist.trackCount }} 首</span><span class="ne-cover-play"><ArrowUpRight :size="21" /></span></span>
-          <span class="ne-cover-copy"><small>{{ String(index + 1).padStart(2, '0') }} / MY COLLECTION</small><strong>{{ playlist.name }}</strong></span>
+          <span class="ne-cover-copy"><small>{{ String(index + 1).padStart(2, '0') }} / {{ playlist.likedSongs ? '我喜欢的音乐' : playlist.editable ? '自建歌单' : '收藏歌单' }}</small><strong>{{ playlist.name }}</strong></span>
         </button>
       </div>
       <div v-else class="ne-empty"><span class="ne-empty-orbit"><Cloud :size="33" :stroke-width="1.2" /></span><h3>{{ state.status === 'connected' ? '还没有加载到歌单' : '连接你的音乐收藏' }}</h3><p>{{ state.status === 'connected' ? '点击读取歌单，或稍后重试。' : '使用官方 App 扫码，带上你珍藏的每一种心情。' }}</p><button v-if="state.status !== 'connected'" class="ne-primary" @click="$emit('manage')">连接账号<ArrowRight :size="16" /></button></div>
@@ -109,7 +113,7 @@ onMounted(() => {
       <button v-if="detail" class="text-button catalog-back" @click="back"><ArrowLeft :size="16" />返回{{ tab === 'search' ? '搜索结果' : '歌单发现' }}</button>
       <div v-if="detail && catalog.playlist" class="ne-detail-hero">
         <span class="ne-detail-cover"><NeteaseArtwork :id="catalog.playlist.id" kind="playlist" :generation="state.generation" :name="catalog.playlist.name" /></span>
-        <div><span class="ne-kicker">PLAYLIST / NETEASE</span><h2>{{ heading }}</h2><p>{{ catalog.total || catalog.playlist.trackCount }} 首歌曲 · 网易云音乐</p><button v-if="tracks[0]" class="ne-primary" :disabled="starting" title="将整张歌单替换为本次播放队列" @click="playPlaylist()"><Play :size="15" fill="currentColor" />{{ starting ? '读取完整歌单…' : '从第一首听起' }}</button></div>
+        <div><span class="ne-kicker">PLAYLIST / NETEASE</span><h2>{{ heading }}</h2><p>{{ catalog.total || catalog.playlist.trackCount }} 首歌曲 · 网易云音乐</p><button v-if="tracks[0]" class="ne-primary" :disabled="starting" title="将整张歌单替换为本次播放队列" @click="playPlaylist()"><Play :size="15" fill="currentColor" />{{ starting ? '读取完整歌单…' : '从第一首听起' }}</button><button v-if="state.status === 'connected' && !state.playlists.some(item => item.id === catalog.playlist?.id && item.editable)" class="subtle-button ne-subscribe" :disabled="state.library.busy" @click="$emit('subscribe', catalog.playlist.id, !state.playlists.some(item => item.id === catalog.playlist?.id && item.subscribed))">{{ state.playlists.some(item => item.id === catalog.playlist?.id && item.subscribed) ? '取消收藏歌单' : '收藏歌单' }}</button></div>
       </div>
       <div v-if="tab === 'hot' && !detail && relevant && catalog.status === 'ready' && featured.length" class="ne-chart-stage" aria-label="热歌前三名">
         <button v-for="(track, index) in featured" :key="track.id" class="ne-chart-feature" :class="{ 'ne-chart-lead': index === 0 }" :aria-label="`播放热榜第${index + 1}名 ${track.name}`" @click="play(track.id)">
@@ -134,6 +138,7 @@ onMounted(() => {
         <template v-else-if="tracks.length">
           <div v-if="selected.length" class="selection-bar"><span>已选择 {{ selected.length }} 首</span><button class="text-button" @click="enqueue"><ListPlus :size="16" />下一首播放</button><button class="text-button" @click="selected = []">取消选择</button></div>
           <TrackTable :tracks="tracks" :selected="selected" :current-id="currentId" :row-offset="catalog.offset" @select="select" @select-all="selectAll" @play="play" @next="id => play(id, true)">
+            <template #actions="{ track }"><NeteaseTrackActions v-if="state.status === 'connected'" :id="track.id" :title="track.title" :liked="likedIds.has(track.id)" :likes-ready="state.library.likesStatus === 'ready'" :busy="state.library.busy" @like="(id, liked) => $emit('like', id, liked)" @add="id => $emit('addToPlaylist', id)" /></template>
             <template #artwork="{ track }"><NeteaseArtwork :id="track.id" kind="track" :generation="state.generation" :name="track.title" /></template>
           </TrackTable>
         </template>

@@ -1,3 +1,4 @@
+import { initialNeteaseLibrary, parseNeteaseLibrary, parseNeteaseMutation, type NeteaseLibrary, type NeteaseMutation } from './netease-library.ts';
 import { initialNeteaseMembership, parseNeteaseMembership, parseNeteaseTrackRights, type NeteaseMembership, type NeteaseTrackRights } from './netease-rights.ts';
 import { parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from './netease-artwork.ts';
 import { parseAppError, type AppError } from './errors.ts';
@@ -8,12 +9,14 @@ export const neteaseChannels = {
   getState: 'starsmusic:netease:get-state', startLogin: 'starsmusic:netease:start-login',
   cancelLogin: 'starsmusic:netease:cancel-login', logout: 'starsmusic:netease:logout',
   loadPlaylists: 'starsmusic:netease:load-playlists', loadPlaylist: 'starsmusic:netease:load-playlist',
+  refreshLibrary: 'starsmusic:netease:refresh-library',
+  loadLikes: 'starsmusic:netease:load-likes', updateLibrary: 'starsmusic:netease:update-library',
   playPlaylist: 'starsmusic:netease:play-playlist',
   refreshMembership: 'starsmusic:netease:refresh-membership',
   browse: 'starsmusic:netease:browse', getArtwork: 'starsmusic:netease:get-artwork',
   enqueueNext: 'starsmusic:netease:enqueue-next', playTrack: 'starsmusic:netease:play-track', stateChanged: 'starsmusic:netease:state-changed',
 } as const;
-export interface NeteasePlaylist { readonly id: string; readonly name: string; readonly trackCount: number }
+export interface NeteasePlaylist { readonly id: string; readonly name: string; readonly trackCount: number; readonly editable?: boolean; readonly likedSongs?: boolean; readonly subscribed?: boolean }
 export interface NeteaseTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number; readonly rights?: NeteaseTrackRights }
 export interface NeteaseSnapshot {
   readonly revision: number;
@@ -32,10 +35,14 @@ export interface NeteaseSnapshot {
   readonly error?: AppError;
   readonly catalog: NeteaseCatalog;
   readonly membership: NeteaseMembership;
+  readonly library: NeteaseLibrary;
 }
 export interface NeteaseApi {
   getState(): Promise<NeteaseSnapshot>;
   refreshMembership(): Promise<NeteaseSnapshot>;
+  loadLikes(): Promise<NeteaseSnapshot>;
+  refreshLibrary(): Promise<NeteaseSnapshot>;
+  updateLibrary(mutation: NeteaseMutation): Promise<NeteaseSnapshot>;
   startLogin(): Promise<NeteaseSnapshot>;
   cancelLogin(): Promise<NeteaseSnapshot>;
   logout(): Promise<NeteaseSnapshot>;
@@ -77,7 +84,7 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
   }
   const playlists = status === 'connected' ? input.playlists.map((value: unknown) => {
     const item = record(value, 'netease.playlist');
-    return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.playlist.name'), trackCount: nonNegativeInteger(item.trackCount, 'netease.trackCount') });
+    return Object.freeze({ id: neteaseId(item.id), name: text(item.name, 'netease.playlist.name'), trackCount: nonNegativeInteger(item.trackCount, 'netease.trackCount'), ...Object.fromEntries(['editable', 'likedSongs', 'subscribed'].flatMap(key => { if (item[key] === undefined) return []; if (typeof item[key] !== 'boolean') throw new ContractValidationError('netease.playlist.capability'); return [[key, item[key]]]; })) });
   }) : [];
   const tracks = status === 'connected' ? input.tracks.map(parseNeteaseTrack) : [];
   const qrAllowed = status === 'waiting-scan' || status === 'awaiting-confirmation';
@@ -93,6 +100,7 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
     nextTrackOffset: status === 'connected' ? nonNegativeInteger(input.nextTrackOffset, 'netease.nextTrackOffset') : 0,
     ...(status === 'connected' && input.playlistId !== undefined ? { playlistId: neteaseId(input.playlistId) } : {}),
     busy: input.busy,
+    library: status === 'connected' && input.library !== undefined ? parseNeteaseLibrary(input.library) : initialNeteaseLibrary(),
     membership: status === 'connected' && input.membership !== undefined ? parseNeteaseMembership(input.membership) : initialNeteaseMembership(),
     catalog: input.catalog === undefined ? initialCatalog() : parseCatalog(input.catalog),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),
@@ -101,7 +109,8 @@ export function parseNeteaseSnapshot(value: unknown): NeteaseSnapshot {
 export function initialNeteaseSnapshot(): NeteaseSnapshot {
   return parseNeteaseSnapshot({ revision: 0, generation: 0, status: 'signed-out', playlists: [], tracks: [], playlistsMore: false, tracksMore: false, nextTrackOffset: 0, busy: false });
 }
-export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number; catalog?: CatalogRequest; artwork?: NeteaseArtworkRequest } {
+export function parseNeteaseArguments(channel: string, args: readonly unknown[]): { id?: string; offset?: number; catalog?: CatalogRequest; artwork?: NeteaseArtworkRequest; mutation?: NeteaseMutation } {
+  if (channel === neteaseChannels.updateLibrary && args.length === 1) return { mutation: parseNeteaseMutation(args[0]) };
   if (channel === neteaseChannels.getArtwork && args.length === 1) return { artwork: parseNeteaseArtworkRequest(args[0]) };
   if (channel === neteaseChannels.browse && args.length === 1) return { catalog: parseCatalogRequest(args[0]) };
   if ((channel === neteaseChannels.playTrack || channel === neteaseChannels.enqueueNext || channel === neteaseChannels.playPlaylist) && args.length === 1) return { id: neteaseId(args[0]) };
@@ -110,7 +119,7 @@ export function parseNeteaseArguments(channel: string, args: readonly unknown[])
     if (offset > 100000 || offset % 50 !== 0) throw new ContractValidationError('netease.offset');
     return { id: neteaseId(args[0]), offset };
   }
-  const empty: readonly string[] = [neteaseChannels.getState, neteaseChannels.startLogin, neteaseChannels.cancelLogin, neteaseChannels.logout, neteaseChannels.loadPlaylists, neteaseChannels.refreshMembership];
+  const empty: readonly string[] = [neteaseChannels.getState, neteaseChannels.startLogin, neteaseChannels.cancelLogin, neteaseChannels.logout, neteaseChannels.loadPlaylists, neteaseChannels.refreshMembership, neteaseChannels.loadLikes, neteaseChannels.refreshLibrary];
   if (empty.includes(channel) && args.length === 0) return {};
   throw new ContractValidationError('netease.command');
 }

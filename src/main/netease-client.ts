@@ -11,7 +11,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'preparePlaylist' | 'refreshMembership' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
+type Operation = 'refreshLibrary' | 'updateLibrary' | 'loadLikes' | 'preparePlaylist' | 'refreshMembership' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'browse' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'getArtwork';
 
 export class NeteaseClient {
   #worker: UtilityProcess | undefined;
@@ -87,7 +87,7 @@ export class NeteaseClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#requests.delete(requestId); reject(new DomainError('timeout')); this.#fail(worker);
-      }, operation === 'preparePlaylist' ? 90000 : operation === 'browse' || operation === 'refreshMembership' ? 45000 : 30000);
+      }, operation === 'updateLibrary' || operation === 'refreshLibrary' ? 150000 : operation === 'preparePlaylist' ? 90000 : operation === 'browse' || operation === 'refreshMembership' ? 45000 : 30000);
       this.#requests.set(requestId, { resolve, reject, timer });
       worker.postMessage({ operation, requestId, ...args });
     });

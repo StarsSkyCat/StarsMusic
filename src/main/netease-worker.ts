@@ -1,3 +1,4 @@
+import { parseNeteaseMutation } from '../../packages/contracts/src/netease-library';
 import { parseNeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { NeteaseService } from '../../packages/providers/src/netease/service';
 import { normalizeError } from '../../packages/contracts/src/errors';
@@ -18,6 +19,9 @@ port.on('message', (event) => {
       const operation = text(message.operation, 'provider.operation');
       let result: unknown;
       if (operation === 'getState') result = service.snapshot();
+      else if (operation === 'refreshLibrary') result = await service.refreshLibrary();
+      else if (operation === 'loadLikes') result = await service.loadLikes();
+      else if (operation === 'updateLibrary') result = await service.updateLibrary(parseNeteaseMutation(message.mutation));
       else if (operation === 'preparePlaylist') result = await service.preparePlaylist(neteaseId(message.id));
       else if (operation === 'getArtwork') result = await service.getArtwork(parseNeteaseArtworkRequest(message.artwork));
       else if (operation === 'refreshMembership') result = await service.refreshMembership();

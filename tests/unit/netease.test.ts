@@ -483,3 +483,146 @@ test('整单准备读取全部 trackIds 并分批归并详情，不截断到当�
     await assert.rejects(request);
   } finally { instance.dispose(); }
 });
+
+function libraryFixture() {
+  const transport = new FakeTransport(); const instance = service(() => transport);
+  const liked = new Set(['7']); const created = new Set(['7']); const subscribed = new Set<string>();
+  let owner = 42;
+  const writes: string[] = [];
+  transport.handlers.set('likes', async () => ({ code: 200, ids: [...liked] }));
+  transport.handlers.set('playlists', async () => ({ code: 200, more: false, playlist: [
+    { id: 1, name: '合成自建歌单', creator: { userId: 42 }, trackCount: created.size },
+    { id: 2, name: '合成我喜欢', creator: { userId: 42 }, specialType: 5, trackCount: liked.size },
+    ...[...subscribed].map(id => ({ id, name: '合成收藏歌单', creator: { userId: 88 }, trackCount: 1 }))
+  ] }));
+  transport.handlers.set('playlist', async data => ({ code: 200, playlist: { id: data.id, creator: { userId: data.id === '1' ? owner : data.id === '2' ? 42 : 88 }, specialType: data.id === '2' ? 5 : 0, trackIds: [...(data.id === '1' ? created : data.id === '2' ? liked : new Set(['7']))].map(id => ({ id })) } }));
+  transport.handlers.set('search', async () => ({ code: 200, result: { songCount: 2, songs: [7,8].map(id => ({ id, name: `合成歌曲 ${id}`, ar: [], dt: 30000 })) } }));
+  transport.handlers.set('songs', async data => ({ code: 200, songs: (JSON.parse(data.c as string) as {id:string}[]).map(({id})=>({id,name:`合成歌曲 ${id}`,ar:[],dt:30000})) }));
+  transport.handlers.set('publicPlaylists', async () => ({ code: 200, more: false, playlists: [{ id: 99, name: '合成发现歌单', trackCount: 1 }] }));
+  transport.handlers.set('like', async data => { writes.push('like'); if (data.like) liked.add(String(data.trackId)); else liked.delete(String(data.trackId)); return { code: 200 }; });
+  transport.handlers.set('editTracks', async data => { writes.push('edit'); const [id] = JSON.parse(data.trackIds as string) as string[]; if (data.op === 'add') created.add(id!); else created.delete(id!); return { code: 200 }; });
+  transport.handlers.set('subscribe', async data => { writes.push('subscribe'); subscribed.add(String(data.id)); return { code: 200 }; });
+  transport.handlers.set('unsubscribe', async data => { writes.push('unsubscribe'); subscribed.delete(String(data.id)); return { code: 200 }; });
+  return { instance, transport, liked, created, subscribed, writes, changeOwner: (value:number)=>{owner=value;} };
+}
+
+test('收藏写入契约拒绝任意字段、URL、隐式布尔和任意动作，匿名不可写', async () => {
+  const { parseNeteaseMutation } = await import('../../packages/contracts/src/netease-library.ts');
+  for (const value of [{kind:'like',id:'7',liked:'true'},{kind:'like',id:'https://example.invalid',liked:true},{kind:'like',id:'7',liked:true,url:'x'},{kind:'playlist-track',playlistId:'1',trackId:'7',operation:'clear'},{kind:'subscribe',id:'99',subscribed:1}]) assert.throws(()=>parseNeteaseMutation(value));
+  assert.throws(()=>parseNeteaseArguments(neteaseChannels.updateLibrary,[{kind:'like',id:'7',liked:true},'extra']));
+  const {instance}=libraryFixture(); try { await assert.rejects(instance.updateLibrary({kind:'like',id:'7',liked:true})); } finally {instance.dispose();}
+});
+
+test('添加喜欢与自建歌单编辑只在官方写入和回读确认后更新，喜欢列表移除走取消喜欢', async () => {
+  const f=libraryFixture(); const {instance}=f;
+  try {
+    await connect(instance); await new Promise(done=>setImmediate(done)); await instance.loadPlaylists();
+    assert.equal(instance.snapshot().playlists.find(item=>item.id==='1')?.editable,true);
+    assert.equal(instance.snapshot().playlists.find(item=>item.id==='2')?.likedSongs,true);
+    await instance.browse({kind:'search',query:'合成',searchType:'songs',offset:0});
+    await instance.updateLibrary({kind:'like',id:'8',liked:true});
+    assert.equal(instance.snapshot().library.likedIds.includes('8'),true);
+    await instance.updateLibrary({kind:'playlist-track',playlistId:'1',trackId:'8',operation:'add'});
+    assert.equal(f.created.has('8'),true); assert.equal(instance.snapshot().error,undefined);
+    await instance.loadPlaylist('1',0);
+    await instance.updateLibrary({kind:'playlist-track',playlistId:'1',trackId:'7',operation:'del'});
+    assert.deepEqual(instance.snapshot().tracks.map(track=>track.id),['8']);
+    await instance.loadPlaylist('2',0); const edits=f.writes.filter(value=>value==='edit').length;
+    await instance.updateLibrary({kind:'playlist-track',playlistId:'2',trackId:'7',operation:'del'});
+    assert.equal(f.liked.has('7'),false); assert.equal(instance.snapshot().tracks.some(track=>track.id==='7'),false);
+    assert.equal(f.writes.filter(value=>value==='edit').length,edits);
+  } finally {instance.dispose();}
+});
+
+test('自建歌单写入前重新校验所有权，未登记歌曲与已转移歌单不能写', async () => {
+  const f=libraryFixture(); try {
+    await connect(f.instance); await f.instance.loadPlaylists();
+    await f.instance.browse({kind:'search',query:'合成',searchType:'songs',offset:0});
+    f.changeOwner(43);
+    await f.instance.updateLibrary({kind:'playlist-track',playlistId:'1',trackId:'8',operation:'add'});
+    assert.equal(f.instance.snapshot().error?.code,'permission-denied'); assert.equal(f.writes.length,0);
+    await f.instance.updateLibrary({kind:'like',id:'666',liked:true}); assert.equal(f.instance.snapshot().error?.code,'invalid-input'); assert.equal(f.writes.length,0);
+  } finally {f.instance.dispose();}
+});
+
+test('发现歌单收藏与取消收藏通过完整私人列表回读确认，自建歌单不可收藏', async () => {
+  const f=libraryFixture(); try {
+    await connect(f.instance); await f.instance.loadPlaylists();
+    await f.instance.browse({kind:'playlists',category:'全部',order:'hot',offset:0});
+    await f.instance.updateLibrary({kind:'subscribe',id:'99',subscribed:true});
+    assert.equal(f.instance.snapshot().playlists.some(item=>item.id==='99'&&item.subscribed),true);
+    await f.instance.updateLibrary({kind:'subscribe',id:'99',subscribed:false});
+    assert.equal(f.instance.snapshot().playlists.some(item=>item.id==='99'),false);
+    await f.instance.updateLibrary({kind:'subscribe',id:'1',subscribed:true}); assert.equal(f.instance.snapshot().error?.code,'permission-denied');
+    assert.deepEqual(f.writes,['subscribe','unsubscribe']);
+  } finally {f.instance.dispose();}
+});
+
+test('写后回读失败不显示已保存，手动刷新恢复真实收藏；平台拒绝不乐观变更', async () => {
+  const f=libraryFixture(); try {
+    await connect(f.instance); await new Promise(done=>setImmediate(done)); await f.instance.loadPlaylists();
+    await f.instance.browse({kind:'search',query:'合成',searchType:'songs',offset:0});
+    f.transport.handlers.set('likes',async()=>{throw new DomainError('network');});
+    await f.instance.updateLibrary({kind:'like',id:'8',liked:true});
+    assert.equal(f.liked.has('8'),true); assert.equal(f.instance.snapshot().library.likedIds.includes('8'),false); assert.equal(f.instance.snapshot().library.unconfirmed,true);
+    f.transport.handlers.set('likes',async()=>({code:200,ids:[...f.liked]})); await f.instance.refreshLibrary();
+    assert.equal(f.instance.snapshot().library.likedIds.includes('8'),true); assert.equal(f.instance.snapshot().library.unconfirmed,false);
+    f.transport.handlers.set('like',async()=>({code:403})); await f.instance.updateLibrary({kind:'like',id:'8',liked:false});
+    assert.equal(f.instance.snapshot().library.likedIds.includes('8'),true); assert.equal(f.instance.snapshot().library.unconfirmed,false);
+  } finally {f.instance.dispose();}
+});
+
+test('收藏操作与旧喜欢响应不跨会话，服务器成功但未应用也不能假报成功', async () => {
+  const f=libraryFixture(); try {
+    await connect(f.instance); await new Promise(done=>setImmediate(done)); await f.instance.loadPlaylists();
+    await f.instance.browse({kind:'search',query:'合成',searchType:'songs',offset:0});
+    const late=deferred<unknown>(); f.transport.handlers.set('like',async()=>late.promise);
+    const operation=f.instance.updateLibrary({kind:'like',id:'8',liked:true}); f.instance.logout(); late.resolve({code:200}); await operation;
+    assert.equal(f.instance.snapshot().library.likedIds.length,0); assert.equal(f.instance.snapshot().status,'signed-out');
+    f.transport.handlers.set('like',async()=>({code:200})); await connect(f.instance); await new Promise(done=>setImmediate(done));
+    await f.instance.browse({kind:'search',query:'合成',searchType:'songs',offset:0});
+    await f.instance.updateLibrary({kind:'like',id:'8',liked:true});
+    assert.equal(f.instance.snapshot().error?.code,'unavailable'); assert.equal(f.instance.snapshot().library.likedIds.includes('8'),false);
+  } finally {f.instance.dispose();}
+});
+
+test('旧歌单分页和旧喜欢读取不能覆盖写入后核对的新收藏', async () => {
+  const f = libraryFixture(); const oldPage = deferred<unknown>();
+  f.transport.handlers.set('playlists', async data => {
+    if (data.limit === 50 && data.offset !== 0) return oldPage.promise;
+    return { code: 200, more: data.limit === 50, playlist: [{ id: 1, name: '合成自建', creator: { userId: 42 }, trackCount: 1 }, ...[...f.subscribed].map(id => ({ id, name: '合成新收藏', creator: { userId: 88 }, trackCount: 1 }))] };
+  });
+  try {
+    await connect(f.instance); await new Promise(done => setImmediate(done)); await f.instance.loadPlaylists();
+    const old = f.instance.loadPlaylists();
+    await f.instance.browse({ kind: 'playlists', category: '全部', order: 'hot', offset: 0 });
+    await f.instance.updateLibrary({ kind: 'subscribe', id: '99', subscribed: true });
+    oldPage.resolve({ code: 200, more: false, playlist: [{ id: 88, name: '迟到旧收藏', creator: { userId: 55 }, trackCount: 1 }] }); await old;
+    assert.equal(f.instance.snapshot().playlists.some(item => item.id === '99'), true); assert.equal(f.instance.snapshot().playlists.some(item => item.id === '88'), false);
+    await f.instance.browse({ kind: 'search', query: '合成', searchType: 'songs', offset: 0 });
+    const oldLikes = deferred<unknown>(); let reads = 0;
+    f.transport.handlers.set('likes', async () => ++reads === 1 ? oldLikes.promise : { code: 200, ids: [...f.liked] });
+    const read = f.instance.loadLikes(); await f.instance.updateLibrary({ kind: 'like', id: '8', liked: true });
+    oldLikes.resolve({ code: 200, ids: [] }); await read;
+    assert.equal(f.instance.snapshot().library.likedIds.includes('8'), true);
+    const firstRead = deferred<unknown>(); let count = 0;
+    f.transport.handlers.set('likes', async () => ++count === 1 ? firstRead.promise : { code: 200, ids: [...f.liked] });
+    const pendingRead = f.instance.loadLikes();
+    await f.instance.updateLibrary({ kind: 'playlist-track', playlistId: '1', trackId: '8', operation: 'add' });
+    await new Promise(done => setImmediate(done));
+    assert.equal(f.instance.snapshot().library.likesStatus, 'ready');
+    firstRead.resolve({ code: 200, ids: [] }); await pendingRead;
+    assert.equal(f.instance.snapshot().library.likedIds.includes('8'), true);
+  } finally { oldPage.resolve({ code: 500 }); f.instance.dispose(); }
+});
+
+test('收藏安全验证被明确提示，认证过期清空当前账号和收藏', async () => {
+  const f = libraryFixture(); try {
+    await connect(f.instance); await f.instance.browse({ kind: 'playlists', category: '全部', order: 'hot', offset: 0 });
+    f.transport.handlers.set('subscribe', async () => ({ code: 460 }));
+    await f.instance.updateLibrary({ kind: 'subscribe', id: '99', subscribed: true });
+    assert.equal(f.instance.snapshot().error?.code, 'verification-required'); assert.equal(f.instance.snapshot().library.unconfirmed, false);
+    f.transport.handlers.set('likes', async () => ({ code: 301 })); await f.instance.refreshLibrary();
+    assert.equal(f.instance.snapshot().status, 'expired'); assert.equal(f.instance.snapshot().library.likedIds.length, 0);
+  } finally { f.instance.dispose(); }
+});

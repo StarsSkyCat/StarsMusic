@@ -11,3 +11,6 @@ credentials 只暴露 getStatus、setRemember、clear 和 onChanged；不暴露�
 appearance 仅暴露 getPreference() / setPreference(system | light | dark)，请求和响应都校验枚举；不暴露任意设置、文件路径或文件读写。
 
 netease.browse 只接受热歌、分类歌单、歌曲/歌单搜索及已登记公开歌单详情的领域联合参数；同时检查关键词、分类、偏移与 ID，不接受端点、Cookie、媒体 URL 或任意请求头。
+
+
+网易云另提供 playPlaylist(id)、loadLikes()、refreshLibrary() 与 updateLibrary(固定喜欢/单曲增删/收藏联合命令)。所有参数在 preload 和 main 重新校验；不暴露内部整单准备、所有者信息请求、签名媒体地址或任意通道。收藏写入和回读的凭据只在 Provider 后台使用。酷狗仍保持独立只读歌单能力。

@@ -1,3 +1,4 @@
+import { parseNeteaseMutation, type NeteaseMutation } from '../../packages/contracts/src/netease-library';
 import { parseNeteaseArtwork, parseNeteaseArtworkRequest, type NeteaseArtworkRequest } from '../../packages/contracts/src/netease-artwork';
 import { parsePresentationSnapshot, presentationChannels } from '../../packages/contracts/src/presentation';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -61,6 +62,9 @@ const api: DesktopApi = Object.freeze({
     },
   }),
   netease: Object.freeze({
+    refreshLibrary: () => invokeNetease(neteaseChannels.refreshLibrary),
+    loadLikes: () => invokeNetease(neteaseChannels.loadLikes),
+    updateLibrary: (mutation: NeteaseMutation) => invokeNetease(neteaseChannels.updateLibrary, parseNeteaseMutation(mutation)),
     refreshMembership: () => invokeNetease(neteaseChannels.refreshMembership),
     async getArtwork(request: NeteaseArtworkRequest) { return parseNeteaseArtwork(await ipcRenderer.invoke(neteaseChannels.getArtwork, parseNeteaseArtworkRequest(request))); },
     browse: (request: CatalogRequest) => invokeNetease(neteaseChannels.browse, parseCatalogRequest(request)),

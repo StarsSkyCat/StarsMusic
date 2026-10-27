@@ -42,3 +42,5 @@
 - [网易云发现页重设计与真实封面](validation/2026-10-27-netease-redesign.md)
 
 - [网易云筛选菜单与会员权限](validation/2026-10-27-netease-rights.md)
+
+- [网易云会员兼容、整单播放与收藏编辑](validation/2026-10-27-netease-library.md)
