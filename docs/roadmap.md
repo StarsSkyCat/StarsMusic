@@ -31,7 +31,7 @@ P0 完成标准：两个平台各有一条可重复的登录—歌单—实际�
 
 ## P1：Linux 可用首版
 
-- [x] 全界面材质与布局重设计：内容/表面/悬浮控制分层、双主题、音乐库与平台空间、设置、播放页和队列统一；减少透明度/动态效果降级与本机 Electron 验证见 [记录](validation/2026-10-28-interface-redesign.md)。
+- [x] 全界面材质与布局重设计：内容/表面/悬浮控制分层、双主题、音乐库与平台空间、设置、播放页和队列统一；减少透明度/动态效果降级与本机 Electron 验证见 [记录](validation/2026-10-28-interface-redesign.md)。 新界面已更新本机 Arch 安装，验证范围见 [安装记录](validation/2026-10-28-local-install.md)。
 
 - [x] 主窗口最小化、最大化/还原、关闭按钮与粘顶拖动区域；Linux 实测，Windows/macOS 仅完成公共接口及原生标题栏配置，见 [窗口控制验证](validation/2026-10-28-window-controls.md)。
 

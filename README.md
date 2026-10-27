@@ -41,7 +41,7 @@ pnpm setup:electron
 pnpm dev
 ```
 
-本机 Arch 打包与安装验证见 [打包说明](packaging/README.md) 和 [实际记录](docs/validation/2026-10-27-arch-package.md)。
+本机 Arch 打包与安装验证见 [打包说明](packaging/README.md)、[首次安装记录](docs/validation/2026-10-27-arch-package.md) 和 [界面更新后的安装记录](docs/validation/2026-10-28-local-install.md)。
 
 验证与运行构建产物：
 

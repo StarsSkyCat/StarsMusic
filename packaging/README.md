@@ -27,4 +27,4 @@ Linux 桌面入口和原创 SVG/PNG 图标与 DesktopEntry / portal 身份一致
 pnpm test:package /opt/starsmusic/starsmusic
 ```
 
-遵循 [Electron 手动分发](https://www.electronjs.org/docs/latest/tutorial/application-distribution)、[pnpm 10 deploy](https://pnpm.io/10.x/cli/deploy) 与 [Arch PKGBUILD](https://man.archlinux.org/man/PKGBUILD.5.en)；没有新增 npm 打包器依赖。本机证据见 [Arch 验证记录](../docs/validation/2026-10-27-arch-package.md)。
+遵循 [Electron 手动分发](https://www.electronjs.org/docs/latest/tutorial/application-distribution)、[pnpm 10 deploy](https://pnpm.io/10.x/cli/deploy) 与 [Arch PKGBUILD](https://man.archlinux.org/man/PKGBUILD.5.en)；没有新增 npm 打包器依赖。本机证据见 [首次 Arch 验证记录](../docs/validation/2026-10-27-arch-package.md) 与 [界面更新后的本地安装记录](../docs/validation/2026-10-28-local-install.md)。

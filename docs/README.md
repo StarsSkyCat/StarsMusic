@@ -61,3 +61,5 @@
 - [跨平台窗口控制与 Linux 验证](validation/2026-10-28-window-controls.md)
 
 - [全界面重设计与材质分层](validation/2026-10-28-interface-redesign.md)
+
+- [界面重设计后的本地安装更新](validation/2026-10-28-local-install.md)
