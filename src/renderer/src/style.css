@@ -1980,7 +1980,7 @@ main:focus {
   padding: 8px;
 }
 
-.transport .playback-mode {
+.transport .playback-mode:hover:not(:disabled) {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-color: var(--line);
