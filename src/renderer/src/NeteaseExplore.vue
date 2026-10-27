@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, UserRound, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, UserRound, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
 import TrackTable from './TrackTable.vue';
@@ -32,7 +32,6 @@ const detail = ref(catalog.value.kind === 'playlist');
 const relevant = computed(() => catalog.value.kind === (detail.value ? 'playlist' : tab.value));
 const loading = computed(() => catalog.value.status === 'loading');
 const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'netease', durationSeconds: track.durationMs / 1000, ...(track.rights ? { rights: track.rights } : {}) })));
-const title = computed(() => tab.value === 'playlists' ? '给心情，换张封面。' : tab.value === 'search' ? '下一次心动，从这里开始。' : '你的收藏，自成宇宙。');
 const subtitle = computed(() => tab.value === 'playlists' ? '一张封面，一段新的音乐旅程。' : tab.value === 'search' ? '歌曲、歌手、歌单。让好音乐与你相遇。' : '熟悉的歌单，随时回到喜欢的声音。');
 function suggest(value: string): void { keyword.value = value; request(); }
 const heading = computed(() => detail.value ? catalog.value.playlist?.name ?? '公开歌单' : tab.value === 'playlists' ? '发现新的音乐收藏' : '搜索结果');
@@ -81,7 +80,7 @@ onMounted(() => {
 <template>
   <section class="netease-explore" aria-label="网易云音乐发现">
     <header class="ne-masthead">
-      <div><span class="ne-kicker"><span><AudioLines :size="13" /></span> NETEASE / MUSIC SPACE</span><h1>{{ title }}</h1><p>{{ subtitle }}</p></div>
+      <div><h1>网易云音乐</h1><p>{{ subtitle }}</p></div>
       <button class="ne-account" @click="$emit('manage')"><UserRound :size="17" /><span>{{ state.account?.nickname ?? '连接网易云' }}</span><ArrowUpRight :size="15" /></button>
     </header>
     <nav class="catalog-tabs" aria-label="网易云浏览">

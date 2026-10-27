@@ -59,3 +59,5 @@
 - [酷狗官方授权取链与内部文件名](validation/2026-10-28-kugou-authorized-playback.md)
 
 - [跨平台窗口控制与 Linux 验证](validation/2026-10-28-window-controls.md)
+
+- [全界面重设计与材质分层](validation/2026-10-28-interface-redesign.md)

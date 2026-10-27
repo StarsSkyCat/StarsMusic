@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Cloud, ListMusic, ListPlus, Play, Search, Sparkles, UserRound } from '@lucide/vue';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, ListMusic, ListPlus, Play, Search, Sparkles, UserRound } from '@lucide/vue';
 import type { KugouSnapshot } from '../../../packages/contracts/src/kugou';
 import { kugouCatalogPageSize as pageSize, type KugouCatalogRequest } from '../../../packages/contracts/src/kugou-catalog';
 import TrackTable from './TrackTable.vue';
@@ -21,7 +21,6 @@ const keyword = ref(catalog.value.query); const searchType = ref(catalog.value.s
 const detail = ref(catalog.value.kind === 'playlist'); const selected = ref<string[]>([]); const actionError = ref('');
 const relevant = computed(() => catalog.value.kind === (detail.value ? 'playlist' : tab.value));
 const tracks = computed<DisplayTrack[]>(() => catalog.value.tracks.map(track => ({ id: track.id, title: track.name, artist: track.artists.join('、'), provider: 'kugou', durationSeconds: track.durationMs / 1000, ...(track.rights ? { rights: track.rights } : {}) })));
-const title = computed(() => tab.value === 'search' ? '想听的，就在这里。' : tab.value === 'owned' ? '把喜欢，留在身边。' : '让好音乐，与你相遇。');
 function request(offset = 0): void {
   if (tab.value === 'owned') { emit('loadOwned'); return; }
   if (tab.value === 'search') { if (keyword.value.trim()) emit('browse', { kind: 'search', query: keyword.value.trim(), searchType: searchType.value, offset }); }
@@ -54,7 +53,7 @@ onMounted(() => { if (tab.value !== 'owned' && (catalog.value.status === 'idle' 
 
 <template>
   <section class="netease-explore kugou-explore" aria-label="酷狗音乐发现">
-    <header class="ne-masthead"><div><span class="ne-kicker"><span><AudioLines :size="13" /></span> KUGOU / MUSIC SPACE</span><h1>{{ title }}</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><button class="ne-account" @click="$emit('manage')"><UserRound :size="16" /><span>{{ state.account?.nickname ?? '连接酷狗账号' }}</span><ArrowUpRight :size="14" /></button></header>
+    <header class="ne-masthead"><div><h1>酷狗音乐</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><button class="ne-account" @click="$emit('manage')"><UserRound :size="16" /><span>{{ state.account?.nickname ?? '连接酷狗账号' }}</span><ArrowUpRight :size="14" /></button></header>
     <nav class="catalog-tabs" aria-label="酷狗内容导航"><button v-for="item in [{ id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const" :key="item.id" :class="{ active: tab === item.id }" :aria-current="tab === item.id ? 'page' : undefined" @click="switchTab(item.id)"><component :is="item.icon" :size="17" />{{ item.label }}</button></nav>
 
     <KugouMembership v-if="state.status === 'connected'" :membership="state.membership" @refresh="$emit('refreshMembership')" />

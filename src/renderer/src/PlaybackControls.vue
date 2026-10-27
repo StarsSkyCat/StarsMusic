@@ -22,6 +22,7 @@ function seek(event: Event): void {
 <template>
   <div class="playback-controls">
     <div class="transport">
+      <button class="icon-button playback-mode" :aria-label="modeLabel" :title="`${modeLabel}：点击切换列表循环、随机播放、单曲循环`" @click="cycleMode"><Shuffle v-if="playback.shuffle" :size="17" /><Repeat1 v-else-if="playback.loopMode === 'track'" :size="17" /><Repeat v-else :size="17" /></button>
       <button
         class="icon-button"
         aria-label="上一首"
@@ -59,7 +60,6 @@ function seek(event: Event): void {
       >
         <SkipForward :size="19" />
       </button>
-      <button class="icon-button playback-mode" :aria-label="modeLabel" :title="`${modeLabel}：点击切换列表循环、随机播放、单曲循环`" @click="cycleMode"><Shuffle v-if="playback.shuffle" :size="17" /><Repeat1 v-else-if="playback.loopMode === 'track'" :size="17" /><Repeat v-else :size="17" /></button>
       <button
         class="icon-button stop-button"
         aria-label="停止"
