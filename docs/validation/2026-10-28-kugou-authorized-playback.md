@@ -31,4 +31,10 @@
 - `pnpm test:playback`：8 项实际 mpv 集成通过，内部编号文件名的合成资源仍被限制在一秒试听范围内。
 - `pnpm test:e2e`：15 项 Electron 桌面测试通过，实际系统输出 PipeWire。
 
-真实账号的授权链成功、准确私人歌单 hash 与实际出声仍待用户官方登录后复测。本机包更新在完成后记录。
+真实账号的授权链成功、准确私人歌单 hash 与实际出声仍待用户官方登录后复测。
+
+## 本机安装更新
+
+已从干净源码 `57857b868bf49ccaef80301edb1bc236175e5476` 生成 `starsmusic-0.0.0.r58.g57857b86-1-x86_64.pkg.tar.zst`，SHA-256 为 `3f4d6fba42f394e7b8b8d223bb3aaeb490be784ee4ef88c4dc7728c8c37a1cac`。沿用白名单部署，审计 5045 个运行文件，不包含账号数据库、密钥、私人截图或本机用户配置。
+
+独立包通过 `pnpm test:package` 后已用 pacman 升级本机；实际安装路径再次通过 `pnpm test:package /opt/starsmusic/starsmusic` 的 Wayland/X11、沙箱、匿名后台、PipeWire、MPRIS Pause/Play 和单实例检查。`pacman -Qk starsmusic` 为 5615 个文件、缺失 0。测试仅使用临时匿名配置和合成音频，未关闭用户现有窗口或操作其登录数据；旧进程需重启生效。niri 托盘状态仍为 unknown。
