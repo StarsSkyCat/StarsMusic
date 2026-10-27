@@ -1,3 +1,4 @@
+import { trackRights } from './rights.ts';
 import { DomainError } from '../../../contracts/src/errors.ts';
 import { kugouId, type KugouTrack } from '../../../contracts/src/kugou.ts';
 import { nonNegativeInteger, record, text } from '../../../contracts/src/validation.ts';
@@ -52,7 +53,7 @@ export function parseTracks(value: unknown): { items: BackendTrack[]; received: 
       const album = raw.albuminfo && typeof raw.albuminfo === 'object' ? record(raw.albuminfo, 'kugou.album') : {};
       const trans = raw.trans_param && typeof raw.trans_param === 'object' ? record(raw.trans_param, 'kugou.track.extra') : {};
       const cover = [raw.cover, raw.img, raw.AlbumImage, album.img, album.cover, album.sizable_cover, trans.union_cover].find(value => typeof value === 'string' && value.length > 0);
-      items.push({ track: { id: hash, name, artists, durationMs }, hash,
+      items.push({ track: { id: hash, name, artists, durationMs, rights: trackRights(raw) }, hash,
         ...(typeof cover === 'string' && cover ? { cover } : {}),
         ...(typeof (album.name ?? raw.AlbumName) === 'string' ? { album: String(album.name ?? raw.AlbumName).slice(0, 500) } : {}),
       });

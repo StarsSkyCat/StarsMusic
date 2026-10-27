@@ -38,7 +38,7 @@ THE SOFTWARE.
 packages/providers/src/kugou/crypto.ts 与 transport.ts 的扫码、设备注册、签名和端点字段参考 MakcRe/KuGouMusicApi 1.6.2，以 Node.js crypto/fetch 重新实现；所需端点白名单固定在该 transport。没有复制参考播放器代码或视觉资产，也没有加载该 SDK 的 Express 服务、共享设备配置或任意接口模块。
 
 - 来源：[KuGouMusicApi 1.6.2](https://github.com/MakcRe/KuGouMusicApi/tree/62730f900dc9fdc51396a663b3d33a6c4c704046)
-- 对应文件：util/config.json、util/crypto.js、util/helper.js、util/request.js、util/util.js、module/login_qr_key.js、login_qr_check.js、register_dev.js、user_detail.js、user_playlist.js、playlist_track_all_new.js、song_url.js、privilege_lite.js、search_lyric.js、lyric.js、search.js、top_playlist.js 与 playlist_track_all.js。
+- 对应文件：util/config.json、util/crypto.js、util/helper.js、util/request.js、util/util.js、module/login_qr_key.js、login_qr_check.js、register_dev.js、user_detail.js、user_playlist.js、playlist_track_all_new.js、song_url.js、privilege_lite.js、search_lyric.js、lyric.js、search.js、top_playlist.js、playlist_track_all.js、user_vip_detail.js 与 youth_union_vip.js。
 - 提交：62730f900dc9fdc51396a663b3d33a6c4c704046。
 - 原许可：[MIT](https://github.com/MakcRe/KuGouMusicApi/blob/62730f900dc9fdc51396a663b3d33a6c4c704046/LICENSE)。完整声明如下；项目整体许可仍未确定。
 

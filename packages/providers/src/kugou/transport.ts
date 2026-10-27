@@ -6,7 +6,7 @@ import { parseApiJson } from '../api-json.ts';
 import { accountProof, md5, registerProof, signature } from './crypto.ts';
 
 export const kugouProtocolBaseline = 'kugoumusicapi@1.6.2/62730f900dc9fdc51396a663b3d33a6c4c704046';
-export type KugouEndpoint = 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register' | 'searchSongs' | 'searchPlaylists' | 'publicPlaylists' | 'publicPlaylist';
+export type KugouEndpoint = 'membership' | 'qrKey' | 'qrPoll' | 'account' | 'playlists' | 'playlist' | 'stream' | 'resource' | 'register' | 'searchSongs' | 'searchPlaylists' | 'publicPlaylists' | 'publicPlaylist';
 export interface KugouTransportSession {
   readonly userid: string;
   readonly token: string;
@@ -23,6 +23,7 @@ export interface KugouTransport {
 const endpoints: Record<KugouEndpoint, readonly [string, string | undefined]> = {
   qrKey: ['https://login-user.kugou.com/v2/qrcode', undefined],
   qrPoll: ['https://login-user.kugou.com/v2/get_userinfo_qrcode', undefined],
+  membership: ['https://kugouvip.kugou.com/v1/get_union_vip', undefined],
   account: ['https://gateway.kugou.com/v3/get_my_info', 'usercenter.kugou.com'],
   playlists: ['https://gateway.kugou.com/v7/get_all_list', 'cloudlist.service.kugou.com'],
   playlist: ['https://gateway.kugou.com/v4/get_list_all_file_v3', 'cloudlist.service.kugou.com'],
@@ -70,6 +71,7 @@ export class DirectKugouTransport implements KugouTransport {
     let aesKey = '';
     if (endpoint === 'qrKey') Object.assign(params, { appid: '1001', type: '1', plat: '4', qrcode_txt: 'https://h5.kugou.com/apps/loginQRCode/html/index.html?appid=1005&', srcappid: '2919' });
     else if (endpoint === 'qrPoll') Object.assign(params, { plat: '4', srcappid: '2919', qrcode: text(data.key, 'kugou.key') });
+    else if (endpoint === 'membership') Object.assign(params, { busi_type: 'concept', opt_product_types: 'dvip,qvip', product_type: 'svip' });
     else if (endpoint === 'account') {
       params.plat = '1'; body = JSON.stringify({ visit_time: time, usertype: 1, p: accountProof(this.#token, time), userid: this.#userid });
     } else if (endpoint === 'playlists') {

@@ -110,6 +110,7 @@ const api: DesktopApi = Object.freeze({
     },
   }),
   kugou: Object.freeze({
+    refreshMembership: () => invokeKugou(kugouChannels.refreshMembership),
     getState: () => invokeKugou(kugouChannels.getState),
     startLogin: () => invokeKugou(kugouChannels.startLogin),
     cancelLogin: () => invokeKugou(kugouChannels.cancelLogin),

@@ -15,6 +15,7 @@ try {
     const state = await service.browse(request);
     if (state.catalog.status !== 'ready') throw new DomainError(state.catalog.error?.code ?? 'unavailable');
     console.log(`酷狗匿名发现通过：${request.kind}${request.kind === 'search' ? `/${request.searchType}` : ''}，偏移 ${request.offset}，曲目 ${state.catalog.tracks.length}，歌单 ${state.catalog.playlists.length}，后续 ${state.catalog.more}。`);
+    if (state.catalog.tracks.length) console.log(`酷狗匿名歌曲会员标记：VIP ${state.catalog.tracks.filter(track => track.rights?.fee === 'vip').length}，VIP 音质 ${state.catalog.tracks.filter(track => track.rights?.fee === 'vip-quality').length}，未确认 ${state.catalog.tracks.filter(track => track.rights?.fee === 'unknown').length}。`);
     const id = state.catalog.tracks[0]?.id ?? state.catalog.playlists[0]?.id;
     if (!id) throw new Error('invalid-response');
     const kind = state.catalog.tracks.length ? 'track' : 'playlist';

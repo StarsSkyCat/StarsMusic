@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NeteaseMembership from './NeteaseMembership.vue';
+import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import type { CredentialStatus } from '../../../packages/contracts/src/credentials';
 import { Check, Cloud, Link2, LogOut, X } from '@lucide/vue';
 import { loginLabels, providerNames, type Provider, type ProviderSnapshot } from './useProvider';
@@ -59,7 +60,7 @@ const diagnostics = {
           : '连接你的账号，把熟悉的歌单带到这里。扫码时可选择记住登录。'
       }}
     </p>
-    <NeteaseMembership v-if="provider === 'netease' && state.status === 'connected' && 'membership' in state" :membership="state.membership" @refresh="$emit('refreshMembership')" />
+    <NeteaseMembership v-if="provider === 'netease' && state.status === 'connected' && 'membership' in state" :membership="(state as NeteaseSnapshot).membership" @refresh="$emit('refreshMembership')" />
     <div v-if="pending.includes(state.status)" class="login-preference">
       <label class="remember-toggle">
         <input type="checkbox" :aria-label="`记住${providerNames[provider]}登录`" :checked="credentials?.rememberedProviders.includes(provider) ?? false" :disabled="saving || !credentials?.available || credentials.locked" @change="$emit('remember', ($event.target as HTMLInputElement).checked)" />

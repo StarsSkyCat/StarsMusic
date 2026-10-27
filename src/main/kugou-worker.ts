@@ -20,6 +20,7 @@ port.on('message', (event) => {
       const operation = text(message.operation, 'provider.operation');
       let result: unknown;
       if (operation === 'getState') result = service.snapshot();
+      else if (operation === 'refreshMembership') result = await service.refreshMembership();
       else if (operation === 'startLogin') result = await service.startLogin();
       else if (operation === 'cancelLogin') result = service.cancelLogin();
       else if (operation === 'logout') result = service.logout();

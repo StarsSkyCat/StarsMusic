@@ -1,8 +1,9 @@
+import { parseKugouTrackRights, type KugouTrackRights } from './kugou-rights.ts';
 import { parseAppError, type AppError } from './errors.ts';
 import { choice, ContractValidationError, nonNegativeInteger, record, text } from './validation.ts';
 
 export const kugouCatalogPageSize = 30;
-export interface KugouCatalogTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number }
+export interface KugouCatalogTrack { readonly id: string; readonly name: string; readonly artists: readonly string[]; readonly durationMs: number; readonly rights?: KugouTrackRights }
 export interface KugouCatalogPlaylist { readonly id: string; readonly name: string; readonly trackCount?: number }
 export interface KugouCatalog {
   readonly kind: 'playlists' | 'search' | 'playlist'; readonly status: 'idle' | 'loading' | 'ready' | 'error';
@@ -57,7 +58,7 @@ export function parseKugouCatalog(value: unknown): KugouCatalog {
       if (name.length > 500 || !Array.isArray(row.artists) || row.artists.length > 100) throw new ContractValidationError('kugou.catalog.track');
       return Object.freeze({ id: kugouHash(row.id), name, artists: Object.freeze(row.artists.map(value => {
         const artist = text(value, 'kugou.artist'); if (artist.length > 500) throw new ContractValidationError('kugou.artist'); return artist;
-      })), durationMs: nonNegativeInteger(row.durationMs, 'kugou.duration') });
+      })), durationMs: nonNegativeInteger(row.durationMs, 'kugou.duration'), ...(row.rights === undefined ? {} : { rights: parseKugouTrackRights(row.rights) }) });
     })), ...(raw.playlist === undefined ? {} : { playlist: parseKugouCatalogPlaylist(raw.playlist) }), ...(raw.error === undefined ? {} : { error: parseAppError(raw.error) }) });
 }
 export function initialKugouCatalog(): KugouCatalog {

@@ -80,7 +80,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
         return { initial: (await api.getState()).status, logout: (await api.logout()).status, keys: Object.keys(api).sort() };
       });
       expect(kugou.initial).toBe('signed-out'); expect(kugou.logout).toBe('signed-out');
-      expect(kugou.keys).toEqual(provider.keys.filter(key => key !== 'refreshMembership' && key !== 'loadLikes' && key !== 'updateLibrary' && key !== 'refreshLibrary'));
+      expect(kugou.keys).toEqual(provider.keys.filter(key => key !== 'loadLikes' && key !== 'updateLibrary' && key !== 'refreshLibrary'));
       await expect(page.getByRole('button', { name: '连接酷狗', exact: true })).toBeAttached();
       const credentials = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { credentials: {

@@ -16,6 +16,8 @@ import { SessionGeneration, type SessionLease } from '../session-generation.ts';
 import { DirectKugouTransport, type KugouTransport } from './transport.ts';
 
 import { integerValue, numericId, optionalInteger, parseTracks, success, type BackendTrack } from './response.ts';
+import { standardBenefits, unionBenefits } from './rights.ts';
+import type { KugouMembership, KugouTrackRights } from '../../../contracts/src/kugou-rights.ts';
 const trackPageSize = kugouTrackPageSize;
 export { apiId } from './response.ts';
 function debugKugou(message: string): void {
@@ -199,6 +201,7 @@ export class KugouService {
   #artworkAbort = new AbortController();
   #artworkCache = new Map<string, string | null>();
   #artworkPending = new Map<string, Promise<string | null>>();
+  #membershipRequest: Promise<KugouSnapshot> | undefined;
 
   constructor(options: ServiceOptions = {}) { this.#options = options; }
   #now(): number { return this.#options.now?.() ?? Date.now(); }
@@ -218,6 +221,7 @@ export class KugouService {
     this.#catalogAbort?.abort(); this.#queueAbort?.abort(); this.#catalogView++;
     this.#artworkAbort.abort(); this.#artworkAbort = new AbortController();
     this.#publicPlaylists.clear(); this.#playlistCovers.clear(); this.#artworkCache.clear(); this.#artworkPending.clear();
+    this.#membershipRequest = undefined;
   }
   #end(status: 'signed-out' | 'cancelled' | 'expired' | 'failed', error?: KugouSnapshot['error']): KugouSnapshot {
     this.#sessions.invalidate('kugou'); this.#lease = undefined; this.#clear();
@@ -298,6 +302,7 @@ export class KugouService {
         this.#lease = connected; this.#key = ''; clearTimeout(this.#timer);
         this.#update({ status: 'connected', generation: connected.generation, account: { id, nickname }, error: undefined });
         this.#emitCredentials();
+        void this.#syncMembership(profile);
       } else throw new DomainError('invalid-response');
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
@@ -353,6 +358,7 @@ export class KugouService {
       this.#lease = connected;
       this.#update({ status: 'connected', generation: connected.generation, account: { id: bundle.accountId, nickname }, error: undefined });
       this.#emitCredentials();
+      void this.#syncMembership(profile);
     } catch (error: unknown) {
       if (this.#sessions.isCurrent(lease)) {
         const safe = normalizeError(error);
@@ -361,6 +367,36 @@ export class KugouService {
       }
     }
     return this.#state;
+  }
+  refreshMembership(): Promise<KugouSnapshot> { return this.#syncMembership(); }
+  #syncMembership(profile?: Record<string, unknown>): Promise<KugouSnapshot> {
+    if (this.#membershipRequest) return this.#membershipRequest;
+    const { lease, transport } = this.#connected();
+    this.#update({ membership: { status: 'loading', benefits: [] } });
+    const operation = (async () => {
+      const now = this.#now();
+      const results = await Promise.allSettled([
+        (async () => standardBenefits(profile ?? record(success(await transport.call('account', {}, lease.signal)).data, 'kugou.membership.account'), lease.context.accountId!, now))(),
+        (async () => unionBenefits(await transport.call('membership', {}, lease.signal), lease.context.accountId!, now))(),
+      ]);
+      if (!this.#sessions.isCurrent(lease)) return this.#state;
+      const benefits: KugouMembership['benefits'][number][] = [];
+      for (const result of results) if (result.status === 'fulfilled') benefits.push(...result.value);
+      const failure = results.find(result => result.status === 'rejected');
+      this.#update({ membership: { status: failure ? 'error' : 'ready', benefits, syncedAt: now,
+        ...(failure?.status === 'rejected' ? { error: normalizeError(failure.reason) } : {}) } });
+      return this.#state;
+    })();
+    this.#membershipRequest = operation;
+    void operation.finally(() => { if (this.#membershipRequest === operation) this.#membershipRequest = undefined; });
+    return operation;
+  }
+  #trackAccess(id: string, playback: KugouTrackRights['playback']): void {
+    const item = this.#knownTracks.get(id); if (!item) return;
+    const track = { ...item.track, rights: { fee: item.track.rights?.fee ?? 'unknown', playback } };
+    this.#knownTracks.set(id, { ...item, track });
+    this.#update({ tracks: this.#state.tracks.map(value => value.id === id ? track : value),
+      catalog: { ...this.#state.catalog, tracks: this.#state.catalog.tracks.map(value => value.id === id ? track : value) } });
   }
   #operationError(lease: SessionLease, error: unknown): void {
     if (!this.#sessions.isCurrent(lease)) return;
@@ -546,13 +582,17 @@ export class KugouService {
     const request = (freePart: boolean) => transport.call('stream', { hash: item.hash, freePart }, lease.signal);
     let identity: KugouResourceIdentity | undefined;
     const parse = async (value: unknown, mode: 'full' | 'preview'): Promise<StreamResolution> => {
-      try { return parseKugouStream(value, id, item.track, mode); }
+      let result: StreamResolution;
+      try { result = parseKugouStream(value, id, item.track, mode); }
       catch (error: unknown) {
         if (!(error instanceof DomainError) || error.code !== 'track-mismatch') throw error;
         identity ??= parseKugouResourceIdentity(await transport.call('resource', { hash: item.hash }, lease.signal), item.hash);
         if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
-        return parseKugouStream(value, id, item.track, mode, identity);
+        result = parseKugouStream(value, id, item.track, mode, identity);
       }
+      if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
+      this.#trackAccess(id, result.access.kind === 'full' ? 'full' : 'preview');
+      return result;
     };
     try {
       try {
@@ -566,6 +606,12 @@ export class KugouService {
       const preview = await request(true);
       if (!this.#sessions.isCurrent(lease) || resolution !== this.#resolution) throw new DomainError('stale-operation');
       return await parse(preview, 'preview');
-    } catch (error: unknown) { if (resolution === this.#resolution) this.#operationError(lease, error); throw error; }
+    } catch (error: unknown) {
+      if (resolution === this.#resolution && this.#sessions.isCurrent(lease)) {
+        if (error instanceof DomainError && ['permission-denied', 'unavailable'].includes(error.code)) this.#trackAccess(id, 'unavailable');
+        this.#operationError(lease, error);
+      }
+      throw error;
+    }
   }
 }

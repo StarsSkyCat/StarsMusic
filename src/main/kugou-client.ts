@@ -13,7 +13,7 @@ interface Request {
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
-type Operation = 'ensureRestoredTrack' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'browse' | 'getArtwork' | 'preparePlaylist';
+type Operation = 'refreshMembership' | 'ensureRestoredTrack' | 'getState' | 'startLogin' | 'cancelLogin' | 'logout' | 'loadPlaylists' | 'loadPlaylist' | 'restoreCredentials' | 'exportCredentials' | 'resolveTrack' | 'getPresentation' | 'browse' | 'getArtwork' | 'preparePlaylist';
 
 export class KugouClient {
   #worker: UtilityProcess | undefined;

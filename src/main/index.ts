@@ -302,6 +302,7 @@ void app.whenReady().then(async () => {
       assertTrustedSource(event, contents, contents?.mainFrame, documentUrl);
       const argument = parseKugouArguments(channel, args);
       if (quitting) return kugou.snapshot();
+      if (channel === kugouChannels.refreshMembership) return kugou.command('refreshMembership');
       if (channel === kugouChannels.getArtwork) return kugou.getArtwork(argument.artwork!);
       if (channel === kugouChannels.browse) return kugou.command('browse', { catalog: argument.catalog });
       if (channel === kugouChannels.playPlaylist) {
