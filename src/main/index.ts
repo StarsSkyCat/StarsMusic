@@ -355,6 +355,7 @@ void app.whenReady().then(async () => {
       if (channel === playbackChannels.resume) return player.resume();
       if (channel === playbackChannels.stop) { selectionGeneration++; return player.stop(); }
       if (channel === playbackChannels.seek) return player.seek(argument as number);
+      if (channel === playbackChannels.setMuted) return player.setMuted(argument as boolean);
       if (channel === playbackChannels.setVolume) return player.setVolume(argument as number);
       return player.snapshot();
     });

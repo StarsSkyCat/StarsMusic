@@ -19,7 +19,7 @@ test('播放 IPC 只接受具体命令、有限数值与已定义参数数量', 
 test('播放快照过滤本地路径并拒绝无效队列、索引、状态与数值', () => {
   const snapshot = {
     revision: 2, generation: 1, status: 'playing', queue: [{ id: 'a', title: 'sample.wav' }],
-    currentIndex: 0, positionSeconds: 1.5, durationSeconds: 30, volume: 70,
+    currentIndex: 0, positionSeconds: 1.5, durationSeconds: 30, volume: 70, muted: false,
   };
   assert.deepEqual(parsePlaybackSnapshot({ ...snapshot, queue: [{ ...snapshot.queue[0], path: 'synthetic-private-path' }] }), snapshot);
   for (const invalid of [
@@ -28,4 +28,9 @@ test('播放快照过滤本地路径并拒绝无效队列、索引、状态与�
     { ...snapshot, revision: -1 }, { ...snapshot, positionSeconds: Infinity },
     { ...snapshot, volume: 101 }, { ...snapshot, status: 'fake-playing' },
   ]) assert.throws(() => parsePlaybackSnapshot(invalid), ContractValidationError);
+});
+
+test('静音仅接受显式布尔值，缺省旧快照保持未静音', () => {
+  assert.equal(parsePlaybackArgument(playbackChannels.setMuted, [true]), true);
+  for (const args of [[], ['true'], [1], [true, false]]) assert.throws(() => parsePlaybackArgument(playbackChannels.setMuted, args));
 });

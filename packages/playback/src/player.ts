@@ -29,6 +29,9 @@ export class MusicPlayer {
   #loaded = false;
   #paused = false;
   #desiredVolume = 70;
+  #lastAudibleVolume = 70;
+  #volumeRevision = 0;
+  #volumeWrite: Promise<void> | undefined;
   #previewSeconds: number | undefined;
   #disposed = false;
   #tail: Promise<void> = Promise.resolve();
@@ -206,7 +209,7 @@ export class MusicPlayer {
         if (this.#disposed || this.#state.generation !== generation) return;
         this.#update({ engineVersion: version });
         await engine.command(['set_property', 'http-header-fields', []]);
-        await engine.command(['set_property', 'volume', this.#desiredVolume]);
+        await engine.command(['set_property', 'volume', this.#state.muted ? 0 : this.#desiredVolume]);
         await engine.command(['loadfile', filename, 'replace']);
       } catch (error: unknown) {
         await engine?.close();
@@ -225,7 +228,7 @@ export class MusicPlayer {
     if (event.event === 'file-loaded') {
       this.#loaded = true;
       this.#update({ status: this.#paused ? 'paused' : 'playing' });
-      void this.#control(['set_property', 'volume', this.#desiredVolume]);
+      void this.setVolume(this.#desiredVolume, false);
     } else if (event.event === 'end-file') {
       this.#loaded = false;
       if (event.reason === 'eof') {
@@ -246,7 +249,7 @@ export class MusicPlayer {
       } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
         if (event.name === 'time-pos' && this.#loaded) this.#update({ positionSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
         else if (event.name === 'duration') this.#update({ durationSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
-        else if (event.name === 'volume' && this.#loaded) this.#update({ volume: Math.min(value, 100) });
+        else if (event.name === 'volume' && this.#loaded && !this.#state.muted && Math.abs(value - this.#desiredVolume) < .01) this.#update({ volume: Math.min(value, 100) });
       }
     }
   }
@@ -273,11 +276,32 @@ export class MusicPlayer {
     playbackNumber(seconds);
     return this.#control(['seek', Math.min(seconds, this.#state.durationSeconds), 'absolute+exact']);
   }
-  async setVolume(volume: number): Promise<PlaybackSnapshot> {
-    playbackNumber(volume, 100);
-    this.#desiredVolume = volume;
-    if (!this.#loaded) { this.#update({ volume }); return this.#state; }
-    return this.#control(['set_property', 'volume', volume]);
+  async #flushVolume(): Promise<void> {
+    if (this.#volumeWrite) return this.#volumeWrite;
+    this.#volumeWrite = (async () => {
+      let delivered = -1;
+      while (this.#loaded && delivered !== this.#volumeRevision && !this.#disposed) {
+        const revision = this.#volumeRevision;
+        await this.#control(['set_property', 'volume', this.#state.muted ? 0 : this.#desiredVolume]);
+        delivered = revision;
+      }
+    })();
+    try { await this.#volumeWrite; } finally { this.#volumeWrite = undefined; }
+  }
+  async setVolume(volume: number, unmute = true): Promise<PlaybackSnapshot> {
+    playbackNumber(volume, 100); this.#desiredVolume = volume;
+    if (volume > 0) this.#lastAudibleVolume = volume;
+    this.#volumeRevision++;
+    this.#update({ volume, ...(unmute ? { muted: false } : {}) });
+    if (this.#loaded) await this.#flushVolume();
+    return this.#state;
+  }
+  async setMuted(muted: boolean): Promise<PlaybackSnapshot> {
+    if (typeof muted !== 'boolean') throw new DomainError('invalid-input');
+    if (!muted && this.#desiredVolume === 0) this.#desiredVolume = this.#lastAudibleVolume;
+    this.#volumeRevision++; this.#update({ muted, volume: this.#desiredVolume });
+    if (this.#loaded) await this.#flushVolume();
+    return this.#state;
   }
 
   stop(): Promise<PlaybackSnapshot> {

@@ -74,3 +74,15 @@ test('整张在线歌单原子替换队列，超过 200 首仍完整且仅按需
     await player.clearRemote('netease'); assert.equal(player.snapshot().queue.length, 0);
   } finally { await player.dispose(); }
 });
+
+test('未播放时也保留音量与独立静音，零音量取消静音恢复上次非零值', async () => {
+  const player = new MusicPlayer();
+  try {
+    await player.setVolume(83); await player.setMuted(true);
+    assert.equal(player.snapshot().volume,83); assert.equal(player.snapshot().muted,true);
+    await player.setMuted(false); assert.equal(player.snapshot().volume,83);
+    await player.setVolume(0); await player.setMuted(false); assert.equal(player.snapshot().volume,83);
+    await Promise.all([player.setVolume(10),player.setVolume(45),player.setVolume(91)]);
+    assert.equal(player.snapshot().volume,91); assert.equal(player.snapshot().muted,false);
+  } finally {await player.dispose();}
+});

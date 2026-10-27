@@ -19,7 +19,6 @@ import {
   Search,
   Settings2,
   Sparkles,
-  Volume2,
   X,
 } from '@lucide/vue';
 import { parseAppInfo, type AppInfo } from '../../../packages/contracts/src/desktop';
@@ -31,6 +30,7 @@ import {
 import { useCredentials } from './useCredentials';
 import CredentialPanel from './CredentialPanel.vue';
 import ProviderAccount from './ProviderAccount.vue';
+import VolumeControl from './VolumeControl.vue';
 import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
@@ -366,9 +366,7 @@ async function refreshInfo(): Promise<void> {
     loading.value = false;
   }
 }
-function changeVolume(event: Event): void {
-  void control((api) => api.setVolume(Number((event.target as HTMLInputElement).value)));
-}
+
 async function showQueue(): Promise<void> {
   await nextTick();
   queueDialog.value?.showModal();
@@ -1026,16 +1024,8 @@ onUnmounted(() => {
       <PlaybackControls :playback="playback" @control="control" />
       <div class="player-tools">
         <span v-if="currentTrack?.detail" class="quality-label">{{ currentTrack.detail }}</span
-        ><label class="volume-control"
-          ><Volume2 :size="18" /><input
-            aria-label="音量"
-            type="range"
-            min="0"
-            max="100"
-            :value="playback.volume"
-            :style="{ '--range-progress': `${playback.volume}%` }"
-            @change="changeVolume" /></label
-        ><button class="queue-toggle" aria-label="打开播放队列" @click="showQueue">
+        > <VolumeControl :volume="playback.volume" :muted="playback.muted" :send="value => control(api => api.setVolume(value))" :mute="value => control(api => api.setMuted(value))" />
+        <button class="queue-toggle" aria-label="打开播放队列" @click="showQueue">
           <ListMusic :size="20" /><span>{{ playback.queue.length }}</span>
         </button>
       </div>

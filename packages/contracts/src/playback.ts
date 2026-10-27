@@ -12,7 +12,7 @@ export const playbackChannels = {
   pause: 'starsmusic:playback:pause',
   stop: 'starsmusic:playback:stop',
   seek: 'starsmusic:playback:seek',
-  setVolume: 'starsmusic:playback:set-volume',
+  setVolume: 'starsmusic:playback:set-volume', setMuted: 'starsmusic:playback:set-muted',
   stateChanged: 'starsmusic:playback:state-changed',
 } as const;
 
@@ -34,6 +34,7 @@ export interface PlaybackSnapshot {
   readonly positionSeconds: number;
   readonly durationSeconds: number;
   readonly volume: number;
+  readonly muted: boolean;
   readonly engineVersion?: string;
   readonly audioOutput?: string;
   readonly error?: AppError;
@@ -51,6 +52,7 @@ export interface PlaybackApi {
   stop(): Promise<PlaybackSnapshot>;
   seek(seconds: number): Promise<PlaybackSnapshot>;
   setVolume(volume: number): Promise<PlaybackSnapshot>;
+  setMuted(muted: boolean): Promise<PlaybackSnapshot>;
   onStateChanged(listener: (snapshot: PlaybackSnapshot) => void): () => void;
 }
 
@@ -63,6 +65,7 @@ export function playbackNumber(value: unknown, maximum = Number.MAX_SAFE_INTEGER
 
 export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
   const input = record(value, 'playback');
+  if (input.muted !== undefined && typeof input.muted !== 'boolean') throw new ContractValidationError('playback.muted');
   if (!Array.isArray(input.queue) || input.queue.length > 10000) throw new ContractValidationError('playback.queue');
   const queue = input.queue.map((value: unknown) => {
     const item = record(value, 'playback.queue.item');
@@ -86,16 +89,17 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
     status, queue: Object.freeze(queue), currentIndex,
     positionSeconds: playbackNumber(input.positionSeconds),
     durationSeconds: playbackNumber(input.durationSeconds),
-    volume: playbackNumber(input.volume, 100),
+    volume: playbackNumber(input.volume, 100), muted: input.muted === true,
     ...(input.engineVersion === undefined ? {} : { engineVersion: text(input.engineVersion, 'playback.engineVersion') }),
     ...(input.audioOutput === undefined ? {} : { audioOutput: text(input.audioOutput, 'playback.audioOutput') }),
     ...(input.error === undefined ? {} : { error: parseAppError(input.error) }),
   });
 }
 
-export function parsePlaybackArgument(command: string, args: readonly unknown[]): string | number | undefined {
+export function parsePlaybackArgument(command: string, args: readonly unknown[]): string | number | boolean | undefined {
   const trackCommands: readonly string[] = [playbackChannels.playTrack, playbackChannels.moveNext, playbackChannels.removeTrack];
   if (trackCommands.includes(command) && args.length === 1) return text(args[0], 'playback.trackId');
+  if (command === playbackChannels.setMuted && args.length === 1 && typeof args[0] === 'boolean') return args[0];
   if (command === playbackChannels.seek && args.length === 1) return playbackNumber(args[0]);
   if (command === playbackChannels.setVolume && args.length === 1) return playbackNumber(args[0], 100);
   const noArguments: readonly string[] = [playbackChannels.getState, playbackChannels.openFiles,

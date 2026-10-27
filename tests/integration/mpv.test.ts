@@ -61,6 +61,10 @@ test('真实解码、暂停、定位、音量、快速切歌、停止与崩溃�
     assert.ok(!JSON.stringify(player.snapshot()).includes(directory));
     await player.pause(); await until(() => player.snapshot().status === 'paused');
     await player.seek(5); await until(() => player.snapshot().positionSeconds >= 4.9);
+    await Promise.all([player.setVolume(10),player.setVolume(90),player.setVolume(47)]);
+    assert.equal(player.snapshot().volume,47);
+    await player.setMuted(true); assert.equal(player.snapshot().muted,true); assert.equal(player.snapshot().volume,47);
+    await player.setMuted(false); assert.equal(player.snapshot().muted,false);
     await player.setVolume(35); await until(() => player.snapshot().volume === 35);
     await player.resume(); await until(() => player.snapshot().status === 'playing');
     const oldPid = (await children())[0]!;

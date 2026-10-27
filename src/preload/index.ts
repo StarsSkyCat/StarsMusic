@@ -53,6 +53,7 @@ const api: DesktopApi = Object.freeze({
     pause: () => invokePlayback(playbackChannels.pause),
     stop: () => invokePlayback(playbackChannels.stop),
     seek: (seconds: number) => invokePlayback(playbackChannels.seek, seconds),
+    setMuted: (muted: boolean) => invokePlayback(playbackChannels.setMuted, muted),
     setVolume: (volume: number) => invokePlayback(playbackChannels.setVolume, volume),
     onStateChanged(listener: (snapshot: ReturnType<typeof parsePlaybackSnapshot>) => void) {
       if (typeof listener !== 'function') throw new Error('监听器无效');
