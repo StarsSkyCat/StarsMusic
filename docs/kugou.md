@@ -108,3 +108,7 @@ https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=<key>
 字段核对来源：[固定基线会员端点](https://github.com/MakcRe/KuGouMusicApi/blob/62730f900dc9fdc51396a663b3d33a6c4c704046/module/youth_union_vip.js)、[会员响应实测说明](https://github.com/DreamAlone666/kg2lx/blob/91a5e3ddd5be44dbb77854a7a9a87e0706f77b68/skills/kugou-music-api/references/song-url-and-entitlements.md) 与 [播放收费标记回归证据](https://github.com/xiaomingky/MingYunTime/blob/7daf07d4ad792a970ef7d158da7aba2ab96fd6eb/scripts/check-song-vip.mjs)。仅参考接口字段和观测结果，自行实现解析，没有复制其他播放器代码或图标。
 
 酷狗与网易云共用搜索栏，搜索结果、公开详情和私人列表均显示归一化的会员/音质与实际播放标记。真实匿名搜索及合成账号权益流程验证见 [搜索与权益记录](validation/2026-10-27-platform-search-rights.md)。
+
+## “我喜欢”的显示顺序
+
+私人接口返回的“我喜欢”与官方客户端顺序相反。后台按 `love` 分组或本人默认 `listid=2/type=0` 识别该列表，完整读取后统一反转，再按 300 首给页面分页；整单播放采用相同顺序。普通歌单与公开歌单保持接口顺序。完整读取有 10000 首上限，缺页、失败或账号变化时不把局部列表冒充正确结果；worker 详情读取上限为 120 秒。合成 650 首回归验证首尾、跨页、普通歌单及整单一致性，真实账号与官方客户端逐项核对仍待用户验收。原固定协议端点未增加未经验证的排序参数。

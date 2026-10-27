@@ -488,3 +488,40 @@ test('恢复酷狗 hash 元数据仅限原账号，仍按现有身份和权限�
     instance.logout(); await assert.rejects(instance.ensureRestoredTrack(track, generation));
   } finally { instance.dispose(); }
 });
+
+test('酷狗我喜欢按官方最新在前，全列表反转后再分页，整单播放保持相同顺序', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  const rows = Array.from({ length: 650 }, (_, i) => ({ hash: i.toString(16).padStart(32, '0'), name: `合成收藏 ${i}`, duration: 30 }));
+  const pages: number[] = [];
+  try {
+    await connect(service);
+    transport.handlers.set('playlists', async () => ok({ info: [{ listid: 2, type: 0, name: '我喜欢', count: rows.length }, { listid: 3, type: 0, name: '普通歌单', count: 3 }] }));
+    transport.handlers.set('playlist', async data => {
+      if (data.id === '3') return ok({ count: 3, info: rows.slice(0, 3) });
+      const page = Number(data.page); pages.push(page); return ok({ count: rows.length, info: rows.slice((page - 1) * 300, page * 300) });
+    });
+    await service.loadPlaylists(); await service.loadPlaylist('2', 0);
+    assert.deepEqual(pages, [1, 2, 3]); assert.equal(service.snapshot().tracks.length, 300);
+    assert.equal(service.snapshot().tracks[0]!.name, '合成收藏 649'); assert.equal(service.snapshot().tracks[299]!.name, '合成收藏 350');
+    await service.loadPlaylist('2', 300); await service.loadPlaylist('2', 600);
+    assert.equal(pages.length, 3); assert.equal(service.snapshot().tracks.length, 650); assert.equal(service.snapshot().tracksMore, false);
+    assert.equal(service.snapshot().tracks[300]!.name, '合成收藏 349'); assert.equal(service.snapshot().tracks[649]!.name, '合成收藏 0');
+    const queue = await service.preparePlaylist('2', 'owned');
+    assert.deepEqual(queue.map(t => t.id), service.snapshot().tracks.map(t => t.id));
+    await service.loadPlaylist('3', 0); assert.deepEqual(service.snapshot().tracks.map(t => t.name), ['合成收藏 0', '合成收藏 1', '合成收藏 2']);
+    const late = deferred<unknown>(); transport.handlers.set('playlist', async () => late.promise);
+    const pending = service.loadPlaylist('2', 0); service.logout(); late.resolve(ok({ count: 3, info: rows.slice(0, 3) })); await pending;
+    assert.equal(service.snapshot().status, 'signed-out'); assert.deepEqual(service.snapshot().tracks, []);
+  } finally { service.dispose(); }
+});
+
+test('酷狗 love 分组识别收藏列表，读取不完整时不返回反序的局部成功', async () => {
+  const transport = new FakeTransport(); const service = create(() => transport);
+  try {
+    await connect(service);
+    transport.handlers.set('playlists', async () => ok({ info: { love: [{ listid: 22, name: '我喜欢', count: 301 }], self: [], collect: [] } }));
+    await service.loadPlaylists();
+    transport.handlers.set('playlist', async () => ok({ count: 301, info: [{ hash, name: '合成收藏', duration: 30 }] }));
+    await service.loadPlaylist('22', 0); assert.equal(service.snapshot().error?.code, 'invalid-response'); assert.equal(service.snapshot().tracks.length, 0);
+  } finally { service.dispose(); }
+});

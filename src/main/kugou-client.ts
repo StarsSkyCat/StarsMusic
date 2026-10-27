@@ -91,7 +91,7 @@ export class KugouClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#requests.delete(requestId); reject(new DomainError('timeout')); this.#fail(worker);
-      }, operation === 'preparePlaylist' ? 120000 : operation === 'resolveTrack' ? 45000 : 30000);
+      }, operation === 'preparePlaylist' || operation === 'loadPlaylist' ? 120000 : operation === 'resolveTrack' ? 45000 : 30000);
       this.#requests.set(requestId, { resolve, reject, timer });
       worker.postMessage({ operation, requestId, ...args });
     });

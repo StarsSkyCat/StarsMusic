@@ -189,6 +189,8 @@ export class KugouService {
   #resolution = 0;
   #playlistOffset = 0;
   #knownPlaylists = new Map<string, number>();
+  #likedPlaylists = new Set<string>();
+  #likedTracks = new Map<string, readonly BackendTrack[]>();
   #knownTracks = new Map<string, BackendTrack>();
   #listBusy = false;
   #pollingLease: SessionLease | undefined;
@@ -217,6 +219,7 @@ export class KugouService {
     clearTimeout(this.#timer); this.#timer = undefined;
     this.#transport?.clear(); this.#transport = undefined; this.#key = '';
     this.#knownTracks.clear(); this.#knownPlaylists.clear(); this.#playlistOffset = 0; this.#listBusy = false; this.#view++;
+    this.#likedPlaylists.clear(); this.#likedTracks.clear();
     this.#guestTransport?.clear(); this.#guestTransport = undefined;
     this.#catalogAbort?.abort(); this.#queueAbort?.abort(); this.#catalogView++;
     this.#artworkAbort.abort(); this.#artworkAbort = new AbortController();
@@ -412,22 +415,29 @@ export class KugouService {
       const data = record(success(await transport.call('playlists', { page: this.#playlistOffset / 50 + 1 }, lease.signal)).data, 'kugou.playlists');
       const info = data.info;
       let rows: unknown[];
+      const likedRows = new Set<unknown>();
       if (Array.isArray(info)) rows = info;
       else {
         const groups = record(info ?? data, 'kugou.playlist.groups');
         const names = ['collect', 'love', 'self', 'list'];
         if (!names.some((key) => Array.isArray(groups[key]))) throw new DomainError('invalid-response');
         rows = names.flatMap((key) => Array.isArray(groups[key]) ? groups[key] as unknown[] : []);
+        if (Array.isArray(groups.love)) for (const row of groups.love) likedRows.add(row);
       }
       const entries = rows.map((value: unknown) => {
         const item = record(value, 'kugou.playlist');
         const id = numericId(item.list_create_listid ?? item.listid);
         const cover = item.pic ?? item.img ?? item.cover ?? item.imgurl;
-        return { id, name: text(item.name ?? item.listname, 'kugou.playlist.name'), trackCount: integerValue(item.count ?? item.song_count ?? 0, 'kugou.count'), type: nonNegativeInteger(item.type ?? 0, 'kugou.type'), ...(typeof cover === 'string' && cover ? { cover } : {}) };
+        const type = nonNegativeInteger(item.type ?? 0, 'kugou.type');
+        return { id, name: text(item.name ?? item.listname, 'kugou.playlist.name'), trackCount: integerValue(item.count ?? item.song_count ?? 0, 'kugou.count'), type, liked: likedRows.has(value) || (type === 0 && id === '2'), ...(typeof cover === 'string' && cover ? { cover } : {}) };
       });
       this.#sessions.commit(lease, () => {
         this.#playlistOffset += 50;
-        for (const item of entries) { this.#knownPlaylists.set(item.id, item.type); if (item.cover) this.#playlistCovers.set(item.id, item.cover); }
+        for (const item of entries) {
+          this.#knownPlaylists.set(item.id, item.type);
+          if (item.liked) this.#likedPlaylists.add(item.id); else this.#likedPlaylists.delete(item.id);
+          if (item.cover) this.#playlistCovers.set(item.id, item.cover);
+        }
         const items = entries.map(({ id, name, trackCount }) => ({ id, name, trackCount }));
         const merged = new Map([...this.#state.playlists, ...items].map((item) => [item.id, item]));
         this.#update({ playlists: [...merged.values()], playlistsMore: rows.length >= 50, busy: false });
@@ -443,6 +453,20 @@ export class KugouService {
     const view = ++this.#view;
     this.#update({ playlistId: id, ...(offset === 0 ? { tracks: [], tracksMore: false, nextTrackOffset: 0 } : {}), busy: true, error: undefined });
     try {
+      if (this.#likedPlaylists.has(id)) {
+        // 官方“我喜欢”以最新收藏在前。先获取完整有界列表再反转，避免逐页反转造成跨页错序。
+        const items = offset === 0 ? await this.#readLikedTracks(id, transport, lease.signal) : this.#likedTracks.get(id);
+        if (!items) throw new DomainError('invalid-input');
+        if (view !== this.#view) return this.#state;
+        this.#sessions.commit(lease, () => {
+          this.#likedTracks.set(id, items);
+          const page = items.slice(offset, offset + trackPageSize);
+          for (const item of page) this.#knownTracks.set(item.track.id, item);
+          this.#update({ tracks: [...(offset === 0 ? [] : this.#state.tracks), ...page.map(item => item.track)],
+            nextTrackOffset: offset + trackPageSize, tracksMore: offset + trackPageSize < items.length, busy: false });
+        });
+        return this.#state;
+      }
       const data = record(success(await transport.call('playlist', { id, type: this.#knownPlaylists.get(id), page: offset / trackPageSize + 1 }, lease.signal)).data, 'kugou.playlist');
       const rows = data.info ?? data.songs ?? data.lists ?? data.file;
       // 末页可能没有 info 字段；首屏缺少列表仍按无效响应处理。
@@ -460,6 +484,23 @@ export class KugouService {
       });
     } catch (error: unknown) { if (view === this.#view) this.#operationError(lease, error); }
     return this.#state;
+  }
+  async #readLikedTracks(id: string, transport: KugouTransport, signal: AbortSignal): Promise<readonly BackendTrack[]> {
+    const items = new Map<string, BackendTrack>();
+    for (let offset = 0; offset < 10000; offset += trackPageSize) {
+      const data = record(success(await transport.call('playlist', { id, type: this.#knownPlaylists.get(id), page: offset / trackPageSize + 1 }, signal)).data, 'kugou.liked');
+      signal.throwIfAborted();
+      const rows = data.info ?? data.songs ?? data.lists ?? data.file;
+      const parsed = parseTracks(rows === undefined && offset > 0 ? [] : Array.isArray(rows) ? rows : record(rows, 'kugou.files').file);
+      const total = optionalInteger(data.count ?? data.total, 'kugou.liked.total');
+      if ((total ?? 0) > 10000) throw new DomainError('unavailable');
+      if (parsed.received > trackPageSize || (total !== undefined && offset + parsed.received < total && parsed.received < trackPageSize)) throw new DomainError('invalid-response');
+      for (const item of parsed.items) items.set(item.track.id, item);
+      if (items.size > 10000) throw new DomainError('unavailable');
+      if (parsed.received < trackPageSize || (total !== undefined && offset + parsed.received >= total)) return Object.freeze([...items.values()].reverse());
+      if (offset + trackPageSize >= 10000) throw new DomainError('unavailable');
+    }
+    throw new DomainError('unavailable');
   }
   async ensureRestoredTrack(value: StoredRemoteTrack, generation: number): Promise<void> {
     const saved = parseStoredPlaybackTrack(value);
@@ -539,7 +580,9 @@ export class KugouService {
     }
     if (!items.size) throw new DomainError('unavailable');
     for (const [id, item] of items) this.#knownTracks.set(id, item);
-    return Object.freeze([...items.values()].map(item => item.track));
+    const ordered = [...items.values()];
+    if (source === 'owned' && this.#likedPlaylists.has(id)) ordered.reverse();
+    return Object.freeze(ordered.map(item => item.track));
   }
   async getPresentation(id: string, generation: number): Promise<PresentationContent> {
     const { lease, transport } = this.#connected();
