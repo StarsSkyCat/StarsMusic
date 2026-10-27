@@ -13,6 +13,7 @@
     "packages/providers/src/**/*.ts",
     "packages/playback/src/**/*.ts",
     "packages/storage/src/**/*.ts",
+    "packages/desktop/src/**/*.ts",
     "tests/**/*.ts",
     "scripts/**/*.ts"
   ]

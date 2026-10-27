@@ -1,3 +1,5 @@
+import { LinuxServices } from '../../packages/desktop/src/linux/services';
+import type { PlatformIntegration } from '../../packages/desktop/src/platform';
 import { PlaybackSession } from './playback-session';
 import { PlaybackSessionStoreClient } from './playback-session-client';
 import type { StoredRemoteTrack } from '../../packages/contracts/src/playback-session';
@@ -44,6 +46,13 @@ const presentation = new PresentationController(async (track, signal) => {
   if (saved && saved.kind !== 'local') await client.ensureRestoredTrack(saved, generation, signal);
   return client.getPresentation(track.sourceId, generation, signal);
 });
+let desktopServices: PlatformIntegration | undefined;
+function showMainWindow(): void {
+  if (quitting) return;
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.show(); mainWindow?.focus();
+}
 let playbackSession: PlaybackSession | undefined;
 async function resolveSavedTrack(track: StoredRemoteTrack, signal: AbortSignal) {
   const client = track.kind === 'netease' ? netease : kugou;
@@ -380,6 +389,10 @@ void app.whenReady().then(async () => {
     });
   }
   createWindow();
+  if (process.platform === 'linux') {
+    desktopServices = new LinuxServices(player, { show: showMainWindow, quit: () => app.quit() });
+    void desktopServices.initialize();
+  }
   void restoreSavedCredentials();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 }).catch(() => {
@@ -396,6 +409,7 @@ app.on('before-quit', (event) => {
   presentation.dispose();
   selectionGeneration++;
   void (async () => {
+    await desktopServices?.dispose();
     try { await playbackSession?.close(); } catch { /* 原记录保留；退出仍清理子进程。 */ }
     await Promise.allSettled([netease.dispose(), kugou.dispose(), player.dispose(), vault?.close()]);
     app.quit();

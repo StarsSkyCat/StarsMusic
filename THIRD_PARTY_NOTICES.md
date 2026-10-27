@@ -66,3 +66,7 @@ IN THE SOFTWARE.
 @lucide/vue 1.61.0 通过 npm 官方注册表引入，用于导航和播放控件。Lucide Icons and Contributors 的 ISC 声明以及 Feather / Cole Bemis 的 MIT 声明均保存在 [完整许可](docs/licenses/lucide.txt)。未复制其他播放器的图标和视觉资产。
 
 星夜山景由内置 Image Gen 于 2026-10-26 为本项目生成，作为品牌默认配图；不是平台专辑封面。来源与使用位置见 [素材说明](src/renderer/src/assets/README.md)。
+
+## dbus-next
+
+Linux 桌面适配实际使用 [dbus-next 0.10.2](https://github.com/dbusjs/node-dbus-next/tree/v0.10.2)，MIT；完整许可见 [dbus-next 声明](docs/licenses/dbus-next.txt)。本仓库维护一个 Hello 失败不再次抛出未处理 rejection 的小补丁，原库 error 事件保持不变。xml2js 定向升级与可选 addon 排除见 [依赖记录](docs/dependencies.md)，未复制其他音乐播放器的桌面实现。

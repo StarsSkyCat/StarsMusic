@@ -1,0 +1,14 @@
+diff --git a/lib/bus.js b/lib/bus.js
+index 5d679eb347531f548f24872a6c121712e05f4d60..4d390249caf644c70faac8e6056ab142d3c62832 100644
+--- a/lib/bus.js
++++ b/lib/bus.js
+@@ -173,7 +173,8 @@ class MessageBus extends EventEmitter {
+       })
+       .catch((err) => {
+         this.emit('error', err);
+-        throw new Error(err);
++        // Consumers handle the error event; do not turn a failed Hello into
++        // an unhandled rejection that terminates the embedding desktop app.
+       });
+   }
+ 

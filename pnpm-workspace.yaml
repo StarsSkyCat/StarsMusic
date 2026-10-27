@@ -3,6 +3,10 @@ packages:
   - 'packages/providers/*'
   - 'packages/desktop/*'
 
+# D-Bus uses Node Unix sockets; no Electron ABI addon is needed.
+ignoredOptionalDependencies:
+  - usocket
+
 # No lifecycle scripts needed. Electron runtime uses explicit setup:electron.
 minimumReleaseAgeExclude:
   - '@pnpm/exe@10.34.9'
@@ -14,3 +18,8 @@ minimumReleaseAgeExclude:
   - '@pnpm/win-x64@10.34.9'
 
 onlyBuiltDependencies: []
+
+overrides:
+  dbus-next>xml2js: 0.6.2
+patchedDependencies:
+  dbus-next@0.10.2: patches/dbus-next@0.10.2.patch

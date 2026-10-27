@@ -38,6 +38,7 @@ export class MusicPlayer {
   #previewSeconds: number | undefined;
   #disposed = false;
   #tail: Promise<void> = Promise.resolve();
+  #seekListeners = new Set<(seconds: number) => void>();
   #listeners = new Set<(state: PlaybackSnapshot) => void>();
   #options: PlayerOptions;
 
@@ -112,10 +113,21 @@ export class MusicPlayer {
     return this.#switch(0);
   }
 
-  playTrack(id: string): Promise<PlaybackSnapshot> {
+  playTrack(id: string, paused = false): Promise<PlaybackSnapshot> {
     const index = this.#tracks.findIndex((track) => track.id === id);
     if (index < 0) return Promise.resolve(this.reportError(appError('invalid-input')));
-    return this.#switch(index);
+    return this.#switch(index, false, paused);
+  }
+
+  cueTrack(id: string): Promise<PlaybackSnapshot> {
+    const index = this.#tracks.findIndex(track => track.id === id);
+    if (index < 0) return Promise.resolve(this.reportError(appError('invalid-input')));
+    const stopping = this.stop();
+    this.#update({ currentIndex: index });
+    return stopping.then(() => this.#state);
+  }
+  subscribeSeeked(listener: (seconds: number) => void): () => void {
+    this.#seekListeners.add(listener); return () => { this.#seekListeners.delete(listener); };
   }
 
   #queue(): PlaybackSnapshot['queue'] {
@@ -198,7 +210,7 @@ export class MusicPlayer {
     return this.#tail.then(() => this.#state);
   }
 
-  #switch(index: number, restore = false): Promise<PlaybackSnapshot> {
+  #switch(index: number, restore = false, paused = false): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
     const track = this.#tracks[index];
     if (!track) return Promise.resolve(this.#state);
@@ -208,7 +220,7 @@ export class MusicPlayer {
     this.#abort.abort(); this.#abort = new AbortController();
     const signal = this.#abort.signal;
     this.#loaded = false;
-    this.#paused = false;
+    this.#paused = paused;
     this.#previewSeconds = undefined;
     this.#update({ generation, currentIndex: index, status: 'loading', positionSeconds: bookmark?.seconds ?? 0, durationSeconds: bookmark?.duration ?? 0, error: undefined, audioOutput: undefined });
     return this.#enqueue(async () => {
@@ -244,7 +256,7 @@ export class MusicPlayer {
         if (this.#disposed || this.#state.generation !== generation) return;
         const startSeconds = Math.max(0, Math.min(bookmark?.seconds ?? 0, Math.max(0, (previewSeconds ?? bookmark?.duration ?? Infinity) - .2)));
         engine = new MpvClient({
-          ...this.#options, startSeconds,
+          ...this.#options, startSeconds, paused,
           ...(track.resolve ? { network: 'loopback' as const } : {}),
           ...(previewSeconds === undefined ? {} : { playbackLength: Math.max(.1, previewSeconds - startSeconds) }),
           onEvent: (event) => { if (this.#state.generation === generation) this.#event(event); },
@@ -324,14 +336,26 @@ export class MusicPlayer {
     }
     return this.#control(['set_property', 'pause', false]);
   }
-  seek(seconds: number): Promise<PlaybackSnapshot> {
+  async seek(seconds: number): Promise<PlaybackSnapshot> {
     playbackNumber(seconds);
     if (!this.#loaded && this.#bookmark) {
       const positionSeconds = Math.min(seconds, this.#state.durationSeconds);
       this.#bookmark.seconds = positionSeconds; this.#update({ positionSeconds });
-      return Promise.resolve(this.#state);
+      for (const listener of this.#seekListeners) listener(positionSeconds);
+      return this.#state;
     }
-    return this.#control(['seek', Math.min(seconds, this.#state.durationSeconds), 'absolute+exact']);
+    const engine = this.#engine; const generation = this.#state.generation;
+    if (this.#disposed || !this.#loaded || !engine || this.#engineGeneration !== generation) return this.#state;
+    try {
+      await engine.command(['seek', Math.min(seconds, this.#state.durationSeconds), 'absolute+exact']);
+      const actual: unknown = await engine.command(['get_property', 'time-pos']);
+      if (!this.#disposed && this.#loaded && generation === this.#state.generation && typeof actual === 'number' && Number.isFinite(actual) && actual >= 0) {
+        const positionSeconds = Math.min(actual, this.#previewSeconds ?? Infinity);
+        this.#update({ positionSeconds });
+        for (const listener of this.#seekListeners) listener(positionSeconds);
+      }
+    } catch (error: unknown) { if (generation === this.#state.generation && !this.#disposed) this.reportError(normalizeError(error)); }
+    return this.#state;
   }
   async #flushVolume(): Promise<void> {
     if (this.#volumeWrite) return this.#volumeWrite;
@@ -378,6 +402,6 @@ export class MusicPlayer {
     if (this.#disposed) return this.#tail;
     this.#disposed = true;
     await this.stop();
-    this.#listeners.clear();
+    this.#listeners.clear(); this.#seekListeners.clear();
   }
 }

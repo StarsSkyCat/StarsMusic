@@ -41,7 +41,7 @@
 
 ## 验证与交付
 
-- 当前可用命令：pnpm check、typecheck、test、test:playback、build、dev、start、test:e2e；桌面启动前运行 pnpm setup:electron，音频测试需 Linux 系统 mpv。无 pnpm 时仍可运行 node scripts/check.mjs 检查文档。
+- 当前可用命令：pnpm check、typecheck、test、test:playback、test:desktop、build、dev、start、test:e2e；桌面启动前运行 pnpm setup:electron，音频测试需 Linux 系统 mpv。无 pnpm 时仍可运行 node scripts/check.mjs 检查文档。
 - 新增脚本或命令时先使其可运行，再写入文档；不创建输出“成功”但不做验证的 test/build 脚本。
 - 文档修改运行文档检查；逻辑变更增加或运行能验证行为的检查，避免只重复实现的测试。
 - 登录真实测试由用户在官方授权流程中完成；不要求在聊天或配置文件中粘贴真实凭据。

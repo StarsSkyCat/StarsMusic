@@ -5,6 +5,7 @@
 | 依赖 | 版本 | 用途 | 许可 |
 | --- | --- | --- | --- |
 | @lucide/vue | 1.61.0 | 实际界面使用的统一线性图标 | ISC；源于 Feather 的图标含 MIT，见 [完整声明](licenses/lucide.txt) |
+| dbus-next | 0.10.2 | Linux MPRIS、session D-Bus 服务探测与后续 portal 操作 | MIT，见 [许可](licenses/dbus-next.txt) |
 | vue | 3.5.44 | 实际桌面页面与响应式状态 | MIT |
 | electron | 45.0.0 | 桌面运行时、窗口、沙箱与 IPC | MIT |
 | electron-vite | 6.0.0 | main / preload / renderer 开发与构建 | MIT |
@@ -17,7 +18,7 @@
 | qrcode | 1.5.4 | 后台把官方登录挑战 URL 转为内存 PNG | MIT |
 | @types/qrcode | 1.5.6 | 二维码生成器类型检查 | MIT |
 
-Vue、@lucide/vue 和 qrcode 为应用依赖，其余为开发依赖。SQLite 凭据库使用 Node/Electron 内置 node:sqlite；Pinia、Router 和发行打包器尚未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Node 内置 crypto/fs 与 node:sqlite，没有新增 npm SQLite 绑定或密钥管理依赖。node:sqlite 随固定的 Electron 45/Node 24 运行时提供，Node 为 MIT、SQLite 核心为公有领域；完整运行时许可仍随发行物审查。safeStorage 仅用于旧加密 JSON 的可选迁移。
+Vue、@lucide/vue、qrcode 和 dbus-next 为应用依赖，其余为开发依赖。SQLite 凭据库使用 Node/Electron 内置 node:sqlite；Pinia、Router 和发行打包器尚未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Node 内置 crypto/fs 与 node:sqlite，没有新增 npm SQLite 绑定或密钥管理依赖。node:sqlite 随固定的 Electron 45/Node 24 运行时提供，Node 为 MIT、SQLite 核心为公有领域；完整运行时许可仍随发行物审查。safeStorage 仅用于旧加密 JSON 的可选迁移。
 
 ## 系统音频依赖
 
@@ -35,3 +36,7 @@ Rolldown、Electron ZIP 解压器等传递依赖包含平台预编译原生包�
 - [electron-vite 开发指南](https://electron-vite.org/guide/dev)
 - [Playwright Electron](https://playwright.dev/docs/api/class-electron)：自动化 API 仍标为实验性。
 - [KuGouMusicApi 1.6.2](https://github.com/MakcRe/KuGouMusicApi/tree/62730f900dc9fdc51396a663b3d33a6c4c704046)：酷狗协议格式与端点基线，MIT；来源声明见 [第三方记录](../THIRD_PARTY_NOTICES.md)。
+
+## Linux D-Bus 依赖边界
+
+[dbus-next 0.10.2](https://github.com/dbusjs/node-dbus-next/tree/v0.10.2) 仅用于可信 Linux 桌面适配层。仓库 `patches/dbus-next@0.10.2.patch` 去除 Hello 失败后再抛出的未处理 rejection，保留 error 事件，避免 session bus 失效终止音频应用。其 xml2js 定向覆盖为 0.6.2（MIT），避免旧版本漏洞；生产依赖 `pnpm audit --prod` 实际通过。可选 usocket 被 ignoredOptionalDependencies 明确排除，连接经 Node 24 Unix socket 实现，不引入 Electron ABI addon 或生命周期编译脚本；abstract Unix socket 同样经 Node 的原生支持。完整传递依赖仍以锁文件和发行许可审计为准。

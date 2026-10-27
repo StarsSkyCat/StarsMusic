@@ -23,10 +23,12 @@
     "probe:netease": "node scripts/probe-netease.ts",
     "probe:netease-discovery": "node scripts/probe-netease-discovery.ts",
     "test:e2e": "electron-vite build && playwright test",
-    "probe:kugou": "node scripts/probe-kugou.ts"
+    "probe:kugou": "node scripts/probe-kugou.ts",
+    "test:desktop": "dbus-run-session -- env STARSMUSIC_TEST_BUS=isolated node --test tests/integration/linux-desktop.test.ts"
   },
   "dependencies": {
     "@lucide/vue": "1.61.0",
+    "dbus-next": "0.10.2",
     "qrcode": "1.5.4",
     "vue": "3.5.44"
   },

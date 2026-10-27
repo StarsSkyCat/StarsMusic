@@ -2,7 +2,7 @@
 
 ## 当前能运行什么
 
-已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/热歌榜/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加整单播放、喜欢、自建歌单编辑、公开歌单收藏，以及官方会员套餐同步与单曲收费/取链权限标记，收藏写入及会员响应兼容的真实账号矩阵仍待验收；真实会员账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库、MPRIS 和安装包尚未验证或实现。
+已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/热歌榜/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加整单播放、喜欢、自建歌单编辑、公开歌单收藏，以及官方会员套餐同步与单曲收费/取链权限标记，收藏写入及会员响应兼容的真实账号矩阵仍待验收；真实会员账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库、安装包尚未验证或实现；Linux MPRIS 和服务探测已实现，见 [桌面集成验证](validation/2026-10-27-linux-desktop.md)。
 
 领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)，登录保存见 [凭据持久化](credentials.md)。默认关闭“记住登录”时，应用关闭后不保留网易云或酷狗登录，需要重新扫码。
 
@@ -30,6 +30,7 @@ pnpm check
 pnpm typecheck
 pnpm test
 pnpm test:playback
+pnpm test:desktop
 pnpm build
 pnpm start
 pnpm test:e2e
@@ -43,6 +44,7 @@ pnpm test:e2e
 - probe:netease-discovery 显式匿名联网检查热歌分页、公开歌单/详情及歌曲/歌单搜索，只输出归一化计数，不登录、不写凭据，CI 不运行。
 - probe:kugou 显式联网验证酷狗设备注册与匿名扫码挑战，只报告固定基线和通过状态，不输出设备标识、key、二维码或响应原文；不登录账号。
 - test:playback 使用实际 mpv 与合成 WAV，显式指定 null 输出，验证本地/本机网关音频、试听上限、切歌、错误与清理；不调用平台、不需要账号。需要 Linux 与 mpv，缺失时失败。
+- test:desktop 在 dbus-run-session 隔离总线中验证真实 MPRIS/服务探测与 mpv；需 Linux、dbus-run-session 和 mpv，不请求平台账号、不操作用户真实桌面通知/托盘。
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。
 - start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、两个平台的匿名后台状态、本地选择、默认系统音频输出和退出，需 Linux、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。
 
@@ -104,7 +106,7 @@ corepack pnpm dev
 | scripts | 可直接执行的仓库工具 |
 | docs | 设计、开发、决策及验证记录 |
 
-main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器、主进程 CredentialVault 和凭据 SQLite 后台已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js、kugou-worker.js、credential-store-worker.js 与 playback-session-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程协调本地密钥加密/解密和异步存储；业务请求仍由后台进程使用解密后的临时凭据。队列存储已由独立 SQLite worker 实现，保存队列顺序、当前项、进度、音量与静音；重启暂停恢复、在线取链需原账号连接，详见 [播放说明](playback.md)。音乐库索引和系统集成仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
+main、preload、renderer、公共契约、会话守卫、网易云 Provider、酷狗 Provider、通用播放器、主进程 CredentialVault 和凭据 SQLite 后台已有实现，由根包统一检查。main 构建同时生成 index.js、netease-worker.js、kugou-worker.js、credential-store-worker.js 与 playback-session-worker.js；后台进程通过具体内部消息通信，凭据不进入 renderer。CredentialVault 只在主进程协调本地密钥加密/解密和异步存储；业务请求仍由后台进程使用解密后的临时凭据。队列存储已由独立 SQLite worker 实现，保存队列顺序、当前项、进度、音量与静音；重启暂停恢复、在线取链需原账号连接，详见 [播放说明](playback.md)。Linux MPRIS 已通过平台适配层接入，其他系统能力仍在接入；音乐库索引仍为规划。尚未拆成独立工作区包，产生独立发布或依赖需求时再增加包配置。
 
 公共 contracts 不导入 Electron/Vue/Provider SDK；renderer 只能使用 preload API。平台请求在 Provider 后台处理。重型扫描和数据库工作与窗口主进程分离。
 
