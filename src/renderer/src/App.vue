@@ -876,6 +876,7 @@ onUnmounted(() => {
               @next="addNext"
               @remove="(id) => control((api) => api.removeTrack(id))"
             >
+              <template v-if="activeProvider === 'netease'" #artwork="{ track }"><NeteaseArtwork :id="track.id" kind="track" :generation="neteaseState.generation" :name="track.title" /></template>
               <template #actions="{ track }"><NeteaseTrackActions v-if="activeProvider === 'netease'" :id="track.id" :title="track.title" :liked="likedNeteaseIds.has(track.id)" :likes-ready="neteaseState.library.likesStatus === 'ready'" :busy="neteaseState.library.busy" :removable="currentNeteasePlaylist?.editable === true" @like="likeNetease" @add="openAddToPlaylist" @remove="removeFromNeteasePlaylist" /></template>
             </TrackTable>
             <div v-else class="empty-library">
