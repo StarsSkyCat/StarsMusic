@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { desktopChannels, type AppInfo } from '../../packages/contracts/src/desktop';
 import { assertTrustedInvoke, assertTrustedSource, getDevelopmentUrl } from './ipc-policy';
-import { parseLoopMode, parsePlaybackArgument, playbackChannels } from '../../packages/contracts/src/playback';
+import { parseLoopMode, parsePlaybackMode, parsePlaybackArgument, playbackChannels } from '../../packages/contracts/src/playback';
 import { appError } from '../../packages/contracts/src/errors';
 import { audioExtensions, MusicPlayer } from '../../packages/playback/src/player';
 import { credentialChannels, parseCredentialArguments } from '../../packages/contracts/src/credentials';
@@ -391,6 +391,7 @@ void app.whenReady().then(async () => {
       if (channel === playbackChannels.previous) { selectionGeneration++; return player.previous(); }
       if (channel === playbackChannels.setLoopMode) return player.setLoopMode(parseLoopMode(argument));
       if (channel === playbackChannels.setShuffle) return player.setShuffle(argument as boolean);
+      if (channel === playbackChannels.setMode) return player.setMode(parsePlaybackMode(argument));
       if (channel === playbackChannels.pause) return player.pause();
       if (channel === playbackChannels.resume) return player.resume();
       if (channel === playbackChannels.stop) { selectionGeneration++; return player.stop(); }

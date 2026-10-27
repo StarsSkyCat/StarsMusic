@@ -58,8 +58,8 @@ test('独立真实 session D-Bus / mpv：MPRIS 发现、状态、微秒、音量
     assert.equal(transitions.includes('playing'), false); unsubscribe();
     await request('Stop'); assert.equal((await get('PlaybackStatus')).value, 'Stopped');
     await request('Next'); assert.equal(player.snapshot().currentIndex, 2); assert.equal(player.snapshot().status, 'idle');
-    assert.equal((await get('LoopStatus')).value, 'None'); assert.equal((await get('Shuffle')).value, false);
-    assert.equal((await get('CanGoNext')).value, false);
+    assert.equal((await get('LoopStatus')).value, 'Playlist'); assert.equal((await get('Shuffle')).value, false);
+    assert.equal((await get('CanGoNext')).value, true);
     await set('LoopStatus', new dbus.Variant('s', 'Playlist'));
     assert.equal(player.snapshot().loopMode, 'playlist'); assert.equal((await get('CanGoNext')).value, true);
     await request('Next'); assert.equal(player.snapshot().currentIndex, 0); assert.equal(player.snapshot().status, 'idle');
@@ -67,12 +67,12 @@ test('独立真实 session D-Bus / mpv：MPRIS 发现、状态、微秒、音量
     const track = trackPath(player.snapshot()); const generation = player.snapshot().generation;
     await set('Shuffle', new dbus.Variant('b', true));
     assert.equal(player.snapshot().shuffle, true); assert.equal(trackPath(player.snapshot()), track); assert.equal(player.snapshot().generation, generation);
-    await set('LoopStatus', new dbus.Variant('s', 'Track')); assert.equal(player.snapshot().loopMode, 'track');
+    await set('LoopStatus', new dbus.Variant('s', 'Track')); assert.equal(player.snapshot().loopMode, 'track'); assert.equal(player.snapshot().shuffle, false);
     await assert.rejects(set('LoopStatus', new dbus.Variant('s', 'invalid'))); assert.equal(player.snapshot().loopMode, 'track');
-    await assert.rejects(set('Shuffle', new dbus.Variant('s', 'true'))); assert.equal(player.snapshot().shuffle, true);
+    await assert.rejects(set('Shuffle', new dbus.Variant('s', 'true'))); assert.equal(player.snapshot().shuffle, false);
     await until(() => changed.some(value => value.LoopStatus?.value === 'Playlist') && changed.some(value => value.Shuffle?.value === true));
     player.setLoopMode('none'); player.setShuffle(false);
-    assert.equal((await get('LoopStatus')).value, 'None'); assert.equal((await get('Shuffle')).value, false);
+    assert.equal((await get('LoopStatus')).value, 'Playlist'); assert.equal((await get('Shuffle')).value, false);
     await assert.rejects(request('OpenUri', 's', ['https://example.invalid/arbitrary']));
     await call(client, name, mprisPath, 'org.mpris.MediaPlayer2', 'Raise'); await call(client, name, mprisPath, 'org.mpris.MediaPlayer2', 'Quit');
     assert.equal(raised, 1); assert.equal(quit, 1);

@@ -3,7 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { appError, DomainError, normalizeError, type AppError } from '../../contracts/src/errors.ts';
-import { adjacentIndex, parseLoopMode, parsePlaybackSnapshot, playbackNumber, type LoopMode, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
+import { adjacentIndex, parseLoopMode, parsePlaybackMode, parsePlaybackSnapshot, playbackNumber, type LoopMode, type PlaybackMode, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import { MpvClient, type MpvOptions } from './mpv-client.ts';
 import { parseStreamResolution, type StreamResolution, type OnlineProviderId } from '../../contracts/src/music.ts';
 import { MediaGateway } from './media-gateway.ts';
@@ -166,19 +166,25 @@ export class MusicPlayer {
     if (this.#state.shuffle) this.#shuffleTracks();
   }
   setLoopMode(mode: LoopMode): PlaybackSnapshot {
-    this.#update({ loopMode: parseLoopMode(mode) }); return this.#state;
+    const loop = parseLoopMode(mode);
+    return this.setMode(loop === 'none' ? 'shuffle' : loop);
   }
   setShuffle(enabled: boolean): PlaybackSnapshot {
     if (typeof enabled !== 'boolean') throw new DomainError('invalid-input');
-    if (enabled === this.#state.shuffle) return this.#state;
+    if (!enabled && !this.#state.shuffle) return this.#state;
+    return this.setMode(enabled ? 'shuffle' : 'playlist');
+  }
+  setMode(mode: PlaybackMode): PlaybackSnapshot {
+    parsePlaybackMode(mode);
+    const enabled = mode === 'shuffle';
     const currentId = this.#tracks[this.#state.currentIndex ?? -1]?.id;
-    if (enabled) { this.#originalOrder = this.#tracks.map(track => track.id); this.#shuffleTracks(currentId); }
-    else {
+    if (enabled && !this.#state.shuffle) { this.#originalOrder = this.#tracks.map(track => track.id); this.#shuffleTracks(currentId); }
+    else if (!enabled && this.#state.shuffle) {
       const tracks = new Map(this.#tracks.map(track => [track.id, track]));
       this.#tracks = this.#originalOrder.flatMap(id => tracks.has(id) ? [tracks.get(id)!] : []);
     }
     const index = this.#tracks.findIndex(track => track.id === currentId);
-    this.#update({ shuffle: enabled, queue: this.#queue(false), currentIndex: index < 0 ? null : index });
+    this.#update({ shuffle: enabled, loopMode: mode === 'shuffle' ? 'none' : mode, queue: this.#queue(false), currentIndex: index < 0 ? null : index });
     return this.#state;
   }
   next(): Promise<PlaybackSnapshot> { return this.#adjacent(1); }

@@ -28,7 +28,7 @@ async function children(): Promise<number[]> {
   return result;
 }
 
-test('真实 mpv EOF 驱动顺序结束、列表回绕、单曲重播和随机一轮不重复，停止不自动重播', async () => {
+test('真实 mpv EOF 驱动随机结束、列表回绕、单曲重播和随机一轮不重复，停止不自动重播', async () => {
   const directory = await mkdtemp('/tmp/starsmusic-mode-mpv-');
   const player = new MusicPlayer({ audioOutput: 'null' });
   const files = ['a.wav', 'b.wav', 'c.wav'].map(file => path.join(directory, file));
@@ -43,7 +43,8 @@ test('真实 mpv EOF 驱动顺序结束、列表回绕、单曲重播和随机�
         }
       });
       await player.openFiles(files.slice(0, 2));
-      if (mode === 'none') { await until(() => player.snapshot().status === 'ended'); assert.deepEqual(played, ['a.wav', 'b.wav']); }
+      const order = player.snapshot().queue.map(track => track.title);
+      if (mode === 'none') { await until(() => player.snapshot().status === 'ended'); assert.deepEqual(played, order); }
       else {
         await until(() => played.length >= 3);
         assert.deepEqual(played.slice(0, 3), mode === 'track' ? ['a.wav', 'a.wav', 'a.wav'] : ['a.wav', 'b.wav', 'a.wav']);
@@ -136,7 +137,7 @@ test('EOF、损坏/缺失文件、快速停止和缺失 mpv 不冒充播放成�
   const missingEngine = new MusicPlayer({ executable: path.join(directory, 'missing-mpv') });
   try {
     await writeSilentWav(short, 0.3); await writeFile(broken, 'not an audio file');
-    await player.openFiles([short]); await until(() => player.snapshot().status === 'ended');
+    player.setMode('shuffle'); await player.openFiles([short]); await until(() => player.snapshot().status === 'ended');
     await player.openFiles([broken]); await until(() => player.snapshot().status === 'error');
     assert.equal(player.snapshot().error?.code, 'playback-failed');
     // 伪装成音频的播放列表不能间接打开其他文件。
@@ -189,7 +190,7 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
       priv_status: 1, is_full_audio: 0, fileName: '合成酷狗曲目', timeLength: 10, free_part_start: 9000, free_part_end: 10000,
     }, 'b'.repeat(32), { name: '合成酷狗曲目', durationMs: 10000 }, 'full',
       parseKugouResourceIdentity({ status: 1, data: [{ hash: 'b'.repeat(32), name: '合成酷狗曲目', relate_goods: [{ hash: 'a'.repeat(32) }] }] }, 'b'.repeat(32)));
-    await player.openRemote('kugou', '合成酷狗曲目', async () => kugou);
+    player.setMode('shuffle'); await player.openRemote('kugou', '合成酷狗曲目', async () => kugou);
     await until(() => player.snapshot().status === 'playing');
     assert.ok(player.snapshot().queue[0]?.provider === 'kugou');
     await until(() => player.snapshot().status === 'ended');
@@ -269,7 +270,7 @@ test('在线恢复重新获取实际权限，旧完整播放书签超出试听�
       currentId: 'saved-online', positionSeconds: 100, durationSeconds: 200, volume: 30, muted: false, lastAudibleVolume: 30 },
     async () => ({ track: { provider: 'netease', id: '7' }, source: { kind: 'remote', url: 'https://m10.music.126.net/synthetic', headers: {} },
       quality: { level: 'standard' }, access: { kind: 'preview', startMs: 0, durationMs: 2000 } }));
-    await player.resume(); await until(() => player.snapshot().status === 'ended');
+    player.setMode('shuffle'); await player.resume(); await until(() => player.snapshot().status === 'ended');
     assert.ok(player.snapshot().durationSeconds <= 2); assert.ok(player.snapshot().positionSeconds <= 2);
     await player.stop(); assert.deepEqual(await children(), []);
   } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }

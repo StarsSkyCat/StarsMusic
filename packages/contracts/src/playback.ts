@@ -10,6 +10,7 @@ export const playbackChannels = {
   clearUpcoming: 'starsmusic:playback:clear-upcoming',
   next: 'starsmusic:playback:next', previous: 'starsmusic:playback:previous',
   setLoopMode: 'starsmusic:playback:set-loop-mode', setShuffle: 'starsmusic:playback:set-shuffle',
+  setMode: 'starsmusic:playback:set-mode',
   resume: 'starsmusic:playback:resume',
   pause: 'starsmusic:playback:pause',
   stop: 'starsmusic:playback:stop',
@@ -19,6 +20,10 @@ export const playbackChannels = {
 } as const;
 
 export type LoopMode = 'none' | 'playlist' | 'track';
+export type PlaybackMode = 'playlist' | 'shuffle' | 'track';
+export function parsePlaybackMode(value: unknown): PlaybackMode {
+  return choice(value, ['playlist', 'shuffle', 'track'], 'playback.mode');
+}
 export function parseLoopMode(value: unknown): LoopMode {
   return choice(value, ['none', 'playlist', 'track'], 'playback.loopMode');
 }
@@ -67,6 +72,7 @@ export interface PlaybackApi {
   previous(): Promise<PlaybackSnapshot>;
   setLoopMode(mode: LoopMode): Promise<PlaybackSnapshot>;
   setShuffle(enabled: boolean): Promise<PlaybackSnapshot>;
+  setMode(mode: PlaybackMode): Promise<PlaybackSnapshot>;
   resume(): Promise<PlaybackSnapshot>;
   pause(): Promise<PlaybackSnapshot>;
   stop(): Promise<PlaybackSnapshot>;
@@ -87,6 +93,7 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
   const input = record(value, 'playback');
   if (input.muted !== undefined && typeof input.muted !== 'boolean') throw new ContractValidationError('playback.muted');
   if (input.shuffle !== undefined && typeof input.shuffle !== 'boolean') throw new ContractValidationError('playback.shuffle');
+  const requestedLoop = input.loopMode === undefined ? 'playlist' : parseLoopMode(input.loopMode);
   if (!Array.isArray(input.queue) || input.queue.length > 10000) throw new ContractValidationError('playback.queue');
   const queue = input.queue.map((value: unknown) => {
     const item = record(value, 'playback.queue.item');
@@ -111,7 +118,8 @@ export function parsePlaybackSnapshot(value: unknown): PlaybackSnapshot {
     positionSeconds: playbackNumber(input.positionSeconds),
     durationSeconds: playbackNumber(input.durationSeconds),
     volume: playbackNumber(input.volume, 100), muted: input.muted === true,
-    loopMode: input.loopMode === undefined ? 'none' : parseLoopMode(input.loopMode), shuffle: input.shuffle === true,
+    // 兼容旧的独立开关记录：随机优先；旧顺序模式迁为列表循环。
+    loopMode: input.shuffle === true ? 'none' : requestedLoop === 'none' ? 'playlist' : requestedLoop, shuffle: input.shuffle === true,
     ...(input.engineVersion === undefined ? {} : { engineVersion: text(input.engineVersion, 'playback.engineVersion') }),
     ...(input.audioOutput === undefined ? {} : { audioOutput: text(input.audioOutput, 'playback.audioOutput') }),
     ...(input.saveError === undefined ? {} : { saveError: parseAppError(input.saveError) }),
@@ -125,6 +133,7 @@ export function parsePlaybackArgument(command: string, args: readonly unknown[])
   if (command === playbackChannels.setMuted && args.length === 1 && typeof args[0] === 'boolean') return args[0];
   if (command === playbackChannels.setShuffle && args.length === 1 && typeof args[0] === 'boolean') return args[0];
   if (command === playbackChannels.setLoopMode && args.length === 1) return parseLoopMode(args[0]);
+  if (command === playbackChannels.setMode && args.length === 1) return parsePlaybackMode(args[0]);
   if (command === playbackChannels.seek && args.length === 1) return playbackNumber(args[0]);
   if (command === playbackChannels.setVolume && args.length === 1) return playbackNumber(args[0], 100);
   const noArguments: readonly string[] = [playbackChannels.getState, playbackChannels.openFiles,
