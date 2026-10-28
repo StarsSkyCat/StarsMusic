@@ -45,7 +45,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.getByText('应用信息与诊断', { exact: true }).click();
       await expect(page.getByRole('status')).toContainText('桌面桥接已连接');
       await page.getByRole('button', { name: '重新检查' }).click();
-      await expect(page.getByRole('status')).toContainText('StarsMusic 0.0.0');
+      await expect(page.getByRole('status')).toContainText('StarsMusic 1.0.0');
 
       const exposure = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { getAppInfo(): Promise<unknown> } }).starsMusic;
@@ -64,7 +64,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       });
       expect(metadata.keys).toEqual(['getState', 'onChanged']);
       expect(metadata.state).toMatchObject({ status: 'idle', trackId: null });
-      expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '0.0.0' });
+      expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '1.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
       await expect(page.getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
       // 仅验证真实 utilityProcess 启动与临时退出，不自动生成/截图真实登录二维码。
