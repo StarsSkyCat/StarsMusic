@@ -6,6 +6,7 @@
 | [Linux 桌面集成](linux-desktop.md) | MPRIS、托盘、通知、快捷键、Wayland 能力与验证边界 |
 | [Windows 开发适配](windows.md) | mpv.exe 环境、命名管道、托盘与快捷键、未完成项 |
 | [Windows 验证](validation/2026-10-28-windows.md) | Windows 单元测试、真实 mpv 与 Electron 桌面回归 |
+| [Windows EXE 验证](validation/2026-10-28-windows-installer.md) | NSIS、本地运行时、实际安装/运行/卸载与边界 |
 | [开发指南](development.md) | 环境、可执行命令、目录边界和日常工作流 |
 | [测试与验收](testing.md) | 当前检查、后续测试分层和 Linux 验收 |
 | [开发路线图](roadmap.md) | 当前状态、P0 任务与完成标准 |

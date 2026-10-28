@@ -1,8 +1,14 @@
 # Windows 开发适配
 
-Windows x64 开发适配已启动。播放引擎已接入 Windows mpv 命名管道；安装包、签名、系统媒体面板与发行兼容性仍待实现或验证。结果见 [验证记录](validation/2026-10-28-windows.md)。
+Windows x64 已接入 mpv 命名管道并提供 NSIS EXE 本地验证安装包；签名、系统媒体面板与完整发行兼容性仍待完成。见 [开发验证](validation/2026-10-28-windows.md) 和 [EXE 安装验证](validation/2026-10-28-windows-installer.md)。
 
-## 环境与启动
+## 安装包
+
+按 [打包说明](../packaging/README.md) 运行 `pnpm package:win`，EXE 与 SHA-256 输出到 release/。安装包内置 mpv，安装后无需配置 PATH；当前用户安装，可选目录，Windows 应用列表提供卸载入口，卸载保留用户数据。本包未签名，仅用于本地开发验证。
+
+`pnpm test:package:win` 验证独立运行目录；`pnpm test:installer:win` 实际安装到项目临时目录并测试、卸载，遇到既有 StarsMusic 安装会拒绝替换。
+
+## 源码开发环境与启动
 
 需要 Node.js 24.x、pnpm 10.34.9，以及可运行的 mpv.exe（本轮验证 0.41 开发构建）。从 [mpv 官方安装页](https://mpv.io/installation/) 选择 Windows 构建，自行核对来源与校验值；应用不自动下载、安装播放器或修改系统 PATH。官方 CI 构建用于开发验证，不作为发行包依赖承诺。
 
@@ -36,7 +42,7 @@ pnpm build
 - 默认关闭窗口退出。设置中可选择关闭到托盘，须先确认通知区域或折叠菜单中的图标可见；禁用托盘会取消关闭到托盘并恢复隐藏窗口。
 - 全局快捷键默认关闭。开启后逐项调用 Electron 注册，冲突按实际结果显示，不把所有组合键一律标为可用；关闭和退出注销本进程注册。
 - Windows 设置页隐藏 Linux MPRIS/Portal，通知显示尚未接入；系统媒体面板、专用媒体键与任务栏媒体控件尚未实现。
-- Windows AppUserModelID 固定为 `org.starsmusic.StarsMusic`；尚不涉及安装器快捷方式或签名。
+- Windows AppUserModelID 固定为 `org.starsmusic.StarsMusic`；EXE 安装包创建对应的桌面/开始菜单快捷方式，仍未签名。
 - 已基于最新 Linux 主分支复验新版界面与共享窗口按钮：最小化、最大化/还原、外部窗口事件同步、默认关闭退出和关闭到托盘。双主题最小布局、标题栏 drag/no-drag 样式及粘顶也已检查；系统贴靠菜单、真实拖动手势与高 DPI 矩阵仍待验证。
 
 ## 播放与保护边界
@@ -50,4 +56,4 @@ pnpm build
 
 ## 待完成验收
 
-真实账号扫码与跨重启恢复、不同音频格式与输出设备、Windows 版本/缩放矩阵、系统媒体控制、安装包和签名需要独立验证。Linux 的历史实测结果不计入 Windows 验收。
+真实账号扫码与跨重启恢复、不同音频格式与输出设备、Windows 版本/缩放矩阵、系统媒体控制、跨版本升级、签名与公开发行需要独立验证。Linux 的历史实测结果不计入 Windows 验收。

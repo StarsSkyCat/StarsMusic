@@ -44,7 +44,8 @@ const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta
 const developmentUrl = app.isPackaged ? undefined : getDevelopmentUrl(process.env.ELECTRON_RENDERER_URL);
 const documentUrl = developmentUrl ?? pathToFileURL(rendererFile).href;
 let mainWindow: BrowserWindow | null = null;
-const player = new MusicPlayer();
+const player = new MusicPlayer(app.isPackaged && process.platform === 'win32'
+  ? { executable: path.join(process.resourcesPath, 'mpv', 'mpv.exe') } : {});
 const netease = new NeteaseClient(fileURLToPath(new URL('./netease-worker.js', import.meta.url)));
 const kugou = new KugouClient(fileURLToPath(new URL('./kugou-worker.js', import.meta.url)));
 const presentation = new PresentationController(async (track, signal) => {
