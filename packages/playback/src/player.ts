@@ -9,6 +9,10 @@ import { parseStreamResolution, type StreamResolution, type OnlineProviderId } f
 import { MediaGateway } from './media-gateway.ts';
 
 export const audioExtensions = ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'aif', 'aiff'];
+const resourceErrors = new Set<AppError['code']>([
+  'unavailable', 'permission-denied', 'playback-access-unknown', 'track-mismatch',
+  'file-unavailable', 'playback-failed', 'network', 'timeout', 'invalid-response',
+]);
 interface PlayerTrack {
   id: string; title: string; artist?: string; sourceId?: string; accountId?: string; durationMs?: number; detail?: string; path?: string; provider?: OnlineProviderId;
   resolve?: (signal: AbortSignal) => Promise<StreamResolution>;
@@ -38,6 +42,8 @@ export class MusicPlayer {
   #bookmark: { id: string; seconds: number; duration: number } | undefined;
   #previewSeconds: number | undefined;
   #disposed = false;
+  #errorAdvance: ReturnType<typeof setTimeout> | undefined;
+  #failedTracks = new Set<string>();
   #tail: Promise<void> = Promise.resolve();
   #seekSerial = 0;
   #seekTail: Promise<unknown> = Promise.resolve();
@@ -109,6 +115,43 @@ export class MusicPlayer {
   reportError(error: AppError): PlaybackSnapshot {
     this.#update({ error });
     return this.#state;
+  }
+
+  #cancelErrorAdvance(resetFailures = true): void {
+    clearTimeout(this.#errorAdvance); this.#errorAdvance = undefined;
+    if (resetFailures) this.#failedTracks.clear();
+  }
+
+  #nextPlayableIndex(): number | null {
+    let index = this.#state.currentIndex;
+    if (index === null) return null;
+    // Follow the current queue order and loop policy, but never retry a failed
+    // item within the same recovery chain (including single-track repeat).
+    for (let count = 1; count < this.#tracks.length; count++) {
+      index = adjacentIndex({ ...this.#state, currentIndex: index }, 1);
+      if (index === null) return null;
+      if (!this.#failedTracks.has(this.#tracks[index]!.id)) return index;
+    }
+    return null;
+  }
+
+  #resourceFailed(error: AppError): void {
+    const generation = this.#state.generation;
+    const track = this.#tracks[this.#state.currentIndex ?? -1];
+    this.#loaded = false;
+    this.#update({ status: 'error', error });
+    if (this.#disposed || this.#state.generation !== generation) return;
+    if (this.#paused || !track || !resourceErrors.has(error.code)) {
+      this.#cancelErrorAdvance(); return;
+    }
+    this.#failedTracks.add(track.id);
+    if (this.#errorAdvance !== undefined || this.#nextPlayableIndex() === null) return;
+    this.#errorAdvance = setTimeout(() => {
+      this.#errorAdvance = undefined;
+      if (this.#disposed || this.#state.generation !== generation || this.#paused || this.#state.status !== 'error') return;
+      const next = this.#nextPlayableIndex();
+      if (next !== null) void this.#switch(next, false, false, true);
+    }, 2500);
   }
 
   openFiles(paths: readonly string[]): Promise<PlaybackSnapshot> {
@@ -190,6 +233,7 @@ export class MusicPlayer {
   next(): Promise<PlaybackSnapshot> { return this.#adjacent(1); }
   previous(): Promise<PlaybackSnapshot> { return this.#adjacent(-1); }
   #adjacent(offset: 1 | -1): Promise<PlaybackSnapshot> {
+    this.#cancelErrorAdvance();
     const index = adjacentIndex(this.#state, offset);
     if (index === null) return Promise.resolve(this.#state);
     if (['idle', 'ended', 'error'].includes(this.#state.status)) return this.cueTrack(this.#tracks[index]!.id);
@@ -271,10 +315,11 @@ export class MusicPlayer {
     return this.#tail.then(() => this.#state);
   }
 
-  #switch(index: number, restore = false, paused = false): Promise<PlaybackSnapshot> {
+  #switch(index: number, restore = false, paused = false, recovering = false): Promise<PlaybackSnapshot> {
     if (this.#disposed) return Promise.resolve(this.#state);
     const track = this.#tracks[index];
     if (!track) return Promise.resolve(this.#state);
+    this.#cancelErrorAdvance(!recovering);
     const bookmark = restore && this.#bookmark?.id === track.id ? this.#bookmark : undefined;
     if (!restore) this.#bookmark = undefined;
     this.#pendingSeek?.done(false); this.#pendingSeek = undefined; this.#seekSerial++;
@@ -324,8 +369,7 @@ export class MusicPlayer {
           onEvent: (event) => { if (this.#state.generation === generation) this.#event(event); },
           onFailure: () => {
             if (!this.#disposed && this.#state.generation === generation) {
-              this.#loaded = false;
-              this.#update({ status: 'error', error: appError('engine-unavailable') });
+              this.#resourceFailed(appError('engine-unavailable'));
             }
           },
         });
@@ -342,8 +386,7 @@ export class MusicPlayer {
         await this.#gateway?.close(); this.#gateway = undefined;
         if (this.#engine === engine) this.#engine = undefined;
         if (!this.#disposed && this.#state.generation === generation) {
-          this.#loaded = false;
-          this.#update({ status: 'error', error: normalizeError(error) });
+          this.#resourceFailed(normalizeError(error));
         }
       }
     });
@@ -356,6 +399,7 @@ export class MusicPlayer {
     } else if (event.event === 'playback-restart') {
       if (this.#pendingSeek?.generation === this.#state.generation && this.#pendingSeek.seen) this.#pendingSeek.done(true);
     } else if (event.event === 'file-loaded') {
+      this.#cancelErrorAdvance(false);
       this.#loaded = true; this.#bookmark = undefined;
       this.#update({ status: this.#paused ? 'paused' : 'playing' });
       void this.setVolume(this.#desiredVolume, false);
@@ -368,7 +412,7 @@ export class MusicPlayer {
         else this.#update({ status: 'ended' });
       }
       else if (event.reason === 'error' || event.reason === 'redirect') {
-        this.#update({ status: 'error', error: appError('playback-failed') });
+        this.#resourceFailed(appError('playback-failed'));
       }
     } else if (event.event === 'property-change') {
       const value = event.data;
@@ -378,7 +422,12 @@ export class MusicPlayer {
         this.#paused = value;
         if (this.#loaded) this.#update({ status: value ? 'paused' : 'playing' });
       } else if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-        if (event.name === 'time-pos' && this.#loaded) this.#update({ positionSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
+        if (event.name === 'time-pos' && this.#loaded) {
+          // file-loaded alone does not prove decoding succeeded. Clear the
+          // failure chain only once playback actually advances.
+          if (value > 0 && !this.#paused) this.#failedTracks.clear();
+          this.#update({ positionSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
+        }
         else if (event.name === 'duration') this.#update({ durationSeconds: Math.min(value, this.#previewSeconds ?? Infinity) });
         else if (event.name === 'volume' && this.#loaded && !this.#state.muted && Math.abs(value - this.#desiredVolume) < .01) this.#update({ volume: Math.min(value, 100) });
       }
@@ -396,7 +445,11 @@ export class MusicPlayer {
     return this.#state;
   }
 
-  pause(): Promise<PlaybackSnapshot> { return this.#control(['set_property', 'pause', true]); }
+  pause(): Promise<PlaybackSnapshot> {
+    this.#cancelErrorAdvance();
+    if (this.#state.status === 'error') this.#paused = true;
+    return this.#control(['set_property', 'pause', true]);
+  }
   resume(): Promise<PlaybackSnapshot> {
     if (this.#state.currentIndex !== null && (!this.#loaded || ['ended', 'idle', 'error'].includes(this.#state.status))) {
       return this.#switch(this.#state.currentIndex, this.#bookmark !== undefined);
@@ -464,6 +517,7 @@ export class MusicPlayer {
   }
 
   stop(): Promise<PlaybackSnapshot> {
+    this.#cancelErrorAdvance();
     this.#pendingSeek?.done(false); this.#pendingSeek = undefined; this.#seekSerial++;
     this.#bookmark = undefined;
     this.#abort.abort();

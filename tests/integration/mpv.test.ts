@@ -12,6 +12,7 @@ import { mpvProcesses } from '../helpers/mpv-processes.ts';
 import { MediaGateway, type FetchMedia } from '../../packages/playback/src/media-gateway.ts';
 import { parseKugouStream, parseKugouResourceIdentity } from '../../packages/providers/src/kugou/service.ts';
 import type { StreamResolution } from '../../packages/contracts/src/music.ts';
+import { DomainError } from '../../packages/contracts/src/errors.ts';
 
 async function until(check: () => boolean | Promise<boolean>): Promise<void> {
   const deadline = Date.now() + 6000;
@@ -23,6 +24,49 @@ async function until(check: () => boolean | Promise<boolean>): Promise<void> {
 async function children(): Promise<number[]> {
   return (await mpvProcesses()).map(item => item.pid);
 }
+
+test('损坏文件失败后等待 2.5 秒绕过单曲循环，下一首实际解码且只保留一个 mpv', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-skip-broken-'));
+  const player = new MusicPlayer({ audioOutput: 'null' });
+  const broken = path.join(directory, 'broken.wav'); const good = path.join(directory, 'good.wav');
+  let failedAt = 0;
+  const unsubscribe = player.subscribe(state => { if (!failedAt && state.status === 'error') failedAt = Date.now(); });
+  try {
+    await writeFile(broken, 'synthetic damaged audio'); await writeSilentWav(good, 10);
+    player.setMode('track'); await player.openFiles([broken, good]);
+    await until(() => player.snapshot().status === 'error');
+    assert.equal(player.snapshot().error?.code, 'playback-failed');
+    await until(() => player.snapshot().status === 'playing' && player.snapshot().currentIndex === 1);
+    assert.ok(Date.now() - failedAt >= 2400);
+    await until(() => player.snapshot().positionSeconds > 0);
+    assert.equal(player.snapshot().error, undefined);
+    assert.equal((await children()).length, 1);
+  } finally { unsubscribe(); await player.dispose(); await rm(directory, { recursive: true, force: true }); }
+  assert.deepEqual(await children(), []);
+});
+
+test('双平台取链失败后继续下一首，经真实网关与 mpv 播放合成音频', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-skip-online-'));
+  const file = path.join(directory, 'synthetic.wav'); await writeSilentWav(file, 10);
+  const audio = await readFile(file);
+  const fetch: FetchMedia = async () => ({ status: 200, headers: { 'content-type': 'audio/wav', 'content-length': String(audio.length) }, stream: Readable.from([audio]) });
+  const player = new MusicPlayer({ audioOutput: 'null', openGateway: (url, signal, provider) => MediaGateway.open(url, signal, fetch, provider) });
+  try {
+    for (const provider of ['netease', 'kugou'] as const) {
+      const stream: StreamResolution = { track: { provider, id: 'synthetic' },
+        source: { kind: 'remote', url: provider === 'netease' ? 'https://m1.music.126.net/synthetic' : 'https://fsandroid.kugou.com/synthetic', headers: {} },
+        access: { kind: 'full' }, quality: { level: 'standard' } };
+      await player.openRemoteList(provider, [
+        { title: '合成不可用资源', sourceId: 'unavailable', resolve: async () => { throw new DomainError('unavailable'); } },
+        { title: '合成可播放资源', sourceId: 'synthetic', resolve: async () => stream },
+      ]);
+      assert.equal(player.snapshot().status, 'error');
+      await until(() => player.snapshot().status === 'playing' && player.snapshot().currentIndex === 1 && player.snapshot().positionSeconds > 0);
+      assert.equal((await children()).length, 1);
+      await player.stop(); assert.deepEqual(await children(), []);
+    }
+  } finally { await player.dispose(); await rm(directory, { recursive: true, force: true }); }
+});
 
 test('真实 mpv EOF 驱动随机结束、列表回绕、单曲重播和随机一轮不重复，停止不自动重播', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-mode-mpv-'));
