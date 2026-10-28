@@ -1336,15 +1336,6 @@ main:focus {
   background: radial-gradient(ellipse at 100% 0, #f8b9c212, transparent 65%), var(--glass);
 }
 
-/* 平台账号在各自页面开头，替代设置中的双列账号卡。 */
-#provider-account { margin-bottom: 24px; padding: 18px 22px; }
-#provider-account .section-heading { margin-bottom: 0; }
-.account-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
-#provider-account .login-saved-note { margin-bottom: 0; }
-#provider-account .account-description { min-height: 0; margin: 12px 0; }
-#provider-account .account-connect { width: auto; }
-#provider-account .qr-login { max-width: 700px; }
-
 .account-card.kugou {
   background: radial-gradient(ellipse at 100% 0, #b1d8ff15, transparent 65%), var(--glass);
 }

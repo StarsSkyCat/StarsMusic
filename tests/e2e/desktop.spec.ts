@@ -68,6 +68,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
       await expect(page.locator('.settings-content .account-card')).toHaveCount(0);
       await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
+      await page.locator('.provider-account-trigger').click();
       await expect(page.locator('#provider-account').getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
       // 仅验证真实 utilityProcess 启动与临时退出，不自动生成/截图真实登录二维码。
       const provider = await page.evaluate(async () => {
@@ -85,6 +86,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       expect(kugou.initial).toBe('signed-out'); expect(kugou.logout).toBe('signed-out');
       expect(kugou.keys).toEqual(provider.keys.filter(key => key !== 'loadLikes' && key !== 'updateLibrary' && key !== 'refreshLibrary'));
       await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^酷狗音乐/ }).click();
+      await page.locator('.provider-account-trigger').click();
       await expect(page.locator('#provider-account').getByRole('button', { name: '连接酷狗', exact: true })).toBeVisible();
       const credentials = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { credentials: {

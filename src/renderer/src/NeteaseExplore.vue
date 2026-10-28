@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, UserRound, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
 import type { NeteaseSnapshot } from '../../../packages/contracts/src/netease';
 import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../../../packages/contracts/src/netease-catalog';
 import TrackTable from './TrackTable.vue';
@@ -80,7 +80,7 @@ onMounted(() => {
   <section class="netease-explore" aria-label="网易云音乐发现">
     <header class="ne-masthead">
       <div><h1>网易云音乐</h1><p>{{ subtitle }}</p></div>
-      <button class="ne-account" @click="$emit('manage')"><UserRound :size="17" /><span>{{ state.account?.nickname ?? '连接网易云' }}</span><ArrowUpRight :size="15" /></button>
+      <slot name="account" />
     </header>
     <nav class="catalog-tabs" aria-label="网易云浏览">
       <button v-for="(item, index) in tabs" :key="item.id" :aria-pressed="tab === item.id" :class="{ active: tab === item.id }" @click="switchTab(item.id)"><component :is="item.icon" :size="17" /><span>{{ item.label }}</span><small aria-hidden="true">0{{ index + 1 }}</small></button>

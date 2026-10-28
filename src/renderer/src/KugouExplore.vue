@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, ListMusic, ListPlus, Play, Search, Sparkles, UserRound } from '@lucide/vue';
+import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, ListMusic, ListPlus, Play, Search, Sparkles } from '@lucide/vue';
 import type { KugouSnapshot } from '../../../packages/contracts/src/kugou';
 import { kugouCatalogPageSize as pageSize, type KugouCatalogRequest } from '../../../packages/contracts/src/kugou-catalog';
 import TrackTable from './TrackTable.vue';
@@ -52,7 +52,7 @@ onMounted(() => { if (tab.value !== 'owned' && (catalog.value.status === 'idle' 
 
 <template>
   <section class="netease-explore kugou-explore" aria-label="酷狗音乐发现">
-    <header class="ne-masthead"><div><h1>酷狗音乐</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><button class="ne-account" @click="$emit('manage')"><UserRound :size="16" /><span>{{ state.account?.nickname ?? '连接酷狗账号' }}</span><ArrowUpRight :size="14" /></button></header>
+    <header class="ne-masthead"><div><h1>酷狗音乐</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><slot name="account" /></header>
     <nav class="catalog-tabs" aria-label="酷狗内容导航"><button v-for="item in [{ id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const" :key="item.id" :class="{ active: tab === item.id }" :aria-current="tab === item.id ? 'page' : undefined" @click="switchTab(item.id)"><component :is="item.icon" :size="17" />{{ item.label }}</button></nav>
 
     <template v-if="tab === 'owned'">

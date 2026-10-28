@@ -80,11 +80,14 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
     const explore = page.getByRole('region', { name: '网易云音乐发现', exact: true });
     await expect(explore.getByRole('button', { name: '热歌榜', exact: true })).toHaveCount(0);
-    await expect(explore.getByRole('button', { name: '合成展示账号', exact: true })).toBeVisible();
-    await expect(page.locator('#provider-account').getByLabel('网易云官方会员权益')).toContainText('黑胶 VIP');
+    await expect(explore.getByRole('button', { name: '网易云音乐账号：合成展示账号', exact: true })).toBeVisible();
+    await expect(page.locator('.provider-account-trigger .account-vip')).toHaveText('VIP');
+    await page.locator('.provider-account-trigger').click();
+    await expect(page.locator('#provider-account').getByLabel('网易云官方会员权益')).toContainText('VIP');
     await page.screenshot({ path: 'artifacts/netease-synthetic-account-header.png', animations: 'disabled' });
     await page.locator('#provider-account').getByRole('button', { name: '同步权益', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'membership' });
+    await page.keyboard.press('Escape');
     await expect(explore.getByRole('button', { name: /合成全部歌单/ })).toBeVisible();
     await explore.locator('.ne-cover-card').first().scrollIntoViewIfNeeded();
     await expect(explore.locator('.ne-cover-card img')).toBeVisible();

@@ -295,7 +295,9 @@ async function openProviderAccount(provider: Provider): Promise<void> {
   await nextTick();
   const account = document.getElementById('provider-account');
   account?.scrollIntoView({ block: 'start' });
-  account?.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
+  const trigger = account?.querySelector<HTMLButtonElement>('.provider-account-trigger');
+  if (trigger?.getAttribute('aria-expanded') !== 'true') trigger?.click();
+  trigger?.focus({ preventScroll: true });
 }
 async function openPlaying(): Promise<void> {
   if (nowPlayingOpen.value) return;
@@ -726,21 +728,6 @@ onUnmounted(() => {
               <FolderOpen :size="16" />选择本地音频</button
             >
           </div>
-          <ProviderAccount
-            @refresh-membership="providers[activeProvider].run(api => api.refreshMembership())"
-            v-if="activeProvider && !selectedPlaylistId"
-            id="provider-account"
-            :key="activeProvider"
-            :provider="activeProvider"
-            :state="providers[activeProvider].state.value"
-            :credentials="credentials.status.value"
-            :saving="credentials.busy[activeProvider]"
-            @remember="(value) => credentials.setRemember(activeProvider!, value)"
-            :error="providers[activeProvider].error.value || credentials.error.value"
-            @login="providers[activeProvider].run((api) => api.startLogin())"
-            @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
-            @logout="providers[activeProvider].run((api) => api.logout())"
-          />
           <section v-if="activeProvider && selectedPlaylistId" class="playlist-detail-heading">
             <button class="text-button" @click="backToPlaylists">
               <ChevronRight class="back-chevron" :size="15" />返回全部歌单
@@ -779,7 +766,23 @@ onUnmounted(() => {
             @open-owned="id => openPlaylist('netease', id)"
             @load-owned="providers.netease.run(api => api.loadPlaylists())"
             @manage="openProviderAccount('netease')"
-          />
+          >
+            <template #account>
+              <ProviderAccount
+                @refresh-membership="providers.netease.run(api => api.refreshMembership())"
+                id="provider-account"
+                provider="netease"
+                :state="providers.netease.state.value"
+                :credentials="credentials.status.value"
+                :saving="credentials.busy.netease"
+                @remember="(value) => credentials.setRemember('netease', value)"
+                :error="providers.netease.error.value || credentials.error.value"
+                @login="providers.netease.run((api) => api.startLogin())"
+                @cancel="providers.netease.run((api) => api.cancelLogin())"
+                @logout="providers.netease.run((api) => api.logout())"
+              />
+            </template>
+          </NeteaseExplore>
           <KugouExplore
             v-if="view === 'kugou' && !selectedPlaylistId"
             v-model:tab="kugouTab"
@@ -796,7 +799,23 @@ onUnmounted(() => {
             @open-owned="id => openPlaylist('kugou', id)"
             @load-owned="providers.kugou.run(api => api.loadPlaylists())"
             @manage="openProviderAccount('kugou')"
-          />
+          >
+            <template #account>
+              <ProviderAccount
+                @refresh-membership="providers.kugou.run(api => api.refreshMembership())"
+                id="provider-account"
+                provider="kugou"
+                :state="providers.kugou.state.value"
+                :credentials="credentials.status.value"
+                :saving="credentials.busy.kugou"
+                @remember="(value) => credentials.setRemember('kugou', value)"
+                :error="providers.kugou.error.value || credentials.error.value"
+                @login="providers.kugou.run((api) => api.startLogin())"
+                @cancel="providers.kugou.run((api) => api.cancelLogin())"
+                @logout="providers.kugou.run((api) => api.logout())"
+              />
+            </template>
+          </KugouExplore>
           <section
             v-if="view === 'library' && !selectedPlaylistId && !libraryRequest.query"
             class="playlist-section"
