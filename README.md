@@ -53,6 +53,30 @@ pnpm start
 
 `build` 生成 out/ 下的应用代码；`start` 运行已有构建。音频集成测试、桌面测试和本机打包要求见 [开发指南](docs/development.md)、[测试说明](docs/testing.md) 与 [打包说明](packaging/README.md)。
 
+### 构建 Windows EXE 安装包
+
+在 **Windows x64** 上准备 Node.js 24.x、pnpm 10.34.9，并将 [固定运行时清单](packaging/windows/mpv-runtime.json) 对应的 `mpv.exe` 和 `vulkan-1.dll` 放入仓库的 `.local/mpv/`。构建会校验两个文件的 SHA-256，不能直接替换成任意 mpv 版本；也可通过环境变量 `STARSMUSIC_MPV_DIR` 指定所在目录。
+
+在仓库根目录执行：
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm setup:electron
+pnpm package:win
+```
+
+`package:win` 自动执行类型检查、应用构建、生产依赖部署和 NSIS 打包，无需先手动执行 `pnpm build`。首次准备依赖和打包工具需要联网。
+
+产物为 `release/windows-<版本>/StarsMusic-<版本>-x64-Setup.exe`，同时生成 `.exe.sha256` 和 `win-unpacked/` 独立运行目录；`release/latest-windows.json` 记录实际路径与校验值。安装包内置 mpv，安装后无需另行配置 PATH。
+
+构建后可验证独立运行目录：
+
+```powershell
+pnpm test:package:win
+```
+
+若需验证真实安装和卸载，运行 `pnpm test:installer:win`；该命令会在临时目录实际安装、测试并卸载，发现既有 StarsMusic 安装时拒绝覆盖。当前包未签名，完整要求和发行限制见 [打包说明](packaging/README.md)。
+
 ## 项目结构
 
 ```text
