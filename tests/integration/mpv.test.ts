@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { MusicPlayer } from '../../packages/playback/src/player.ts';
 import { MpvClient } from '../../packages/playback/src/mpv-client.ts';
 import { writeSilentWav } from '../helpers/audio.ts';
+import { mpvProcesses } from '../helpers/mpv-processes.ts';
 import { MediaGateway, type FetchMedia } from '../../packages/playback/src/media-gateway.ts';
 import { parseKugouStream, parseKugouResourceIdentity } from '../../packages/providers/src/kugou/service.ts';
 import type { StreamResolution } from '../../packages/contracts/src/music.ts';
@@ -20,16 +21,11 @@ async function until(check: () => boolean | Promise<boolean>): Promise<void> {
   }
 }
 async function children(): Promise<number[]> {
-  const pids = (await readFile(`/proc/self/task/${process.pid}/children`, 'utf8')).trim().split(/\s+/).filter(Boolean);
-  const result: number[] = [];
-  for (const pid of pids) {
-    try { if ((await readlink(`/proc/${pid}/exe`)).endsWith('/mpv')) result.push(Number(pid)); } catch { /* 已退出 */ }
-  }
-  return result;
+  return (await mpvProcesses()).map(item => item.pid);
 }
 
 test('真实 mpv EOF 驱动随机结束、列表回绕、单曲重播和随机一轮不重复，停止不自动重播', async () => {
-  const directory = await mkdtemp('/tmp/starsmusic-mode-mpv-');
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-mode-mpv-'));
   const player = new MusicPlayer({ audioOutput: 'null' });
   const files = ['a.wav', 'b.wav', 'c.wav'].map(file => path.join(directory, file));
   try {
@@ -65,7 +61,7 @@ test('真实 mpv EOF 驱动随机结束、列表回绕、单曲重播和随机�
   assert.deepEqual(await children(), []);
 });
 
-test('实际 mpv 私有 FD 握手、请求关联、头重置与退出清理', async () => {
+test('实际 mpv 平台 IPC 握手、请求关联、头重置与退出清理', async () => {
   const client = new MpvClient({ audioOutput: 'null', onEvent: () => undefined, onFailure: () => undefined });
   try {
     assert.match(await client.start(), /mpv/);
@@ -78,9 +74,14 @@ test('实际 mpv 私有 FD 握手、请求关联、头重置与退出清理', as
     assert.deepEqual(await client.command(['get_property', 'http-header-fields']), []);
     await assert.rejects(client.command(['get_property', 'nonexistent-test-property']));
     assert.equal(await client.command(['get_property', 'pause']), false);
-    const commandLine = await readFile(`/proc/${client.pid}/cmdline`, 'utf8');
-    assert.ok(commandLine.includes('--input-ipc-client=fd://3'));
-    assert.ok(!commandLine.includes('--input-ipc-server'));
+    const commandLine = (await mpvProcesses()).find(item => item.pid === client.pid)!.commandLine;
+    if (process.platform === 'win32') {
+      assert.match(commandLine, /--input-ipc-server=\\\\\.\\pipe\\starsmusic-[0-9a-f-]{36}/);
+      assert.ok(!commandLine.includes('--input-ipc-client'));
+    } else {
+      assert.ok(commandLine.includes('--input-ipc-client=fd://3'));
+      assert.ok(!commandLine.includes('--input-ipc-server'));
+    }
     assert.ok(!commandLine.includes('synthetic'));
   } finally { await client.close(); }
   assert.deepEqual(await children(), []);
@@ -251,7 +252,7 @@ test('真实解码重启恢复：启动暂停且不创建 mpv，用户继续后�
     await second.seek(11); await second.resume();
     await until(() => second.snapshot().status === 'playing' && second.snapshot().positionSeconds >= 10.9);
     assert.equal((await children()).length, 1);
-    assert.match(await readFile(`/proc/${(await children())[0]}/cmdline`, 'utf8'), /--start=11/);
+    assert.match((await mpvProcesses())[0]!.commandLine, /--start=11/);
     await second.setMuted(false); assert.equal(second.snapshot().volume, 41);
   } finally { await first.dispose(); await second.dispose(); await rm(directory, { recursive: true, force: true }); }
 });
