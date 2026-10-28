@@ -28,6 +28,7 @@ class Transport implements KugouTransport {
     if (endpoint === 'playlists') return ok({ info: [{ listid: 1, name: '合成歌单', count: 1 }] });
     if (endpoint === 'playlist') return ok({ count: 1, info: [song] });
     if (endpoint === 'searchSongs') return ok({ total: 1, lists: [{ ...song, FileHash: hash, SongName: song.name }] });
+    if (endpoint === 'verifyPlayback' || endpoint === 'authorizePlayback' || endpoint === 'authorizedStream') return { status: 0 };
     return { status: 1, hash, url: ['https://fsandroid.kugou.com/synthetic'], priv_status: 0 };
   }
 }

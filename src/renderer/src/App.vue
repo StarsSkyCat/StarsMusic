@@ -18,7 +18,6 @@ import {
   Play,
   Search,
   Settings2,
-  Sparkles,
   X,
 } from '@lucide/vue';
 import { parseAppInfo, type AppInfo } from '../../../packages/contracts/src/desktop';
@@ -34,10 +33,11 @@ import VolumeControl from './VolumeControl.vue';
 import PlaybackControls from './PlaybackControls.vue';
 import TrackTable from './TrackTable.vue';
 import NowPlayingPage from './NowPlayingPage.vue';
-import GlassScene from './GlassScene.vue';
+import libraryArtwork from './assets/stars-night.png';
 import LibrarySearch from './LibrarySearch.vue';
 import AppearancePanel from './AppearancePanel.vue';
 import DesktopPanel from './DesktopPanel.vue';
+import WindowControls from './WindowControls.vue';
 import type { NeteaseMutation } from '../../../packages/contracts/src/netease-library';
 import NeteaseTrackActions from './NeteaseTrackActions.vue';
 import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
@@ -499,17 +499,13 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
-    <div class="ambient-field" aria-hidden="true">
-      <i></i><i></i><i></i>
-    </div>
+    <div class="ambient-field" aria-hidden="true"></div>
     <a class="skip-link" href="#main" @click.prevent="mainPane?.focus()">跳到主内容</a>
     <aside class="sidebar" aria-label="主导航">
       <a class="brand" href="#main" @click.prevent="navigate('library')"
-        ><span class="brand-mark"><Sparkles :size="23" /></span>StarsMusic<span class="brand-dot"
-          >.</span
-        ></a
+        ><span class="brand-mark"><AudioLines :size="22" /></span>StarsMusic</a
       >
-      <p class="sidebar-label">听见你的宇宙 <span>01 / EXPLORE</span></p>
+      <p class="sidebar-label">资料库</p>
       <nav class="main-navigation" aria-label="音乐库">
         <button
           :class="{ active: view === 'library' && !nowPlayingOpen }"
@@ -533,7 +529,7 @@ onUnmounted(() => {
           ></span>
         </button>
       </nav>
-      <p class="sidebar-label source-label">音乐来源 <span>02 / CONNECT</span></p>
+      <p class="sidebar-label source-label">音乐来源</p>
       <nav class="main-navigation" aria-label="音乐来源">
         <button
           :class="{ active: view === 'local' && !nowPlayingOpen }"
@@ -566,12 +562,11 @@ onUnmounted(() => {
         :aria-label="`打开本次播放队列，${playback.queue.length} 首音乐`"
         @click="showQueue"
       >
-        <span class="session-symbol"><AudioLines :size="22" /></span>
-        <span class="sidebar-note-title">让音乐接着发生</span>
+        <span class="sidebar-note-title">本次聆听</span>
         <span class="sidebar-queue">
           <ListMusic :size="18" /><strong>{{ playback.queue.length }} 首音乐</strong
           ><ChevronRight :size="15" /></span
-        ><small>顺序播放 · 自动保存</small>
+        ><small>队列与进度自动保存</small>
       </button>
       <button
         class="settings-nav"
@@ -581,7 +576,7 @@ onUnmounted(() => {
       >
         <Settings2 :size="18" />账号与设置
       </button>
-      <span class="sidebar-footer"><i></i>STARS MUSIC / LINUX</span>
+      <span class="sidebar-footer">为每一次聆听。</span>
     </aside>
 
     <main id="main" ref="mainPane" tabindex="-1" :class="{ 'is-playing-view': nowPlayingOpen }">
@@ -607,6 +602,7 @@ onUnmounted(() => {
           <span class="avatar"><Headphones :size="17" /></span
           ><span>{{ connectedCount ? `${connectedCount} 个账号已连接` : '连接音乐账号' }}</span>
         </button>
+        <WindowControls />
       </header>
       <div
         class="content"
@@ -629,50 +625,30 @@ onUnmounted(() => {
         />
         <template v-else-if="view !== 'settings'">
           <LibrarySearch v-if="view === 'library' && libraryRequest.query" :query="libraryRequest.query" :search-type="libraryRequest.searchType" :request-id="libraryRequest.revision" :netease="neteaseState" :kugou="kugouState" :errors="libraryErrors" :opening="libraryOpening" :local-tracks="localTracks" :playlists="playlists" :current-track="currentTrack" @request="requestLibrarySource" @type="submitLibrarySearch" @play="playLibraryTrack" @enqueue="enqueueLibraryTracks" @open="openLibraryPublic" @open-owned="openPlaylist" @manage="navigate('settings')" />
-          <section
-            v-if="view === 'library' && !libraryRequest.query"
-            class="library-overview"
-            aria-labelledby="library-title"
-          >
-            <div class="library-intro">
-              <span class="eyebrow"><span></span>YOUR PERSONAL SOUNDSPACE</span>
-              <h1 id="library-title">音乐库</h1>
-              <h2 class="hero-headline">让声音，<br /><em>自由流动。</em></h2>
-              <p>穿过日常的喧嚣，抵达你的音乐宇宙。</p>
-              <div class="library-actions">
-                <button class="primary-button" @click="openFiles">
-                  <FolderOpen :size="16" />选择本地音频</button
-                ><button class="text-button" @click="navigate('settings')">
-                  {{ connectedCount ? '管理音乐账号' : '连接音乐账号' }}<ArrowRight :size="16" />
-                </button>
+          <template v-if="view === 'library' && !libraryRequest.query">
+            <div class="library-heading">
+              <div><h1 id="library-title">音乐库</h1><p>喜欢的音乐，都在这里。</p></div>
+              <span class="library-summary">{{ localTracks.length }} 首本地音乐 · {{ playlists.length }} 张歌单</span>
+            </div>
+            <section class="library-overview" aria-label="开始聆听">
+              <img class="library-landscape" :src="libraryArtwork" alt="" />
+              <div class="library-intro">
+                <span class="hero-kicker"><AudioLines :size="16" />属于你的音乐时刻</span>
+                <h2 class="hero-headline">让喜欢的声音，<br />陪你一整天。</h2>
+                <p>从一首熟悉的歌开始。</p>
+                <div class="library-actions">
+                  <button class="primary-button" @click="openFiles"><FolderOpen :size="16" />选择本地音频</button>
+                  <button class="text-button" @click="navigate('netease')">发现新音乐<ArrowRight :size="16" /></button>
+                </div>
               </div>
-            </div>
-            <div class="hero-art">
-              <GlassScene />
-              <span class="hero-art-label">A LITTLE SPACE. ALL YOUR MUSIC.</span>
-            </div>
-            <button v-if="currentTrack" class="library-current" @click="continueListening">
-              <span class="library-current-art"
-                ><img
-                  v-if="artwork && !artworkFailed"
-                  :src="artwork"
-                  alt=""
-                  @error="artworkFailed = true" /><Disc3 v-else :size="35" /></span
-              ><span class="library-current-copy"
-                ><small>继续聆听</small><strong>{{ currentTrack.title }}</strong
-                ><span>{{
-                  currentTrack.artist || providerNames[currentTrack.provider ?? 'local']
-                }}</span></span
-              ><Play :size="18" fill="currentColor" />
-            </button>
-            <div v-else class="library-start-note">
-              <span class="library-start-icon"><Headphones :size="19" /></span>
-              <div>
-                <strong>好音乐，从你的收藏开始</strong>
-                <p>本地音乐与平台歌单，在这里相遇。</p>
-              </div>
-            </div>
-          </section>
+              <button v-if="currentTrack" class="library-current" @click="continueListening">
+                <span class="library-current-art"><img v-if="artwork && !artworkFailed" :src="artwork" alt="" @error="artworkFailed = true" /><Disc3 v-else :size="28" /></span>
+                <span class="library-current-copy"><small>继续聆听</small><strong>{{ currentTrack.title }}</strong><span>{{ currentTrack.artist || providerNames[currentTrack.provider ?? 'local'] }}</span></span>
+                <Play :size="18" fill="currentColor" />
+              </button>
+              <span v-else class="library-art-caption">STARS MUSIC · YOUR SOUND, YOUR SPACE</span>
+            </section>
+          </template>
           <section
             v-if="view === 'library' && !libraryRequest.query"
             class="source-section"
@@ -680,15 +656,15 @@ onUnmounted(() => {
           >
             <div class="section-heading">
               <div class="heading-with-count">
-                <span class="section-index">01</span>
-                <h2 id="sources-title">你的音乐空间</h2>
+
+                <h2 id="sources-title">音乐来源</h2>
               </div>
               <span class="muted small">{{ connectedCount }} / 2 个平台已连接</span>
             </div>
             <div class="source-grid">
               <button class="source-card local" @click="navigate('local')">
                 <span class="source-card-top">
-                  <span>ON YOUR DEVICE</span><ArrowRight :size="17" />
+                  <ArrowRight :size="17" />
                 </span>
                 <span class="source-icon"><FolderOpen :size="23" /></span
                 ><span class="source-card-copy"
@@ -696,9 +672,9 @@ onUnmounted(() => {
                   ><small>{{
                     localTracks.length
                       ? `${localTracks.length} 首 · 已加入队列`
-                      : '从你的设备，发现好音乐'
+                      : '播放设备上的音频文件'
                   }}</small></span
-                ><span class="source-card-state"><i></i>随时出发</span>
+                ><span class="source-card-state"><i></i>本机文件</span>
               </button>
               <button
                 v-for="id in providerIds"
@@ -708,7 +684,6 @@ onUnmounted(() => {
                 @click="navigate(id)"
               >
                 <span class="source-card-top">
-                  <span>{{ id === 'netease' ? 'NETEASE CLOUD' : 'KUGOU MUSIC' }}</span>
                   <ArrowRight :size="17" />
                 </span>
                 <span class="source-icon"><Cloud :size="23" /></span
@@ -721,7 +696,7 @@ onUnmounted(() => {
                   class="source-card-state"
                   :class="{ connected: providers[id].state.value.status === 'connected' }"
                   ><i></i>{{
-                    providers[id].state.value.status === 'connected' ? '已连接' : '等待连接'
+                    providers[id].state.value.status === 'connected' ? '已连接' : '浏览公开歌单'
                   }}</span
                 >
               </button>
@@ -810,7 +785,7 @@ onUnmounted(() => {
           >
             <div class="section-heading">
               <div class="heading-with-count">
-                <span class="section-index">{{ view === 'library' ? '02' : '01' }}</span>
+
                 <h2 id="playlists-title">我的歌单</h2>
                 <span class="count-pill">{{ filteredPlaylists.length }}</span>
               </div>
@@ -992,11 +967,11 @@ onUnmounted(() => {
         <template v-else>
           <div class="page-heading settings-heading">
             <div>
-              <span class="eyebrow">MAKE YOURSELF AT HOME</span>
+              <span class="eyebrow">偏好设置</span>
               <h1>账号与设置</h1>
               <p>连接音乐来源，让每一份收藏都触手可及。</p>
             </div>
-            <span class="page-heading-symbol" aria-hidden="true"><Settings2 :size="42" :stroke-width="1.2" /></span>
+
           </div>
           <AppearancePanel />
           <DesktopPanel />
@@ -1074,11 +1049,11 @@ onUnmounted(() => {
             v-else
             :size="25" /></span
         ><span class="now-playing-copy"
-          ><strong>{{ currentTrack?.title ?? '此刻，听点喜欢的。' }}</strong
+          ><strong>{{ currentTrack?.title ?? '未在播放' }}</strong
           ><small>{{
             currentTrack
               ? `${currentTrack.artist || providerNames[currentTrack.provider ?? 'local']} · ${statusText}`
-              : '选择一首歌，开启你的音乐时刻'
+              : '从音乐库选择歌曲'
           }}</small></span
         >
       </button>
@@ -1109,7 +1084,7 @@ onUnmounted(() => {
     >
       <div class="drawer-header">
         <div>
-          <span class="eyebrow">UP NEXT</span>
+          <span class="eyebrow">本次聆听</span>
           <h2 id="queue-title">
             播放队列 <span class="muted">{{ playback.queue.length }}</span>
           </h2>
@@ -1177,7 +1152,7 @@ onUnmounted(() => {
           <p>在歌曲旁点击「下一首播放」，<br />音乐会在这里接着响起。</p>
         </div>
       </div>
-      <p class="drawer-footnote">顺序播放 · 队列与进度自动保存 · 最多 10000 首</p>
+      <p class="drawer-footnote">队列与进度自动保存 · 最多 10000 首</p>
     </dialog>
     <dialog ref="addDialog" class="ne-add-dialog" aria-labelledby="ne-add-title">
       <header><div><span class="eyebrow">SAVE TO YOUR COLLECTION</span><h2 id="ne-add-title">添加到自建歌单</h2><p>选择歌单后，将保存到网易云账号。</p></div><button class="icon-button" aria-label="关闭添加到歌单" @click="addDialog?.close()"><X :size="19" /></button></header>

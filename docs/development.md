@@ -4,7 +4,7 @@
 
 酷狗已补充独立音乐空间：发现歌单、歌曲/歌单搜索、公开详情分页、私人歌单与曲目封面、整单播放及多选下一首。匿名浏览和封面已用真实接口/桌面验证，真实账号搜索播放仍待验收；收藏/歌单编辑尚未实现，见 [接入记录](validation/2026-10-27-kugou-discovery.md)。
 
-已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、system、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加整单播放、喜欢、自建歌单编辑、公开歌单收藏，以及官方会员套餐同步与单曲收费/取链权限标记，收藏写入及会员响应兼容的真实账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库、安装包尚未验证或实现；Linux MPRIS、服务探测、通知、托盘和快捷键已实现，见 [桌面集成验证](validation/2026-10-27-linux-desktop.md)。
+已实现安全窗口、本地播放、网易云 App 扫码/私人歌单/分类公开歌单/歌曲与歌单搜索/播放，酷狗标准版 App 扫码、设备注册、账号验证、歌单/曲目分页、流解析和单曲播放，以及可选的 SQLite 加密“记住登录”。preload 暴露 getAppInfo、system、appearance、playback、netease、kugou、presentation、credentials 的具体白名单方法；网易云已增加整单播放、喜欢、自建歌单编辑、公开歌单收藏，以及官方会员套餐同步与单曲收费/取链权限标记，收藏写入及会员响应兼容的真实账号矩阵仍待验收；真实账号跨重启恢复、目录扫描、音乐库数据库与其他发行包仍待实现；已提供本机 Arch 原生验证包；Linux MPRIS、服务探测、通知、托盘和快捷键已实现，见 [桌面集成验证](validation/2026-10-27-linux-desktop.md)。
 
 领域契约见 [公共契约](contracts.md)，播放基础见 [播放说明](playback.md)，独立后台进程与临时扫码流程见 [网易云说明](netease.md) 和 [酷狗说明](kugou.md)，登录保存见 [凭据持久化](credentials.md)。默认关闭“记住登录”时，应用关闭后不保留网易云或酷狗登录，需要重新扫码。
 
@@ -51,7 +51,7 @@ pnpm test:e2e
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。
 - start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、两个平台的匿名后台状态、本地选择、默认系统音频输出和退出，需 Linux、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。
 
-Linux 默认关闭窗口退出；已提供托盘菜单、可选关闭到托盘、后台切歌通知、MPRIS 和窗口/全局快捷键。关闭到托盘要求实际宿主和本进程图标注册仍成立；宿主丢失恢复窗口。设置与实测边界见 [Linux 桌面集成](linux-desktop.md)。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用云瓷白 / 曜石黑 Liquid Glass 设计，包含悬浮侧栏、折射唱片主视觉、来源卡、平台扫码步骤、歌单详情、列表筛选、多选下一首、玻璃队列抽屉和独立播放页；底部播放舱持续可用。布局和视觉检查见 [液态玻璃记录](validation/2026-10-27-liquid-glass.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。网易云发现页提供真实封面网格与搜索空间，见 [重设计与封面验证](validation/2026-10-27-netease-redesign.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词采用无框悬浮布局，居中显示并按区域大小放大字号/行距，远处歌词淡出；本地音乐归入来源分组第一项，左下队列卡整块可点击，见 [交互调整](validation/2026-10-27-floating-lyrics.md)。歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
+Linux 默认关闭窗口退出；已提供托盘菜单、可选关闭到托盘、后台切歌通知、MPRIS 和窗口/全局快捷键。关闭到托盘要求实际宿主和本进程图标注册仍成立；宿主丢失恢复窗口。设置与实测边界见 [Linux 桌面集成](linux-desktop.md)。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用中性浅色 / 暗色内容层与悬浮玻璃控制层，包含紧凑侧栏、原创山景音乐库、来源入口、平台搜索与封面网格、账号设置、曲目表、队列抽屉和独立播放页；底部播放条持续可用。全界面材质、布局、减少透明度降级与本机检查见 [重设计记录](validation/2026-10-28-interface-redesign.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。网易云发现页提供真实封面网格与搜索空间，见 [重设计与封面验证](validation/2026-10-27-netease-redesign.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词采用无框悬浮布局，居中显示并按区域大小放大字号/行距，远处歌词淡出；本地音乐归入来源分组第一项，左下队列卡整块可点击，见 [交互调整](validation/2026-10-27-floating-lyrics.md)。歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
 
 环境已提供 Corepack、但没有 pnpm 命令时，可直接执行以下命令，无需全局安装：
 
@@ -119,6 +119,8 @@ main、preload、renderer、公共契约、会话守卫、网易云 Provider、�
 
 ## 日常开发
 
+窗口控制使用 `window` 白名单桥接与 `packages/desktop/src/window-controls.ts` 公共适配；主进程只接受当前主窗口精确主文档的无参命令。Linux/Windows 使用应用内按钮，macOS 保留原生按钮，平台差异不由页面启动系统进程实现。实际范围见 [窗口控制验证](validation/2026-10-28-window-controls.md)。
+
 播放模式由唯一 MusicPlayer 管理，底栏单按钮三模式控制、MPRIS 以及桌面切歌共用队列导航；模式和随机顺序跨重启保存。验证范围见 [播放模式记录](validation/2026-10-27-playback-modes.md)。
 
 底栏播放权限与音质标签在 960px 起的窗口中保留完整宽度，双主题缩放验证见 [底栏信息记录](validation/2026-10-27-player-details.md)。
@@ -138,3 +140,7 @@ main、preload、renderer、公共契约、会话守卫、网易云 Provider、�
 默认不自动配置远程地址、推送、修改全局 Git 身份或创建发布标签。初始化与文件变更状态应分别记录；没有提交时明确说明尚无初始提交。
 
 开发检查不要求联网、真实平台账号或读取用户主目录的凭据文件。
+
+## 本机 Arch 原生包
+
+`pnpm package:arch` 进行类型检查、构建、白名单生产部署和 makepkg 打包，生成忽略的 release/ 安装包与 SHA-256。`pnpm test:package` 使用该独立运行目录测试可用的 Wayland/X11、系统输出与 MPRIS；`pnpm test:package /opt/starsmusic/starsmusic` 检查实际安装路径。仅作用于临时测试配置，不自动登录或读取真实账号。工具要求、安装/卸载与实际边界见 [打包说明](../packaging/README.md) 和 [Arch 记录](validation/2026-10-27-arch-package.md)。

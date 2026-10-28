@@ -39,7 +39,7 @@ export function parseTracks(value: unknown): { items: BackendTrack[]; received: 
       if (!/^[a-f0-9]{32}$/.test(hash)) continue;
       const singers = Array.isArray(raw.singerinfo) ? raw.singerinfo
         : Array.isArray(raw.authors) ? raw.authors : Array.isArray(raw.Singers) ? raw.Singers : [];
-      const artists = singers.flatMap((value: unknown) => {
+      let artists = singers.flatMap((value: unknown) => {
         try {
           const singer = record(value, 'kugou.singer');
           return [text(singer.name ?? singer.author_name, 'kugou.singer.name')];
@@ -47,6 +47,12 @@ export function parseTracks(value: unknown): { items: BackendTrack[]; received: 
       });
       const name = text(raw.name ?? raw.filename ?? raw.songname ?? raw.SongName ?? raw.FileName, 'kugou.song.name').replace(/\.(?:mp3|flac|m4a|aac|ogg|wav|ape|opus|aiff?)$/i, '').trim();
       if (!name) continue;
+      if (!artists.length) {
+        const singer = raw.singername ?? raw.SingerName;
+        const prefix = name.match(/^(.+?)\s+[-–—]\s+\S/u)?.[1];
+        if (typeof singer === 'string' && singer.trim()) artists = [singer.trim()];
+        else if (prefix) artists = [prefix.trim()];
+      }
       const timelen = optionalInteger(raw.timelen, 'kugou.timelen');
       const seconds = optionalInteger(raw.duration ?? raw.Duration, 'kugou.duration');
       const durationMs = timelen ?? (seconds === undefined ? 0 : seconds * 1000);
