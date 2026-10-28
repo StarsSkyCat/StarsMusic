@@ -19,7 +19,7 @@ test('真实窗口按钮、系统状态同步、双主题最小布局、粘顶�
     const api = await page.evaluate(() => Object.keys((window as unknown as { starsMusic: DesktopApi }).starsMusic.window).sort());
     expect(api).toEqual(['close', 'getState', 'minimize', 'onChanged', 'toggleMaximize']);
     for (const theme of ['light', 'dark'] as const) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
       await page.getByRole('radio', { name: theme === 'light' ? '浅色' : '暗色', exact: true }).check();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await page.getByRole('navigation', { name: '音乐库', exact: true }).getByRole('button', { name: '音乐库', exact: true }).click();
@@ -53,7 +53,7 @@ test('真实窗口按钮、系统状态同步、双主题最小布局、粘顶�
     await page.getByRole('button', { name: '最小化窗口', exact: true }).click();
     await expect.poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMinimized())).toBe(true);
     await desktop.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]!; win.restore(); win.show(); win.focus(); });
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await page.locator('main').evaluate(element => { element.scrollTop = element.scrollHeight; });
     await expect(page.getByRole('button', { name: '关闭窗口', exact: true })).toBeInViewport();
     const closed = desktop.waitForEvent('close');

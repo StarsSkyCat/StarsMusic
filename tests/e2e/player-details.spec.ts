@@ -25,7 +25,7 @@ test('双主题底栏完整显示播放权限和音质，缩放后不挤压音�
     const player = page.getByRole('contentinfo', { name: '播放状态' });
     const label = player.locator('.quality-label');
     for (const theme of ['浅色', '暗色']) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
       const radio = page.getByRole('radio', { name: theme, exact: true });
       await radio.check(); await expect(radio).toBeEnabled();
       for (const width of [960, 1150, 1151, 1241, 1280, 1440]) {

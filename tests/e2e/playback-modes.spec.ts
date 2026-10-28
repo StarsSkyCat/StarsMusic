@@ -81,7 +81,7 @@ test('真实 Electron/mpv：UI 与 MPRIS 双向模式同步、暂停切歌、双
     await set('Shuffle', new dbus.Variant('b', true));
     await expect(page.getByRole('button', { name: '随机播放', exact: true })).toBeVisible();
     for (const theme of ['浅色', '暗色']) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
       await page.getByRole('radio', { name: theme, exact: true }).check();
       for (const width of [960, 1150, 1241, 1440]) {
         await page.setViewportSize({ width, height: 800 });

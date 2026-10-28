@@ -17,18 +17,11 @@ export function useCredentials() {
     } catch { error.value = '登录保存设置失败，请重试。'; }
     finally { busy[provider] = false; }
   }
-  async function clear(): Promise<void> {
-    error.value = '';
-    try {
-      if (!window.starsMusic) throw new Error('bridge unavailable');
-      receive(await window.starsMusic.credentials.clear());
-    } catch { error.value = '清除已保存登录失败，请重试。'; }
-  }
   onMounted(() => {
     if (!window.starsMusic) return;
     unsubscribe = window.starsMusic.credentials.onChanged(receive);
     void window.starsMusic.credentials.getStatus().then(receive).catch(() => { error.value = '暂时无法读取登录保存状态。'; });
   });
   onUnmounted(() => unsubscribe?.());
-  return { status, busy, error, setRemember, clear };
+  return { status, busy, error, setRemember };
 }

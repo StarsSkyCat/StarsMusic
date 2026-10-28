@@ -23,8 +23,8 @@ test('真实 Windows Electron：托盘、关闭隐藏/恢复、实际快捷键�
     await expect.poll(async () => (await state()).tray.state).toBe('available');
     expect((await state()).preferences.closeToTray).toBe(false);
     expect((await state()).mpris.state).toBe('unavailable'); expect((await state()).notifications.state).toBe('unavailable');
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '桌面集成', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '桌面设置', exact: true })).toBeVisible();
     await expect(page.getByText('MPRIS 媒体控制', { exact: true })).toHaveCount(0);
     await expect(page.getByText('桌面 Portal', { exact: true })).toHaveCount(0);
     await page.screenshot({ path: 'artifacts/windows-desktop-settings.png', animations: 'disabled' });

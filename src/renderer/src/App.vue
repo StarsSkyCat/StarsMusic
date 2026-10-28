@@ -27,7 +27,6 @@ import {
   type PlaybackSnapshot,
 } from '../../../packages/contracts/src/playback';
 import { useCredentials } from './useCredentials';
-import CredentialPanel from './CredentialPanel.vue';
 import ProviderAccount from './ProviderAccount.vue';
 import VolumeControl from './VolumeControl.vue';
 import PlaybackControls from './PlaybackControls.vue';
@@ -162,7 +161,7 @@ const backLabel = computed(() =>
   view.value === 'library'
     ? '音乐库'
     : view.value === 'settings'
-      ? '账号与设置'
+      ? '设置'
       : providerNames[view.value],
 );
 const queryInput = ref<HTMLInputElement>();
@@ -222,7 +221,7 @@ const title = computed(() =>
     : view.value === 'library'
       ? '音乐库'
       : view.value === 'settings'
-        ? '账号与设置'
+        ? '设置'
         : providerNames[view.value],
 );
 const activeProvider = computed(() =>
@@ -290,6 +289,13 @@ function navigate(to: typeof view.value): void {
   query.value = '';
   selected.value = [];
   void nextTick(() => mainPane.value?.scrollTo({ top: 0 }));
+}
+async function openProviderAccount(provider: Provider): Promise<void> {
+  if (view.value !== provider || selectedPlaylistId.value || nowPlayingOpen.value) navigate(provider);
+  await nextTick();
+  const account = document.getElementById('provider-account');
+  account?.scrollIntoView({ block: 'start' });
+  account?.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
 }
 async function openPlaying(): Promise<void> {
   if (nowPlayingOpen.value) return;
@@ -574,7 +580,7 @@ onUnmounted(() => {
         :aria-current="view === 'settings' && !nowPlayingOpen ? 'page' : undefined"
         @click="navigate('settings')"
       >
-        <Settings2 :size="18" />账号与设置
+        <Settings2 :size="18" />设置
       </button>
       <span class="sidebar-footer">为每一次聆听。</span>
     </aside>
@@ -598,9 +604,9 @@ onUnmounted(() => {
             placeholder="筛选歌曲、歌手或歌单"
           /><kbd>/</kbd></label
         >
-        <button class="account-shortcut" aria-label="打开账号与设置" @click="navigate('settings')">
+        <button class="account-shortcut" aria-label="打开设置" @click="navigate('settings')">
           <span class="avatar"><Headphones :size="17" /></span
-          ><span>{{ connectedCount ? `${connectedCount} 个账号已连接` : '连接音乐账号' }}</span>
+          ><span>设置</span>
         </button>
         <WindowControls />
       </header>
@@ -624,7 +630,7 @@ onUnmounted(() => {
           @queue="showQueue"
         />
         <template v-else-if="view !== 'settings'">
-          <LibrarySearch v-if="view === 'library' && libraryRequest.query" :query="libraryRequest.query" :search-type="libraryRequest.searchType" :request-id="libraryRequest.revision" :netease="neteaseState" :kugou="kugouState" :errors="libraryErrors" :opening="libraryOpening" :local-tracks="localTracks" :playlists="playlists" :current-track="currentTrack" @request="requestLibrarySource" @type="submitLibrarySearch" @play="playLibraryTrack" @enqueue="enqueueLibraryTracks" @open="openLibraryPublic" @open-owned="openPlaylist" @manage="navigate('settings')" />
+          <LibrarySearch v-if="view === 'library' && libraryRequest.query" :query="libraryRequest.query" :search-type="libraryRequest.searchType" :request-id="libraryRequest.revision" :netease="neteaseState" :kugou="kugouState" :errors="libraryErrors" :opening="libraryOpening" :local-tracks="localTracks" :playlists="playlists" :current-track="currentTrack" @request="requestLibrarySource" @type="submitLibrarySearch" @play="playLibraryTrack" @enqueue="enqueueLibraryTracks" @open="openLibraryPublic" @open-owned="openPlaylist" @manage="openProviderAccount" />
           <template v-if="view === 'library' && !libraryRequest.query">
             <div class="library-heading">
               <div><h1 id="library-title">音乐库</h1><p>喜欢的音乐，都在这里。</p></div>
@@ -718,10 +724,23 @@ onUnmounted(() => {
             </div>
             <button v-if="view === 'local'" class="primary-button" @click="openFiles">
               <FolderOpen :size="16" />选择本地音频</button
-            ><button v-else class="subtle-button" @click="navigate('settings')">
-              管理账号<ChevronRight :size="16" />
-            </button>
+            >
           </div>
+          <ProviderAccount
+            @refresh-membership="providers[activeProvider].run(api => api.refreshMembership())"
+            v-if="activeProvider && !selectedPlaylistId"
+            id="provider-account"
+            :key="activeProvider"
+            :provider="activeProvider"
+            :state="providers[activeProvider].state.value"
+            :credentials="credentials.status.value"
+            :saving="credentials.busy[activeProvider]"
+            @remember="(value) => credentials.setRemember(activeProvider!, value)"
+            :error="providers[activeProvider].error.value || credentials.error.value"
+            @login="providers[activeProvider].run((api) => api.startLogin())"
+            @cancel="providers[activeProvider].run((api) => api.cancelLogin())"
+            @logout="providers[activeProvider].run((api) => api.logout())"
+          />
           <section v-if="activeProvider && selectedPlaylistId" class="playlist-detail-heading">
             <button class="text-button" @click="backToPlaylists">
               <ChevronRight class="back-chevron" :size="15" />返回全部歌单
@@ -759,7 +778,7 @@ onUnmounted(() => {
             @enqueue="ids => enqueueCatalog(ids)"
             @open-owned="id => openPlaylist('netease', id)"
             @load-owned="providers.netease.run(api => api.loadPlaylists())"
-            @manage="navigate('settings')"
+            @manage="openProviderAccount('netease')"
           />
           <KugouExplore
             v-if="view === 'kugou' && !selectedPlaylistId"
@@ -776,7 +795,7 @@ onUnmounted(() => {
             @play-playlist="id => playWholePlaylist(id, 'kugou', 'public')"
             @open-owned="id => openPlaylist('kugou', id)"
             @load-owned="providers.kugou.run(api => api.loadPlaylists())"
-            @manage="navigate('settings')"
+            @manage="openProviderAccount('kugou')"
           />
           <section
             v-if="view === 'library' && !selectedPlaylistId && !libraryRequest.query"
@@ -968,34 +987,13 @@ onUnmounted(() => {
           <div class="page-heading settings-heading">
             <div>
               <span class="eyebrow">偏好设置</span>
-              <h1>账号与设置</h1>
-              <p>连接音乐来源，让每一份收藏都触手可及。</p>
+              <h1>设置</h1>
+              <p>按你的习惯，调整外观与桌面行为。</p>
             </div>
 
           </div>
           <AppearancePanel />
           <DesktopPanel />
-          <div class="accounts-grid">
-            <ProviderAccount
-              @refresh-membership="providers[id].run(api => api.refreshMembership())"
-              v-for="id in providerIds"
-              :key="id"
-              :provider="id"
-              :state="providers[id].state.value"
-              :credentials="credentials.status.value"
-              :saving="credentials.busy[id]"
-              @remember="(value) => credentials.setRemember(id, value)"
-              :error="providers[id].error.value"
-              @login="providers[id].run((api) => api.startLogin())"
-              @cancel="providers[id].run((api) => api.cancelLogin())"
-              @logout="providers[id].run((api) => api.logout())"
-            />
-          </div>
-          <CredentialPanel
-            :status="credentials.status.value"
-            :error="credentials.error.value"
-            @clear="credentials.clear"
-          />
           <details class="runtime-disclosure">
             <summary><Monitor :size="17" />应用信息与诊断</summary>
             <section class="runtime" aria-labelledby="runtime-title">

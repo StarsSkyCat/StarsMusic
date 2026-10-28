@@ -5,7 +5,6 @@ import type { KugouSnapshot } from '../../../packages/contracts/src/kugou';
 import { kugouCatalogPageSize as pageSize, type KugouCatalogRequest } from '../../../packages/contracts/src/kugou-catalog';
 import TrackTable from './TrackTable.vue';
 import PlatformSearch from './PlatformSearch.vue';
-import KugouMembership from './KugouMembership.vue';
 import KugouArtwork from './KugouArtwork.vue';
 import type { DisplayTrack } from './music-ui';
 import './netease.css';
@@ -56,7 +55,6 @@ onMounted(() => { if (tab.value !== 'owned' && (catalog.value.status === 'idle' 
     <header class="ne-masthead"><div><h1>酷狗音乐</h1><p>{{ tab === 'owned' ? '同步你的酷狗收藏，继续熟悉的旋律。' : '搜索歌曲、发现歌单，开启一段新的聆听。' }}</p></div><button class="ne-account" @click="$emit('manage')"><UserRound :size="16" /><span>{{ state.account?.nickname ?? '连接酷狗账号' }}</span><ArrowUpRight :size="14" /></button></header>
     <nav class="catalog-tabs" aria-label="酷狗内容导航"><button v-for="item in [{ id: 'playlists', label: '发现歌单', icon: ListMusic }, { id: 'search', label: '搜索', icon: Search }, { id: 'owned', label: '我的歌单', icon: Cloud }] as const" :key="item.id" :class="{ active: tab === item.id }" :aria-current="tab === item.id ? 'page' : undefined" @click="switchTab(item.id)"><component :is="item.icon" :size="17" />{{ item.label }}</button></nav>
 
-    <KugouMembership v-if="state.status === 'connected'" :membership="state.membership" @refresh="$emit('refreshMembership')" />
     <template v-if="tab === 'owned'">
       <div class="ne-section-heading"><div><span class="ne-kicker">YOUR COLLECTION</span><h2>我的酷狗歌单<span>{{ state.playlists.length }}</span></h2></div><button v-if="state.status === 'connected' && (state.playlistsMore || !state.playlists.length)" class="subtle-button" :disabled="state.busy" @click="$emit('loadOwned')">{{ state.busy ? '读取中…' : state.playlistsMore ? '加载更多歌单' : '读取歌单' }}</button></div>
       <div v-if="state.playlists.length" class="ne-cover-grid"><button v-for="playlist in state.playlists" :key="playlist.id" class="ne-cover-card" @click="$emit('openOwned', playlist.id)"><span class="ne-cover-image"><KugouArtwork :id="playlist.id" kind="playlist" :generation="state.generation" :name="playlist.name" /><span class="ne-cover-count"><ListMusic :size="12" />{{ playlist.trackCount }} 首</span><span class="ne-cover-play"><ArrowUpRight :size="21" /></span></span><span class="ne-cover-copy"><small>KUGOU / YOUR PLAYLIST</small><strong>{{ playlist.name }}</strong></span></button></div>

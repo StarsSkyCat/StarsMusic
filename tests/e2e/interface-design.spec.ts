@@ -23,12 +23,14 @@ test('界面重设计：双主题导航、最小窗口、继续聆听、队列�
         queue: [{ id: 'synthetic-design', title: '合成界面验证 · 一首名称很长的歌曲用于检查窄窗口中的截断与按钮布局', artist: '合成歌手', provider: 'local' }], positionSeconds: 0, durationSeconds: 30 });
     }, { channel: playbackChannels.stateChanged, snapshot });
     for (const theme of ['light', 'dark']) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
+      await expect(page.locator('.settings-content .account-card, .credential-panel, .desktop-capabilities')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: '清除已保存登录', exact: true })).toHaveCount(0);
       const radio = page.getByRole('radio', { name: theme === 'light' ? '浅色' : '暗色', exact: true });
       await radio.check(); await expect(radio).toBeEnabled();
       for (const size of [{ width: 960, height: 640 }, { width: 1440, height: 900 }]) {
         await page.setViewportSize(size);
-        for (const [name, surface] of [['音乐库', 'library'], ['本地音乐', 'local'], ['正在播放', 'playing'], ['账号与设置', 'settings']] as const) {
+        for (const [name, surface] of [['音乐库', 'library'], ['本地音乐', 'local'], ['正在播放', 'playing'], ['设置', 'settings']] as const) {
           const navigation = page.locator('.sidebar').getByRole('button', { name: new RegExp(`^${name}`) });
           await navigation.click();
           await expect(navigation).toHaveAttribute('aria-current', 'page');

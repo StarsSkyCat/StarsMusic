@@ -36,7 +36,7 @@ test('双主题播放舞台填满高窗口，缩放后歌词居中且底栏与�
     await expect(sources.getByRole('button').nth(1)).toHaveText(/^网易云音乐/);
     await expect(sources.getByRole('button').nth(2)).toHaveText(/^酷狗音乐/);
     for (const theme of ['light', 'dark'] as const) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
       const radio = page.getByRole('radio', { name: theme === 'light' ? '浅色' : '暗色', exact: true });
       await radio.check(); await expect(radio).toBeEnabled();
       await page.getByRole('button', { name: '正在播放', exact: true }).click();

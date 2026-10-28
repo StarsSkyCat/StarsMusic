@@ -116,7 +116,7 @@ test('音乐库全来源搜索：独立失败/分页、旧响应、播放来源�
     await expect(page.getByRole('heading', { name: 'kugou合成私人歌单', level: 1, exact: true })).toBeVisible();
     await page.getByRole('navigation', { name: '音乐库', exact: true }).getByRole('button', { name: '音乐库', exact: true }).click(); await results.getByRole('button', { name: '歌曲', exact: true }).click();
     for (const theme of ['浅色', '暗色']) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
+      await page.getByRole('button', { name: '设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
       await page.getByRole('navigation', { name: '音乐库', exact: true }).getByRole('button', { name: '音乐库', exact: true }).click();
       for (const width of [960, 1280]) {
         await page.setViewportSize({ width, height: 800 }); await input.focus();

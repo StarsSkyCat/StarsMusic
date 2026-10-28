@@ -24,8 +24,8 @@ test('实际 Electron / 独立总线合成宿主：托盘注册、portal 确认�
     desktop = await launch(); let page = await desktop.firstWindow(); await page.setViewportSize({ width: 1280, height: 900 });
     const state = () => page.evaluate(async () => (window as unknown as { starsMusic: { system: SystemApi } }).starsMusic.system.getState());
     const playback = () => page.evaluate(async () => (window as unknown as { starsMusic: { playback: PlaybackApi } }).starsMusic.playback.getState());
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
-    await expect(page.getByRole('heading', { name: '桌面集成', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '桌面设置', exact: true })).toBeVisible();
     await expect.poll(async () => (await state()).mpris.state).toBe('available');
     await expect.poll(async () => server.watcher.items.length).toBeGreaterThan(0);
     await expect.poll(async () => (await state()).tray.state).toBe('available');
@@ -56,9 +56,11 @@ test('实际 Electron / 独立总线合成宿主：托盘注册、portal 确认�
     const showItem = find(layout[1]); expect(showItem).toBeDefined();
     await call(server.bus, itemName, menuPath, 'com.canonical.dbusmenu', 'Event', 'isvu', [showItem!, 'clicked', new dbus.Variant('s', ''), 0]);
     await expect.poll(async () => desktop!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isVisible())).toBe(true);
-    await page.getByRole('button', { name: '发送测试通知', exact: true }).click();
+    await expect(page.getByRole('button', { name: '发送测试通知', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '重新检测桌面能力', exact: true })).toHaveCount(0);
+    // 诊断从用户设置移除，底层通知仍在隔离总线验证。
+    await page.evaluate(() => (window as unknown as { starsMusic: { system: SystemApi } }).starsMusic.system.testNotification());
     await expect.poll(() => server.notifications.received.length).toBe(1);
-    await expect(page.getByText(/通知服务已接收测试请求；免打扰/)).toBeVisible();
     await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.hide());
     server.notifications.ActionInvoked(server.notifications.received[0]!.id, 'default');
     await expect.poll(async () => desktop!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isVisible())).toBe(true);
@@ -71,7 +73,7 @@ test('实际 Electron / 独立总线合成宿主：托盘注册、portal 确认�
     await page.getByRole('checkbox', { name: /启用系统托盘/ }).uncheck();
     expect((await state()).preferences.closeToTray).toBe(false);
     await desktop.close(); desktop = undefined;
-    desktop = await launch(); page = await desktop.firstWindow(); await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    desktop = await launch(); page = await desktop.firstWindow(); await page.getByRole('button', { name: '设置', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: /启用系统托盘/ })).not.toBeChecked();
     await expect(page.getByRole('checkbox', { name: /申请全局快捷键/ })).not.toBeChecked();
     const projection = await state(); expect(projection.tray.state).toBe('disabled'); expect(projection.shortcuts.state).toBe('disabled');

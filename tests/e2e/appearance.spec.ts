@@ -15,7 +15,7 @@ test('浅色、暗色、实时跟随系统和真实应用重启恢复外观偏�
   try {
     desktop = await launch(); let page = await desktop.firstWindow();
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await expect(page.getByRole('radio', { name: '跟随系统', exact: true })).toBeChecked();
     await page.getByRole('radio', { name: '浅色', exact: true }).check();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -44,7 +44,7 @@ test('浅色、暗色、实时跟随系统和真实应用重启恢复外观偏�
     desktop = await launch(); page = await desktop.firstWindow();
     await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await expect(page.getByRole('radio', { name: '浅色', exact: true })).toBeChecked();
     // 仅破坏本测试的临时外观文件，确认保存失败时 UI 和单选框一起回退。
     const file = path.join(profile, 'appearance.json');

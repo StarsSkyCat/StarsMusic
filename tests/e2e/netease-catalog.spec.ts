@@ -81,10 +81,12 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     const explore = page.getByRole('region', { name: '网易云音乐发现', exact: true });
     await expect(explore.getByRole('button', { name: '热歌榜', exact: true })).toHaveCount(0);
     await expect(explore.getByRole('button', { name: '合成展示账号', exact: true })).toBeVisible();
-    await expect(explore.getByLabel('网易云官方会员权益')).toContainText('黑胶 VIP');
-    await explore.getByRole('button', { name: '同步权益', exact: true }).click();
+    await expect(page.locator('#provider-account').getByLabel('网易云官方会员权益')).toContainText('黑胶 VIP');
+    await page.screenshot({ path: 'artifacts/netease-synthetic-account-header.png', animations: 'disabled' });
+    await page.locator('#provider-account').getByRole('button', { name: '同步权益', exact: true }).click();
     expect((await calls()).at(-1)).toMatchObject({ operation: 'membership' });
     await expect(explore.getByRole('button', { name: /合成全部歌单/ })).toBeVisible();
+    await explore.locator('.ne-cover-card').first().scrollIntoViewIfNeeded();
     await expect(explore.locator('.ne-cover-card img')).toBeVisible();
     expect((await calls()).filter(call => call.kind).at(-1)).toMatchObject({ kind: 'playlists' });
     await expect(explore.getByRole('combobox')).toHaveCount(0);
@@ -161,14 +163,14 @@ test('网易云发现、分类、双类型搜索、分页、详情和播放命�
     await page.setViewportSize({ width: 960, height: 640 });
     expect(await page.locator('main').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
     await page.screenshot({ path: 'artifacts/netease-synthetic-owned-minimum.png', animations: 'disabled' });
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     const dark = page.getByRole('radio', { name: '暗色', exact: true }); await dark.check(); await expect(dark).toBeEnabled();
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
     await explore.getByRole('button', { name: '搜索', exact: true }).click();
     await search.fill('合成关键词'); await search.press('Enter');
     await expect(explore.locator('.song-list li')).toHaveCount(1);
     for (const theme of ['浅色', '暗色']) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
+      await page.getByRole('button', { name: '设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
       await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
       for (const width of [960, 1280]) {
         await page.setViewportSize({ width, height: 800 }); await search.focus();

@@ -41,7 +41,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await expect(page.getByRole('heading', { name: '还没有正在播放的音乐', exact: true })).toBeVisible();
       await page.getByRole('button', { name: '返回音乐库', exact: true }).click();
       await page.setViewportSize({ width: 1280, height: 800 });
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
       await page.getByText('应用信息与诊断', { exact: true }).click();
       await expect(page.getByRole('status')).toContainText('桌面桥接已连接');
       await page.getByRole('button', { name: '重新检查' }).click();
@@ -66,7 +66,9 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       expect(metadata.state).toMatchObject({ status: 'idle', trackId: null });
       expect(exposure.info).toMatchObject({ name: 'StarsMusic', version: '1.0.0' });
       expect([exposure.require, exposure.process, exposure.ipcRenderer]).toEqual(['undefined', 'undefined', 'undefined']);
-      await expect(page.getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
+      await expect(page.locator('.settings-content .account-card')).toHaveCount(0);
+      await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
+      await expect(page.locator('#provider-account').getByRole('button', { name: '连接网易云', exact: true })).toBeVisible();
       // 仅验证真实 utilityProcess 启动与临时退出，不自动生成/截图真实登录二维码。
       const provider = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { netease: { getState(): Promise<{ status: string }>; logout(): Promise<{ status: string }> } } }).starsMusic.netease;
@@ -82,7 +84,8 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       });
       expect(kugou.initial).toBe('signed-out'); expect(kugou.logout).toBe('signed-out');
       expect(kugou.keys).toEqual(provider.keys.filter(key => key !== 'loadLikes' && key !== 'updateLibrary' && key !== 'refreshLibrary'));
-      await expect(page.getByRole('button', { name: '连接酷狗', exact: true })).toBeAttached();
+      await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^酷狗音乐/ }).click();
+      await expect(page.locator('#provider-account').getByRole('button', { name: '连接酷狗', exact: true })).toBeVisible();
       const credentials = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { credentials: {
           getStatus(): Promise<{ available: boolean; backend: string; remembered: boolean; locked: boolean; savedProviders: string[]; error?: { code: string } }>;
@@ -99,7 +102,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       expect(credentials.cleared.remembered).toBe(false); expect(credentials.cleared.savedProviders).toEqual([]);
       await page.getByRole('button', { name: '音乐库', exact: true }).click();
       await page.screenshot({ path: 'artifacts/music-library.png' });
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+      await page.getByRole('button', { name: '设置', exact: true }).click();
 
     });
 
@@ -131,14 +134,14 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       // Wayland 合成器可忽略原生 setSize，显式设置视口以验证准确的布局尺寸。
       await page.setViewportSize({ width: 1280, height: 800 });
       const defaultSidebar = await page.locator('.sidebar').boundingBox();
-      const defaultSettings = await page.getByRole('button', { name: '账号与设置', exact: true }).boundingBox();
+      const defaultSettings = await page.getByRole('button', { name: '设置', exact: true }).boundingBox();
       expect(defaultSidebar).not.toBeNull(); expect(defaultSettings).not.toBeNull();
       expect(defaultSettings!.y + defaultSettings!.height).toBeLessThanOrEqual(defaultSidebar!.y + defaultSidebar!.height);
       await page.screenshot({ path: 'artifacts/desktop-default.png' });
       await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(960, 640));
       await page.setViewportSize({ width: 960, height: 640 });
       const sidebarBounds = await page.locator('.sidebar').boundingBox();
-      const settingsBounds = await page.getByRole('button', { name: '账号与设置', exact: true }).boundingBox();
+      const settingsBounds = await page.getByRole('button', { name: '设置', exact: true }).boundingBox();
       expect(sidebarBounds).not.toBeNull(); expect(settingsBounds).not.toBeNull();
       expect(settingsBounds!.y + settingsBounds!.height).toBeLessThanOrEqual(sidebarBounds!.y + sidebarBounds!.height);
       await page.getByText('应用信息与诊断', { exact: true }).click();
@@ -302,7 +305,9 @@ test('扫码保存选择按平台隔离，未成功登录的选择不跨应用�
     desktop = await launch(); let page = await desktop.firstWindow();
     const enabled = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { setRemember(provider: 'netease' | 'kugou', value: boolean): Promise<{ available: boolean; remembered: boolean; backend: string }> } } }).starsMusic.credentials.setRemember('kugou', true));
     expect(enabled).toMatchObject({ available: true, remembered: true, backend: 'local-key-aes-256-gcm' });
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(page.getByRole('button', { name: '清除已保存登录', exact: true })).toHaveCount(0);
+    await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^酷狗音乐/ }).click();
     // 仅为登录选项布局注入合成等待状态和 1px 图片，不获取/保存真实二维码，不模拟认证成功。
     const waiting = await page.evaluate(async () => {
       const api = (window as unknown as { starsMusic: { kugou: { getState(): Promise<Record<string, unknown>> } } }).starsMusic.kugou;
@@ -327,9 +332,9 @@ test('扫码保存选择按平台隔离，未成功登录的选择不跨应用�
     const restored = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { getStatus(): Promise<{ available: boolean; remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.getStatus());
     expect(restored).toMatchObject({ available: true, remembered: false, savedProviders: [] });
     // 不注入账号、不调用真实登录；平台凭据的加密往返由实际 SQLite/AES 单元测试验证。
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
+    await page.getByRole('button', { name: '设置', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: /记住.*登录/ })).toHaveCount(0);
-    await expect(page.getByText('在各平台扫码区域选择「记住登录」。退出账号会自动删除该平台凭据。', { exact: true })).toBeVisible();
+    await expect(page.locator('.settings-content .account-card, .credential-panel')).toHaveCount(0);
     const cleared = await page.evaluate(async () => (window as unknown as { starsMusic: { credentials: { clear(): Promise<{ remembered: boolean; savedProviders: string[] }> } } }).starsMusic.credentials.clear());
     expect(cleared).toMatchObject({ remembered: false, savedProviders: [] });
   } finally { await desktop?.close(); await rm(profile, { recursive: true, force: true }); }

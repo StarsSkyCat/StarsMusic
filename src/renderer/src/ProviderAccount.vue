@@ -22,18 +22,26 @@ const diagnostics = {
 
 <template>
   <section class="account-card" :class="provider" :aria-label="providerNames[provider]" :aria-busy="state.busy">
-    <div class="account-overline"><span>{{ provider === 'netease' ? 'NETEASE CLOUD MUSIC' : 'KUGOU MUSIC' }}</span><span>{{ provider === 'netease' ? '01' : '02' }}</span></div>
     <div class="section-heading">
       <div class="account-heading">
         <span class="source-icon"><Cloud :size="23" /></span>
         <div>
-          <h2>{{ providerNames[provider] }}</h2>
+          <h2 tabindex="-1">{{ providerNames[provider] }}</h2>
           <p>{{ state.account?.nickname ?? loginLabels[state.status] }}</p>
         </div>
       </div>
-      <span v-if="state.status === 'connected'" class="connected-badge"
-        ><Check :size="13" /> 已连接</span
-      >
+      <div class="account-actions">
+        <span v-if="state.status === 'connected'" class="connected-badge"><Check :size="13" />已连接</span>
+        <button v-if="state.status === 'connected' || credentials?.savedProviders.includes(provider)" class="subtle-button" @click="$emit('logout')">
+          <LogOut :size="15" />{{ provider === 'netease' ? '退出网易云' : '退出酷狗' }}
+        </button>
+        <button v-else-if="pending.includes(state.status)" class="subtle-button" @click="$emit('cancel')">
+          <X :size="15" />取消授权
+        </button>
+        <button v-else class="primary-button account-connect" @click="$emit('login')">
+          <Link2 :size="16" />{{ provider === 'netease' ? '连接网易云' : '连接酷狗' }}
+        </button>
+      </div>
     </div>
     <div v-if="state.qrImage" class="qr-login">
       <img
@@ -55,13 +63,7 @@ const diagnostics = {
         <p>二维码过期后重新获取，请勿保存或分享。</p>
       </div>
     </div>
-    <p v-else class="account-description">
-      {{
-        state.status === 'connected'
-          ? '歌单已连接到你的音乐空间。播放权限以平台实际返回为准。'
-          : '连接你的账号，把熟悉的歌单带到这里。扫码时可选择记住登录。'
-      }}
-    </p>
+    <p v-else-if="state.status !== 'connected'" class="account-description">使用官方 App 扫码连接账号，同步你的歌单；扫码时可选择记住登录。</p>
     <NeteaseMembership v-if="provider === 'netease' && state.status === 'connected' && 'membership' in state" :membership="(state as NeteaseSnapshot).membership" @refresh="$emit('refreshMembership')" />
     <KugouMembership v-if="provider === 'kugou' && state.status === 'connected'" :membership="(state as KugouSnapshot).membership" @refresh="$emit('refreshMembership')" />
     <div v-if="pending.includes(state.status)" class="login-preference">
@@ -70,27 +72,16 @@ const diagnostics = {
         <span>记住登录</span>
       </label>
       <p>勾选后在本机保存，下次打开自动验证。退出账号会删除保存。</p>
-      <p v-if="credentials && !credentials.available" role="alert">本地保存暂不可用，可继续临时登录。</p>
+      <p v-if="credentials && (!credentials.available || credentials.locked)" role="alert">本地保存暂不可用，可继续临时登录。</p>
     </div>
     <p v-if="state.status === 'connected'" class="login-saved-note">{{ credentials?.savedProviders.includes(provider) ? '已记住登录 · 退出账号会删除保存' : '仅本次登录 · 下次需重新扫码' }}</p>
+    <p v-if="credentials?.error" class="error-message" role="alert">{{ credentials.error.message }}</p>
     <p v-if="error || state.error" class="error-message" role="alert">
       {{ error || state.error?.message
       }}<span v-if="'loginDiagnostic' in state && state.loginDiagnostic"
         >（{{ diagnostics[state.loginDiagnostic] }}）</span
       >
     </p>
-    <button v-if="state.status === 'connected'" class="subtle-button" @click="$emit('logout')">
-      <LogOut :size="15" />{{ provider === 'netease' ? '退出网易云' : '退出酷狗' }}
-    </button>
-    <button
-      v-else-if="pending.includes(state.status)"
-      class="subtle-button"
-      @click="$emit('cancel')"
-    >
-      <X :size="15" />取消授权
-    </button>
-    <button v-else class="primary-button account-connect" @click="$emit('login')">
-      <Link2 :size="16" />{{ provider === 'netease' ? '连接网易云' : '连接酷狗' }}
-    </button>
+
   </section>
 </template>

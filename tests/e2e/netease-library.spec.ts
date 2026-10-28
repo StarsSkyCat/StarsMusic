@@ -78,7 +78,7 @@ test('合成收藏流程：喜欢切换、自建歌单添加/移除、喜欢列�
     await explore.getByRole('button', { name: '我的歌单', exact: true }).click();
     await explore.getByRole('button', { name: /合成发现歌单/ }).click();
     await more().click(); await expect(page.getByRole('menuitem', { name: '从歌单移除', exact: true })).toHaveCount(0); await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click(); await page.getByRole('radio', { name: '暗色', exact: true }).check();
+    await page.getByRole('button', { name: '设置', exact: true }).click(); await page.getByRole('radio', { name: '暗色', exact: true }).check();
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^网易云音乐/ }).click();
     await explore.getByRole('button', { name: '搜索', exact: true }).click();
     await explore.getByRole('searchbox').fill('合成'); await explore.getByRole('searchbox').press('Enter');

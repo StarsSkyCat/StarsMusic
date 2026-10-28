@@ -6,7 +6,6 @@ import { catalogPageSize, type CatalogRequest, type NeteaseCategory } from '../.
 import TrackTable from './TrackTable.vue';
 import NeteaseTrackActions from './NeteaseTrackActions.vue';
 import NeteaseLibraryStatus from './NeteaseLibraryStatus.vue';
-import NeteaseMembership from './NeteaseMembership.vue';
 import PlatformSearch from './PlatformSearch.vue';
 import GlassSelect from './GlassSelect.vue';
 import NeteaseArtwork from './NeteaseArtwork.vue';
@@ -86,7 +85,6 @@ onMounted(() => {
     <nav class="catalog-tabs" aria-label="网易云浏览">
       <button v-for="(item, index) in tabs" :key="item.id" :aria-pressed="tab === item.id" :class="{ active: tab === item.id }" @click="switchTab(item.id)"><component :is="item.icon" :size="17" /><span>{{ item.label }}</span><small aria-hidden="true">0{{ index + 1 }}</small></button>
     </nav>
-    <NeteaseMembership v-if="state.status === 'connected'" :membership="state.membership" @refresh="$emit('refreshMembership')" />
     <NeteaseLibraryStatus v-if="state.status === 'connected'" :library="state.library" @refresh="$emit('refreshLibrary')" />
     <template v-if="tab === 'owned'">
       <div class="ne-section-heading"><div><span class="ne-kicker">YOUR COLLECTION</span><h2>我的网易云歌单<span>{{ state.playlists.length.toString().padStart(2, '0') }}</span></h2></div><button v-if="state.status === 'connected' && (state.playlistsMore || !state.playlists.length)" class="subtle-button" :disabled="state.busy" @click="$emit('loadOwned')">{{ state.busy ? '读取中…' : state.playlistsMore ? '加载更多歌单' : '读取歌单' }}</button></div>

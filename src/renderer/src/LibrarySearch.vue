@@ -22,7 +22,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   request: [provider: Provider, offset: number]; type: [value: 'songs' | 'playlists'];
   play: [provider: Provider | 'local', id: string, next: boolean]; enqueue: [provider: Provider | 'local', ids: string[]];
-  open: [provider: Provider, id: string]; openOwned: [provider: Provider, id: string]; manage: [];
+  open: [provider: Provider, id: string]; openOwned: [provider: Provider, id: string]; manage: [provider: Provider];
 }>();
 const selected = ref<Record<Provider | 'local', string[]>>({ local: [], netease: [], kugou: [] });
 const actionErrors = ref<Record<Provider, string>>({ netease: '', kugou: '' });
@@ -92,7 +92,7 @@ for (const provider of ['netease', 'kugou'] as const) watch(() => props[provider
         <p v-else class="library-search-note"><Search :size="17" />{{ source.name }}没有找到匹配{{ searchType === 'songs' ? '歌曲' : '歌单' }}。</p>
         <nav v-if="source.catalog.tracks.length || source.catalog.playlists.length || source.catalog.offset" class="catalog-pagination" :aria-label="`${source.name}搜索分页`"><button class="subtle-button" :disabled="source.catalog.offset === 0" @click="request(source.provider, Math.max(0, source.catalog.offset - source.pageSize))"><ArrowLeft :size="16" />上一页</button><span>第 {{ source.catalog.offset / source.pageSize + 1 }} 页</span><button class="subtle-button" :disabled="!source.catalog.more" @click="request(source.provider, source.catalog.offset + source.pageSize)">下一页<ArrowRight :size="16" /></button></nav>
       </template>
-      <p v-if="actionErrors[source.provider]" class="error-message" role="alert">{{ actionErrors[source.provider] }}<button class="text-button" @click="$emit('manage')">去连接</button></p>
+      <p v-if="actionErrors[source.provider]" class="error-message" role="alert">{{ actionErrors[source.provider] }}<button class="text-button" @click="$emit('manage', source.provider)">去连接</button></p>
     </section>
   </section>
 </template>

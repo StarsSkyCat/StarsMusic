@@ -73,13 +73,15 @@ test('合成酷狗发现/双类型搜索/分页/私人歌单封面/整单与多�
     await explore.getByRole('button', { name: '返回搜索结果', exact: true }).click(); await expect(input).toHaveValue('合成');
     await app.evaluate(() => { (Reflect.get(globalThis, '__connectSyntheticKugou') as () => void)(); });
     await expect(explore.getByRole('button', { name: '合成酷狗账号', exact: true })).toBeVisible();
-    const membership = explore.getByRole('region', { name: '酷狗官方会员权益', exact: true });
+    const membership = page.locator('#provider-account').getByRole('region', { name: '酷狗官方会员权益', exact: true });
     await expect(membership).toContainText('标准版 VIP'); await expect(membership).toContainText('概念版 VIP'); await expect(membership).toContainText('畅听 VIP');
+    await page.locator('#provider-account').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'artifacts/kugou-synthetic-account-header.png', animations: 'disabled' });
     await expect(membership).not.toContainText('QVIP'); await expect(membership).not.toContainText('DVIP');
     await membership.getByRole('button', { name: '同步权益', exact: true }).click(); expect((await calls()).at(-1)).toMatchObject({ operation: 'membership' });
     await explore.getByRole('button', { name: '歌曲', exact: true }).click(); await expect(explore.locator('.song-list li')).toHaveCount(3);
     await explore.getByRole('button', { name: '播放 合成酷狗歌曲 1', exact: true }).click();
-    expect((await calls()).at(-1)).toMatchObject({ operation: 'play', id: 'a'.repeat(32) });
+    expect((await calls()).filter(call => call.operation === 'play').at(-1)).toMatchObject({ operation: 'play', id: 'a'.repeat(32) });
     await explore.getByRole('checkbox', { name: '选择 合成酷狗歌曲 1', exact: true }).check();
     await explore.getByRole('checkbox', { name: '选择 合成酷狗歌曲 2', exact: true }).check();
     const before = (await calls()).filter(call => call.operation === 'next').length;
@@ -96,7 +98,7 @@ test('合成酷狗发现/双类型搜索/分页/私人歌单封面/整单与多�
     await page.screenshot({ path: 'artifacts/kugou-synthetic-owned-tracks.png', animations: 'disabled' });
     await page.getByRole('button', { name: '返回全部歌单', exact: true }).click(); await expect(explore.getByRole('button', { name: /合成私人酷狗歌单/ })).toBeVisible();
     for (const theme of ['浅色', '暗色']) {
-      await page.getByRole('button', { name: '账号与设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
+      await page.getByRole('button', { name: '设置', exact: true }).click(); await page.getByRole('radio', { name: theme, exact: true }).check();
       await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^酷狗音乐/ }).click();
       await explore.getByRole('navigation', { name: '酷狗内容导航' }).getByRole('button', { name: '搜索', exact: true }).click(); await explore.getByRole('button', { name: '歌曲', exact: true }).click();
       for (const width of [960, 1280]) {
@@ -111,8 +113,8 @@ test('合成酷狗发现/双类型搜索/分页/私人歌单封面/整单与多�
     await expect(explore.getByRole('button', { name: '搜索酷狗', exact: true })).toBeDisabled();
     await app.evaluate(() => { (Reflect.get(globalThis, '__kugouMembershipFailure') as () => void)(); });
     await expect(membership).toContainText('部分权益未同步'); await expect(membership).toContainText('标准版 VIP');
-    await page.getByRole('button', { name: '账号与设置', exact: true }).click();
-    await expect(page.getByRole('region', { name: '酷狗音乐', exact: true }).getByRole('region', { name: '酷狗官方会员权益', exact: true })).toContainText('标准版 VIP');
+    await page.getByRole('button', { name: '设置', exact: true }).click();
+    await expect(page.getByRole('region', { name: '酷狗官方会员权益', exact: true })).toHaveCount(0);
     await page.getByRole('navigation', { name: '音乐来源', exact: true }).getByRole('button', { name: /^酷狗音乐/ }).click();
     await input.fill('空结果'); await input.press('Enter'); await expect(explore.getByRole('heading', { name: '没有找到匹配的内容', exact: true })).toBeVisible();
     await input.fill('失败'); await input.press('Enter'); await expect(explore.getByRole('alert')).toContainText('网络连接失败');
