@@ -57,7 +57,7 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
           ipcRenderer: typeof Reflect.get(window, 'ipcRenderer'),
         };
       });
-      expect(exposure.keys).toEqual(['getAppInfo', 'system', 'appearance', 'playback', 'netease', 'kugou', 'presentation', 'credentials']);
+      expect(exposure.keys).toEqual(['getAppInfo', 'window', 'system', 'appearance', 'playback', 'netease', 'kugou', 'presentation', 'credentials']);
       const metadata = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { presentation: { getState(): Promise<{ status: string; trackId: string | null }> } } }).starsMusic.presentation;
         return { keys: Object.keys(api).sort(), state: await api.getState() };

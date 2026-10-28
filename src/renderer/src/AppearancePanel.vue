@@ -4,14 +4,14 @@ import { useAppearance } from './useAppearance';
 const appearance = useAppearance();
 const options = [
   { value: 'system', title: '跟随系统', detail: '随桌面外观自动切换', icon: Monitor },
-  { value: 'light', title: '浅色', detail: '云瓷白 · 通透轻盈', icon: Sun },
-  { value: 'dark', title: '暗色', detail: '曜石黑 · 柔光沉浸', icon: Moon },
+  { value: 'light', title: '浅色', detail: '明亮底色，清晰的内容层次', icon: Sun },
+  { value: 'dark', title: '暗色', detail: '深色背景，柔和的玻璃高光', icon: Moon },
 ] as const;
 </script>
 <template>
   <section class="appearance-panel" aria-labelledby="appearance-title">
     <div class="section-heading">
-      <div><h2 id="appearance-title">外观与配色</h2><p>为你的音乐空间，选一种光。</p></div>
+      <div><h2 id="appearance-title">外观与配色</h2><p>选择浅色、暗色，或跟随桌面外观。</p></div>
       <span class="appearance-current">当前{{ appearance.resolvedTheme.value === 'light' ? '浅色' : '暗色' }}</span>
     </div>
     <fieldset class="theme-options" :disabled="appearance.busy.value">

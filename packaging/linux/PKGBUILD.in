@@ -1,0 +1,24 @@
+# Local Arch x86_64 package; generated inputs and checksums are supplied by package-arch.mjs.
+pkgname=starsmusic
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc='Local and online music player with Linux desktop integration'
+arch=('x86_64')
+url='https://github.com/StarsSkyCat/StarsMusic'
+license=('custom')
+depends=('mpv' 'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'gcc-libs' 'glib2' 'glibc' 'gtk3' 'libcups' 'libdrm' 'libx11' 'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'systemd-libs')
+options=('!strip' '!debug')
+source=('starsmusic-runtime.tar.zst' 'starsmusic-launcher' 'org.starsmusic.StarsMusic.desktop' 'org.starsmusic.StarsMusic.svg' 'starsmusic.png' 'THIRD_PARTY_NOTICES.md')
+sha256sums=(@CHECKSUMS@)
+
+package() {
+  install -d "$pkgdir/opt/starsmusic"
+  cp -a --no-preserve=ownership "$srcdir/starsmusic/." "$pkgdir/opt/starsmusic/"
+  # Chromium's sandbox helper must be root-owned/setuid in a system installation.
+  chmod 4755 "$pkgdir/opt/starsmusic/chrome-sandbox"
+  install -Dm755 "$srcdir/starsmusic-launcher" "$pkgdir/usr/bin/starsmusic"
+  install -Dm644 "$srcdir/org.starsmusic.StarsMusic.desktop" "$pkgdir/usr/share/applications/org.starsmusic.StarsMusic.desktop"
+  install -Dm644 "$srcdir/org.starsmusic.StarsMusic.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.starsmusic.StarsMusic.svg"
+  install -Dm644 "$srcdir/starsmusic.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/org.starsmusic.StarsMusic.png"
+  install -Dm644 "$srcdir/THIRD_PARTY_NOTICES.md" "$pkgdir/usr/share/licenses/starsmusic/THIRD_PARTY_NOTICES.md"
+}

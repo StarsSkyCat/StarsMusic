@@ -18,7 +18,7 @@
 | qrcode | 1.5.4 | 后台把官方登录挑战 URL 转为内存 PNG | MIT |
 | @types/qrcode | 1.5.6 | 二维码生成器类型检查 | MIT |
 
-Vue、@lucide/vue、qrcode 和 dbus-next 为应用依赖，其余为开发依赖。SQLite 凭据库使用 Node/Electron 内置 node:sqlite；Pinia、Router 和发行打包器尚未使用，因此未安装。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Node 内置 crypto/fs 与 node:sqlite，没有新增 npm SQLite 绑定或密钥管理依赖。node:sqlite 随固定的 Electron 45/Node 24 运行时提供，Node 为 MIT、SQLite 核心为公有领域；完整运行时许可仍随发行物审查。safeStorage 仅用于旧加密 JSON 的可选迁移。
+Vue、@lucide/vue、qrcode 和 dbus-next 为应用依赖，其余为开发依赖。SQLite 凭据库使用 Node/Electron 内置 node:sqlite；Pinia、Router 与 npm 发行打包器未使用，因此未安装；本机 Arch 包采用现有 pnpm deploy、系统 makepkg/fakeroot 与 librsvg，不新增 npm 依赖。网易云协议以 api-enhanced 4.41.1 固定源码为基线，酷狗协议以 KuGouMusicApi 1.6.2 固定源码为基线，均使用 Node 内置 crypto/fetch 实现白名单端点，未安装或加载完整 SDK；只新增实际使用的二维码依赖和类型。系统 mpv 仍作为子进程使用。凭据保险库使用 Node 内置 crypto/fs 与 node:sqlite，没有新增 npm SQLite 绑定或密钥管理依赖。node:sqlite 随固定的 Electron 45/Node 24 运行时提供，Node 为 MIT、SQLite 核心为公有领域；完整运行时许可仍随发行物审查。safeStorage 仅用于旧加密 JSON 的可选迁移。
 
 ## 系统音频依赖
 
@@ -42,3 +42,7 @@ Rolldown、Electron ZIP 解压器等传递依赖包含平台预编译原生包�
 ## Linux D-Bus 依赖边界
 
 [dbus-next 0.10.2](https://github.com/dbusjs/node-dbus-next/tree/v0.10.2) 仅用于可信 Linux 桌面适配层。仓库 `patches/dbus-next@0.10.2.patch` 去除 Hello 失败后再抛出的未处理 rejection，保留 error 事件，避免 session bus 失效终止音频应用。其 xml2js 定向覆盖为 0.6.2（MIT），避免旧版本漏洞；生产依赖 `pnpm audit --prod` 实际通过。可选 usocket 被 ignoredOptionalDependencies 明确排除，连接经 Node 24 Unix socket 实现，不引入 Electron ABI addon 或生命周期编译脚本；abstract Unix socket 同样经 Node 的原生支持。完整传递依赖仍以锁文件和发行许可审计为准。
+
+## Arch 验证包
+
+包使用固定 Electron 45，保留其 LICENSE / LICENSES.chromium.html 与生产依赖许可。makepkg/fakeroot、tar/zstd、rsvg-convert（librsvg）、desktop-file-validate（desktop-file-utils）均为本机已有系统构建工具，不捆入应用；运行时 GTK、NSS、Mesa、ALSA、D-Bus 等依赖在 PKGBUILD 明确声明，mpv/FFmpeg 仍由系统包提供。该包仅用于本机安装验证，不代替后续完整对外发行许可审计。

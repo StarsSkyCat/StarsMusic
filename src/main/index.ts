@@ -30,11 +30,15 @@ import { NeteaseClient } from './netease-client';
 import { neteaseChannels, parseNeteaseArguments } from '../../packages/contracts/src/netease';
 import { appearanceChannels, parseAppearanceArguments } from '../../packages/contracts/src/appearance';
 import { AppearanceStore } from './appearance-store';
+import { windowChrome } from '../../packages/desktop/src/window-controls';
+import { observeWindowControls, registerWindowControls } from './window-controls';
 
 app.setName('StarsMusic');
 if (process.platform === 'linux') app.setDesktopName(`${desktopId}.desktop`);
 if (process.platform === 'win32') app.setAppUserModelId('org.starsmusic.StarsMusic');
 app.enableSandbox();
+const ownsInstance = !app.isPackaged || app.requestSingleInstanceLock();
+if (!ownsInstance) app.quit();
 
 const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
 const developmentUrl = app.isPackaged ? undefined : getDevelopmentUrl(process.env.ELECTRON_RENDERER_URL);
@@ -70,6 +74,7 @@ let vault: CredentialVault;
 let selectionGeneration = 0;
 let quitting = false;
 let appearance: AppearanceStore;
+let disposeWindowControls: (() => void) | undefined;
 
 function windowBackground(): string {
   const preference = appearance?.getPreference() ?? 'system';
@@ -79,7 +84,9 @@ function windowBackground(): string {
 
 function createWindow(): void {
   const window = new BrowserWindow({
+    ...windowChrome(process.platform),
     title: 'StarsMusic',
+    ...(app.isPackaged && process.platform === 'linux' ? { icon: path.join(process.resourcesPath, 'app/icon.png') } : {}),
     width: 1280,
     height: 800,
     minWidth: 960,
@@ -100,6 +107,7 @@ function createWindow(): void {
     },
   });
   mainWindow = window;
+  observeWindowControls(window);
   window.webContents.on('before-input-event', (event, input) => { if (desktopIntegration?.handleInput(input)) event.preventDefault(); });
   window.on('close', (event) => {
     if (!quitting && desktopIntegration?.shouldHideOnClose()) { event.preventDefault(); window.hide(); }
@@ -161,11 +169,13 @@ async function restoreSavedCredentials(): Promise<void> {
 }
 
 void app.whenReady().then(async () => {
+  if (!ownsInstance) return;
   const uiSession = session.fromPartition('starsmusic-ui');
   uiSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   uiSession.setPermissionCheckHandler(() => false);
   uiSession.on('will-download', (event) => event.preventDefault());
   Menu.setApplicationMenu(null);
+  disposeWindowControls = registerWindowControls(() => mainWindow, documentUrl);
   const profile = app.getPath('userData');
   appearance = new AppearanceStore(path.join(profile, 'appearance.json'));
   await appearance.initialize();
@@ -447,6 +457,7 @@ void app.whenReady().then(async () => {
 
 // 默认关闭窗口退出；用户明确启用且托盘宿主仍可用时，由窗口 close 钩子隐藏。
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('second-instance', () => showMainWindow());
 app.on('before-quit', (event) => {
   if (quitting) return;
   event.preventDefault();
@@ -463,6 +474,7 @@ app.on('before-quit', (event) => {
 app.on('will-quit', () => {
   for (const channel of Object.values(systemChannels)) if (channel !== systemChannels.changed) ipcMain.removeHandler(channel);
   ipcMain.removeHandler(desktopChannels.getAppInfo);
+  disposeWindowControls?.();
   ipcMain.removeHandler(presentationChannels.getState);
   for (const channel of Object.values(credentialChannels)) {
     if (channel !== credentialChannels.changed) ipcMain.removeHandler(channel);

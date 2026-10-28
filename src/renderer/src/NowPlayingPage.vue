@@ -5,7 +5,6 @@ import { adjacentIndex, type PlaybackSnapshot, type QueueTrack } from '../../../
 import type { PresentationSnapshot } from '../../../packages/contracts/src/presentation';
 import { providerNames } from './useProvider';
 import TrackLyrics from './TrackLyrics.vue';
-import GlassScene from './GlassScene.vue';
 import defaultArtwork from './assets/stars-night.png';
 const props = defineProps<{
   playback: PlaybackSnapshot;
@@ -37,7 +36,7 @@ const next = computed(() => {
       <button class="text-button np-back" @click="$emit('back')">
         <ArrowLeft :size="17" />返回{{ backLabel }}
       </button>
-      <span class="eyebrow"><AudioLines :size="15" />NOW PLAYING</span>
+      <span class="eyebrow"><AudioLines :size="15" />正在聆听</span>
       <button class="subtle-button compact" @click="$emit('queue')">
         <ListMusic :size="16" />播放队列
         <span class="np-queue-count">{{ playback.queue.length }}</span>
@@ -75,7 +74,7 @@ const next = computed(() => {
       </div>
     </div>
     <div v-else class="np-empty">
-      <div class="np-empty-disc"><GlassScene /></div>
+      <div class="np-empty-symbol" aria-hidden="true"><Music2 :size="48" :stroke-width="1.3" /></div>
       <h1 tabindex="-1">还没有正在播放的音乐</h1>
       <p>从本地音乐或你的歌单中，选一首喜欢的。</p>
       <button class="primary-button" @click="$emit('back')"><Music2 :size="17" />去选首歌</button>

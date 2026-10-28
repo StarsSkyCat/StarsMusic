@@ -1,0 +1,3 @@
+#!/bin/sh
+unset ELECTRON_RUN_AS_NODE ELECTRON_RENDERER_URL
+exec /opt/starsmusic/starsmusic "$@"

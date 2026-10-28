@@ -25,7 +25,9 @@
     "test:e2e": "electron-vite build && playwright test",
     "probe:kugou": "node scripts/probe-kugou.ts",
     "probe:kugou-discovery": "node scripts/probe-kugou-discovery.ts",
-    "test:desktop": "dbus-run-session -- env STARSMUSIC_TEST_BUS=isolated node --test tests/integration/linux-desktop.test.ts"
+    "test:desktop": "dbus-run-session -- env STARSMUSIC_TEST_BUS=isolated node --test tests/integration/linux-desktop.test.ts",
+    "package:arch": "pnpm typecheck && node scripts/package-arch.mjs",
+    "test:package": "node scripts/smoke-packaged.mjs"
   },
   "dependencies": {
     "@lucide/vue": "1.61.0",
@@ -44,5 +46,10 @@
     "vite": "8.3.5",
     "vue-tsc": "3.3.13"
   },
-  "desktopName": "org.starsmusic.StarsMusic.desktop"
+  "desktopName": "org.starsmusic.StarsMusic.desktop",
+  "files": [
+    "out/",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/licenses/"
+  ]
 }

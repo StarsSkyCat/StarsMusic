@@ -188,7 +188,7 @@ test('实际 mpv 通过 loopback 网关解码合成在线资源，限制试听�
     await player.clearRemote('kugou'); assert.equal(player.snapshot().generation, generation);
     await player.clearRemote('netease'); assert.deepEqual(player.snapshot().queue, []);
     const kugou = parseKugouStream({ status: 1, hash: 'a'.repeat(32), url: ['https://fsandroid.kugou.com/synthetic'],
-      priv_status: 1, is_full_audio: 0, fileName: '合成酷狗曲目', timeLength: 10, free_part_start: 9000, free_part_end: 10000,
+      priv_status: 1, is_full_audio: 0, fileName: `${'a'.repeat(32)} - 123456789.mp`, timeLength: 10, free_part_start: 9000, free_part_end: 10000,
     }, 'b'.repeat(32), { name: '合成酷狗曲目', durationMs: 10000 }, 'full',
       parseKugouResourceIdentity({ status: 1, data: [{ hash: 'b'.repeat(32), name: '合成酷狗曲目', relate_goods: [{ hash: 'a'.repeat(32) }] }] }, 'b'.repeat(32)));
     player.setMode('shuffle'); await player.openRemote('kugou', '合成酷狗曲目', async () => kugou);

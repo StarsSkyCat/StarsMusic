@@ -21,6 +21,8 @@ test:playback 有 8 项实际 mpv 场景，在 Linux/Windows 使用 null 输出�
 
 test:e2e 先构建，再启动实际 Electron，检查桥接/沙箱、弹窗与导航、960×640 布局以及本地选择/播放/暂停/定位。只替代原生选择器交互，使用实际 mpv 和默认系统音频输出，拒绝 null 输出；关闭应用后验证 mpv PID 已退出。需要 Linux 或 Windows、mpv、可用的图形和音频会话。Playwright 显式启用 chromiumSandbox；Linux 通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs，Windows 检查 Electron sandboxed 指标。子进程检查从实际 Electron 主进程 PID 查询，Windows 使用 CIM。Linux D-Bus/MPRIS 和 Windows 系统用例在另一平台明确跳过。临时配置和合成文件会清理，截图留在 Git 忽略的 artifacts/；不需要下载 Playwright 浏览器。
 
+interface-design.spec.ts 使用临时用户目录和明确标记的合成长歌名，验证浅/暗主题下音乐库、本地音乐、播放页、设置、队列的 960×640 / 1440×900 布局；检查横向溢出、底栏遮挡、继续聆听入口、键盘关闭队列和焦点返回。通过 Chromium 媒体偏好模拟检查减少透明度和减少动态效果，不伪造平台授权或播放成功。截图位于忽略的 artifacts/redesign/，最新范围见 [重设计记录](validation/2026-10-28-interface-redesign.md)。
+
 桌面 E2E 也实际启动网易云与酷狗 utilityProcess，验证匿名 getState/本地退出及窄桥接，禁止自动生成真实二维码或授权账号；同时验证 preload 的 credentials 白名单、状态投影，以及 basic 密码库环境下本地加密保存仍可用。pnpm probe:netease、pnpm probe:kugou 是显式匿名联网探测，不在 CI 执行。真实听音与权限结果独立记录在 [网易云验证](validation/2026-10-26-netease.md) 与 [酷狗验证](validation/2026-10-26-kugou.md)；凭据结果见 [SQLite 保存验证](validation/2026-10-26-sqlite-credentials.md)。
 
 CI 配置在 Linux/Windows 执行冻结安装、类型、合成契约和构建，Linux 另执行文档与 mpv null 集成测试；Windows mpv/E2E 目前在本机执行。CI 没有真实平台登录、图形、安装包或系统音频验收。新增 Windows job 尚未推送，远端结果需实际观察。

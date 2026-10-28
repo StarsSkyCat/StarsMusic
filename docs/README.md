@@ -53,3 +53,15 @@
 - [音乐库全来源搜索与酷狗收藏排序](validation/2026-10-27-library-search-order.md)
 
 - [main 合并前的数据检查](validation/2026-10-27-main-merge-audit.md)
+
+- [Arch 原生安装包验证](validation/2026-10-27-arch-package.md)
+
+- [酷狗文件名格式误拒](validation/2026-10-28-kugou-filename.md)
+
+- [酷狗官方授权取链与内部文件名](validation/2026-10-28-kugou-authorized-playback.md)
+
+- [跨平台窗口控制与 Linux 验证](validation/2026-10-28-window-controls.md)
+
+- [全界面重设计与材质分层](validation/2026-10-28-interface-redesign.md)
+
+- [界面重设计后的本地安装更新](validation/2026-10-28-local-install.md)

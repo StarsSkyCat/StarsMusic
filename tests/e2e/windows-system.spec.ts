@@ -35,7 +35,7 @@ test('真实 Windows Electron：托盘、关闭隐藏/恢复、实际快捷键�
     await set('globalShortcuts', false);
     expect(await desktop.evaluate(({ globalShortcut }, accelerators) => accelerators.some(key => globalShortcut.isRegistered(key)), registered.bindings.map(binding => binding.accelerator))).toBe(false);
     await set('closeToTray', true);
-    await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+    await page.getByRole('button', { name: '关闭窗口', exact: true }).click();
     expect(await desktop.evaluate(({ BrowserWindow }) => ({ count: BrowserWindow.getAllWindows().length, visible: BrowserWindow.getAllWindows()[0]!.isVisible() }))).toEqual({ count: 1, visible: false });
     // 禁用托盘会恢复隐藏窗口，不依赖测试点击通知区域的具体位置。
     await set('tray', false);
