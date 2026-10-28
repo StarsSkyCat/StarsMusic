@@ -75,7 +75,7 @@ pnpm package:win
 pnpm test:package:win
 ```
 
-若需验证真实安装和卸载，运行 `pnpm test:installer:win`；该命令会在临时目录实际安装、测试并卸载，发现既有 StarsMusic 安装时拒绝覆盖。当前包未签名，完整要求和发行限制见 [打包说明](packaging/README.md)。
+若需验证真实安装和卸载，运行 `pnpm test:installer:win`；该命令会在临时目录实际安装、测试并卸载，发现既有 StarsMusic 安装或默认用户数据时拒绝运行。新构建安装包正式卸载会删除默认应用数据，升级保留数据；自定义路径和旧包的边界见打包说明。当前包未签名，完整要求和发行限制见 [打包说明](packaging/README.md)。
 
 ## 项目结构
 

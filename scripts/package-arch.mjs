@@ -72,10 +72,11 @@ try {
   await writeFile(path.join(runtime, 'BUILD-METADATA.json'), JSON.stringify({ application: manifest.name, version: manifest.version, packageVersion: version, commit, localChanges: dirty, electron: electronVersion, platform: 'linux', architecture: 'x64', auditedFiles: files }, null, 2) + '\n');
   const payload = 'starsmusic-runtime.tar.zst';
   await run('tar', ['--zstd', '-cf', path.join(work, payload), '-C', work, 'starsmusic'], { env: { ...process.env, ZSTD_CLEVEL: '6', ZSTD_NBTHREADS: '2' } });
-  const inputs = [payload, 'starsmusic-launcher', 'org.starsmusic.StarsMusic.desktop', 'org.starsmusic.StarsMusic.svg', 'starsmusic.png', 'THIRD_PARTY_NOTICES.md'];
+  const inputs = [payload, 'starsmusic-launcher', 'org.starsmusic.StarsMusic.desktop', 'org.starsmusic.StarsMusic.svg', 'starsmusic.png', 'THIRD_PARTY_NOTICES.md', 'remove-user-data.sh'];
   for (const [source, target] of [
     ['packaging/linux/starsmusic', inputs[1]], ['packaging/linux/org.starsmusic.StarsMusic.desktop.in', inputs[2]],
     ['packaging/linux/org.starsmusic.StarsMusic.svg', inputs[3]], ['THIRD_PARTY_NOTICES.md', inputs[5]],
+    ['packaging/linux/remove-user-data.sh', inputs[6]], ['packaging/linux/starsmusic.install', 'starsmusic.install'],
   ]) await cp(path.join(root, source), path.join(work, target));
   await cp(path.join(deployed, 'icon.png'), path.join(work, inputs[4]));
   await run('desktop-file-validate', [path.join(work, inputs[2])]);

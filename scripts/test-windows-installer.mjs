@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -31,11 +31,20 @@ async function until(check) {
   while (!await check()) { if (Date.now() > deadline) throw new Error('Installer state did not settle'); await delay(200); }
 }
 if (await registrations()) throw new Error('An existing StarsMusic installation was found; refusing to replace it during testing');
+if (!process.env.APPDATA || !path.isAbsolute(process.env.APPDATA)) throw new Error('A valid APPDATA directory is required');
+const userData = path.join(process.env.APPDATA, 'StarsMusic');
+if (await exists(userData)) throw new Error('Existing StarsMusic user data was found; refusing an uninstall test that would delete it');
 const work = await mkdtemp(path.join(root, '.local', 'windows-installer-test-'));
 const installed = path.join(work, 'StarsMusic 测试安装');
 const uninstall = path.join(installed, 'Uninstall StarsMusic.exe');
 let clean = false;
+let ownsUserData = false;
 try {
+  // Exclusive mkdir prevents overwriting a profile created after the guard above.
+  await mkdir(userData); ownsUserData = true;
+  await mkdir(path.join(userData, 'keys'));
+  await writeFile(path.join(userData, 'keys/login.key'), 'synthetic uninstall test only');
+  await writeFile(path.join(userData, 'credentials.sqlite'), 'synthetic uninstall test only');
   // NSIS /D 必须是最后的、未加引号的参数；使用参数数组直启进程，无 shell。
   await run(latest.installer, ['/S', `/D=${installed}`], { windowsVerbatimArguments: true });
   await until(() => exists(path.join(installed, 'StarsMusic.exe')));
@@ -44,12 +53,14 @@ try {
   await run(process.execPath, [path.join(root, 'scripts/smoke-windows.mjs'), path.join(installed, 'StarsMusic.exe')]);
   await run(uninstall, ['/S']);
   await until(async () => !await exists(path.join(installed, 'StarsMusic.exe')) && await registrations() === 0);
+  await until(async () => !await exists(userData));
   clean = true;
-  console.log('Windows EXE install/uninstall passed: per-user silent installation into a Chinese/spaced path, installed-runtime smoke and uninstall registry cleanup.');
+  console.log('Windows EXE install/uninstall passed: Chinese/spaced path, installed-runtime smoke, registry and synthetic user data cleanup.');
 } finally {
   if (!clean && await exists(uninstall)) {
     await run(uninstall, ['/S']); await until(async () => await registrations() === 0);
   }
+  if (ownsUserData) await rm(userData, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
   const resolved = path.resolve(work);
   if (!resolved.startsWith(path.resolve(root, '.local') + path.sep)) throw new Error('Invalid installer test directory');
   await rm(resolved, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });

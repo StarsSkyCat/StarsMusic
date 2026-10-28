@@ -85,7 +85,7 @@ try {
     files: ['out/**/*', 'package.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/licenses/**/*'],
     extraResources: [{ from: audio, to: 'mpv' }, { from: path.join(assets, 'starsmusic.png'), to: 'icon.png' }, { from: path.join(work, 'BUILD-METADATA.json'), to: 'BUILD-METADATA.json' }, { from: path.join(work, 'LICENSE.electron.txt'), to: 'LICENSE.electron.txt' }],
     win: { target: 'nsis', icon: path.join(assets, 'starsmusic.ico'), requestedExecutionLevel: 'asInvoker', signAndEditExecutable: true, artifactName: 'StarsMusic-${version}-x64-Setup.${ext}' },
-    nsis: { oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true, runAfterFinish: false, deleteAppDataOnUninstall: false,
+    nsis: { oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true, runAfterFinish: false, deleteAppDataOnUninstall: true,
       createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: 'StarsMusic', packElevateHelper: false, installerLanguages: ['zh_CN', 'en_US'], displayLanguageSelector: true },
     afterPack: async context => {
       const directory = path.resolve(context.appOutDir);

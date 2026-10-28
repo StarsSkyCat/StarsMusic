@@ -33,6 +33,10 @@ Linux 使用 dbus-next 0.10.2。patches/dbus-next@0.10.2.patch 修复 Hello 失�
 
 electron-builder 26.18.0 仅用于 Windows NSIS 构建，工具缓存被忽略，生产包不包含此开发依赖；不使用 Squirrel 或其安装脚本。Arch 打包使用系统 makepkg / fakeroot、tar / zstd、librsvg 和 desktop-file-utils。
 
+## Arch 卸载所用系统工具
+
+Arch 包显式依赖 `util-linux`（`runuser`，降权清理）与 `procps-ng`（`pgrep`，定位当前账号中属于该安装目录的进程），不捆绑或通过应用自动安装。开发机版本分别为 2.42.4-1 与 4.0.7-1，目标机版本由 pacman 管理。系统包元数据分别列出 BSD / GPL / LGPL / ISC / 公有领域组合与 GPL / LGPL，具体文件许可由对应系统包的许可证说明约束。
+
 ## mpv 与 FFmpeg
 
 开发使用系统 mpv，不自动安装系统包。已有 Linux 验证版本为 mpv 0.41.0，Arch 包许可元数据为 GPL-2.0-or-later AND LGPL-2.1-or-later，FFmpeg 为 n9.0.2；该系统包元数据不替代其他构建的许可审查。Arch 安装包依赖系统 mpv / FFmpeg，不捆绑它们。

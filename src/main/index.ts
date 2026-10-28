@@ -459,6 +459,9 @@ void app.whenReady().then(async () => {
 // 默认关闭窗口退出；用户明确启用且托盘宿主仍可用时，由窗口 close 钩子隐藏。
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('second-instance', () => showMainWindow());
+// Package removal sends SIGTERM: use the normal shutdown path to flush SQLite
+// and stop mpv before the uninstaller removes the user's data directory.
+process.on('SIGTERM', () => app.quit());
 app.on('before-quit', (event) => {
   if (quitting) return;
   event.preventDefault();

@@ -6,9 +6,10 @@ pkgdesc='Local and online music player with Linux desktop integration'
 arch=('x86_64')
 url='https://github.com/StarsSkyCat/StarsMusic'
 license=('MIT')
-depends=('mpv' 'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'gcc-libs' 'glib2' 'glibc' 'gtk3' 'libcups' 'libdrm' 'libx11' 'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'systemd-libs')
+depends=('mpv' 'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'gcc-libs' 'glib2' 'glibc' 'gtk3' 'libcups' 'libdrm' 'libx11' 'libxcb' 'libxcomposite' 'libxdamage' 'libxext' 'libxfixes' 'libxkbcommon' 'libxrandr' 'mesa' 'nspr' 'nss' 'pango' 'procps-ng' 'systemd-libs' 'util-linux')
+install=starsmusic.install
 options=('!strip' '!debug')
-source=('starsmusic-runtime.tar.zst' 'starsmusic-launcher' 'org.starsmusic.StarsMusic.desktop' 'org.starsmusic.StarsMusic.svg' 'starsmusic.png' 'THIRD_PARTY_NOTICES.md')
+source=('starsmusic-runtime.tar.zst' 'starsmusic-launcher' 'org.starsmusic.StarsMusic.desktop' 'org.starsmusic.StarsMusic.svg' 'starsmusic.png' 'THIRD_PARTY_NOTICES.md' 'remove-user-data.sh')
 sha256sums=(@CHECKSUMS@)
 
 package() {
@@ -17,6 +18,7 @@ package() {
   # Chromium's sandbox helper must be root-owned/setuid in a system installation.
   chmod 4755 "$pkgdir/opt/starsmusic/chrome-sandbox"
   install -Dm755 "$srcdir/starsmusic-launcher" "$pkgdir/usr/bin/starsmusic"
+  install -Dm755 "$srcdir/remove-user-data.sh" "$pkgdir/usr/lib/starsmusic/remove-user-data.sh"
   install -Dm644 "$srcdir/org.starsmusic.StarsMusic.desktop" "$pkgdir/usr/share/applications/org.starsmusic.StarsMusic.desktop"
   install -Dm644 "$srcdir/org.starsmusic.StarsMusic.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.starsmusic.StarsMusic.svg"
   install -Dm644 "$srcdir/starsmusic.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/org.starsmusic.StarsMusic.png"

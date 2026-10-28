@@ -1,11 +1,13 @@
 import { _electron, expect } from '@playwright/test';
-import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
+import { access, mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dbus from 'dbus-next';
 import { writeSilentWav } from '../tests/helpers/audio.ts';
+import { mpvProcesses } from '../tests/helpers/mpv-processes.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const latest = JSON.parse(await readFile(path.join(root, 'release/latest-arch.json'), 'utf8'));
@@ -80,4 +82,36 @@ for (const backend of backends) {
   } finally {
     bus?.disconnect(); await desktop?.close(); await rm(profile, { recursive: true, force: true });
   }
+}
+
+// Only the newly built isolated runtime is eligible: never terminate or clean
+// data belonging to a user-supplied installed executable.
+if (!process.argv[2]) {
+  const home = await mkdtemp(path.join(tmpdir(), 'starsmusic-package-uninstall-'));
+  const profile = path.join(home, '.config/StarsMusic');
+  const music = path.join(home, 'Music/synthetic.wav');
+  await mkdir(path.dirname(music)); await writeSilentWav(music, 30);
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), XDG_CACHE_HOME: path.join(home, '.cache'), GSETTINGS_BACKEND: 'memory' };
+  delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL; delete env.STARSMUSIC_DEBUG;
+  let desktop;
+  try {
+    desktop = await _electron.launch({ executablePath: executable, args: [], env, chromiumSandbox: true, timeout: 15000 });
+    const page = await desktop.firstWindow();
+    await expect(page.getByRole('heading', { name: '音乐库', exact: true })).toBeVisible();
+    expect(await desktop.evaluate(({ app }) => app.getPath('userData'))).toBe(profile);
+    await desktop.evaluate(({ dialog }, filename) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] }); }, music);
+    await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
+    await expect.poll(() => page.evaluate(async () => (await window.starsMusic.playback.getState()).status)).toBe('playing');
+    const audio = await mpvProcesses(desktop.process().pid); expect(audio).toHaveLength(1);
+    await access(path.join(profile, 'credentials.sqlite'));
+    await access(path.join(profile, 'playback.sqlite'));
+    const closed = desktop.waitForEvent('close');
+    await promisify(execFile)('/bin/sh', [path.join(root, 'packaging/linux/remove-user-data.sh'), executable], { env });
+    await closed;
+    await expect.poll(() => { try { process.kill(audio[0].pid, 0); return true; } catch { return false; } }).toBe(false);
+    try { await access(profile); throw new Error('Uninstall cleanup retained the default profile'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await access(music);
+    console.log('Packaged uninstall helper: isolated default profile and SQLite removed, mpv exited, source music retained. No pacman transaction or real user data was used.');
+  } finally { await desktop?.close(); await rm(home, { recursive: true, force: true }); }
 }

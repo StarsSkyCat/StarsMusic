@@ -13,7 +13,7 @@ Linux 集成由 packages/desktop/src/linux/ 承载：
 - **托盘**：按实际宿主注册报告能力。默认关闭窗口退出；可选关闭到托盘，宿主丢失或禁用托盘时恢复窗口，并保留退出入口。
 - **全局键**：默认关闭；X11 逐项检查 Electron 注册结果，Wayland 经 GlobalShortcuts portal 请求授权，只有实际返回的绑定才标为可用。
 
-设置页区分 available / unavailable / unknown / pending / disabled，不把存在 D-Bus 服务视为能力验收。应用桌面身份为 org.starsmusic.StarsMusic.desktop，必须与实际安装的桌面入口匹配；开发环境的 portal 申请可能被桌面后端拒绝。
+设置页仅保留桌面偏好开关、快捷键说明和退出入口，不展示能力诊断、重新检测或通知测试。后台继续区分 available / unavailable / unknown / pending / disabled，不把存在 D-Bus 服务视为能力验收。应用桌面身份为 org.starsmusic.StarsMusic.desktop，必须与实际安装的桌面入口匹配；开发环境的 portal 申请可能被桌面后端拒绝。
 
 ## Windows
 
@@ -27,7 +27,7 @@ pnpm setup:electron
 pnpm dev
 ```
 
-示例目录替换为实际位置。Windows EXE 安装版固定使用 resources/mpv/mpv.exe，并校验构建输入，不从 PATH 回退。当前用户安装、可选路径、快捷方式与卸载入口已实现，卸载保留用户数据。安装包未签名，仍为本地验证用途。
+示例目录替换为实际位置。Windows EXE 安装版固定使用 resources/mpv/mpv.exe，并校验构建输入，不从 PATH 回退。当前用户安装、可选路径、快捷方式与卸载入口已实现，新构建的安装包正式卸载会删除默认用户数据，升级保留；自定义数据路径不在自动清理范围。安装包未签名，仍为本地验证用途。
 
 已实现共用托盘菜单、可选关闭到托盘、原生窗口控制和逐项报告注册结果的全局快捷键。AppUserModelID 为 org.starsmusic.StarsMusic。通知、系统媒体面板、专用媒体键和任务栏媒体控件尚未接入；设置页不显示 Linux 专用能力。
 
@@ -44,7 +44,7 @@ Linux / Windows 提供最小化、最大化 / 还原与关闭按钮，顶部空�
 | 静音 | Ctrl + Alt + M |
 | 显示窗口 | Ctrl + Alt + O |
 
-窗口内键不要求全局授权。全局键受宿主、冲突和用户授权影响，具体以设置页实际状态为准。
+窗口内键不要求全局授权。全局键受宿主、冲突和用户授权影响，启用结果由后台实际注册状态决定，失败时显示错误。
 
 ## 尚未覆盖
 

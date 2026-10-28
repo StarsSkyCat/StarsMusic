@@ -1,0 +1,15 @@
+pre_remove() {
+  # pacman invokes this only for removal; upgrades must preserve user data.
+  local username password uid gid gecos home shell
+  while IFS=: read -r username password uid gid gecos home shell; do
+    # System service accounts never run the sandboxed desktop application.
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    (( uid >= 1000 && uid < 65534 )) || continue
+    [[ "$home" == /* && "$home" != / && -d "$home" ]] || continue
+    # Never recursively delete a user's paths with pacman's root privileges.
+    if ! runuser -u "$username" -- env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME HOME="$home" \
+      /bin/sh /usr/lib/starsmusic/remove-user-data.sh; then
+      printf 'StarsMusic: could not clean application data for uid %s.\n' "$uid" >&2
+    fi
+  done < <(getent passwd)
+}
