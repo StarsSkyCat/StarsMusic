@@ -1,0 +1,11 @@
+{
+  "version": "v0.41.0-dev-gad5877eda",
+  "architecture": "x64",
+  "source": "https://github.com/mpv-player/mpv/commit/ad5877eda",
+  "archive": "https://github.com/mpv-player/mpv/releases/download/git-release/mpv-v0.41.0-dev-gad5877eda-40559215985-x86_64-pc-windows-msvc.zip",
+  "archiveSha256": "00e757c6708430ebd4d56be0a910172aa7d5243a31fdc5044e054aea00badb2f",
+  "files": {
+    "mpv.exe": "145e05e720d995d408bd1e1dd4fc6fed5862ad7d11787a9d5435d2086c21298a",
+    "vulkan-1.dll": "aed7bf9140c16a3b1e3b30ad2cf24664a870031c70e6b3633be028b86977887c"
+  }
+}

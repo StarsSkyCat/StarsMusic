@@ -16,7 +16,7 @@ Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、�
 
 Linux 已通过平台适配层接入 MPRIS、通知、托盘和快捷键；设置页按实际 D-Bus/宿主/portal 响应显示能力，Wayland 全局键需确认绑定，缺失服务时保留窗口和退出路径。范围见 [桌面集成](docs/linux-desktop.md)。
 
-Windows 已开始开发适配：mpv 命名管道、本地播放、托盘、可选关闭到托盘和全局快捷键已接入；Windows 通知、系统媒体面板和安装包仍待实现。实测边界见 [Windows 验证](docs/validation/2026-10-28-windows.md)。macOS 尚未适配。
+Windows 已接入本地播放、托盘、可选关闭到托盘和全局快捷键，并提供内置 mpv 的 x64 EXE 本地验证安装包，见 [打包说明](packaging/README.md) 与 [EXE 验证](docs/validation/2026-10-28-windows-installer.md)。Windows 通知、系统媒体面板、签名和公开发行仍待完成；macOS 尚未适配。
 
 主窗口右上角提供最小化、最大化/还原和关闭按钮；顶部空白区域可拖动，滚动页面时控制保持可见。窗口控制经独立白名单桥接，Linux/Windows 共用控制且已验证本机窗口按钮，macOS 配置保留原生红黄绿按钮、仍待实机验证。关闭遵循现有托盘设置，见 [窗口控制验证](docs/validation/2026-10-28-window-controls.md) 与 [Windows 复验](docs/validation/2026-10-28-windows.md)。
 

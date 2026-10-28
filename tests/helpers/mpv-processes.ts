@@ -8,7 +8,7 @@ export async function mpvProcesses(parentPid = process.pid): Promise<{ pid: numb
   if (process.platform === 'win32') {
     // 只查询本次测试的直接 mpv 子进程，不结束或读取其他应用。
     const { stdout } = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-      `Get-CimInstance Win32_Process -Filter "ParentProcessId=${parentPid} AND Name='mpv.exe'" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress`],
+      `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); Get-CimInstance Win32_Process -Filter "ParentProcessId=${parentPid} AND Name='mpv.exe'" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress`],
     { windowsHide: true, timeout: 10_000 });
     if (!stdout.trim()) return [];
     const raw: unknown = JSON.parse(stdout);

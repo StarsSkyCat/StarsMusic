@@ -49,6 +49,8 @@
 - Linux 交付验证实际安装包、X11/Wayland、音频输出与 MPRIS；构建成功不等于发行版兼容。
 - 最终说明具体修改、实际执行的检查及未完成项；不把开发机结果描述成跨平台验证。
 
+- Windows 安装包命令：pnpm package:win、test:package:win、test:installer:win。后者会实际临时安装/卸载，必须拒绝覆盖既有安装；安装版使用固定校验的内置 mpv，不从 PATH 回退。完整发行许可、签名及升级验证仍待完成。
+
 ## Code Review Rules
 
 - 优先检查凭据泄漏、过宽 IPC、旧响应覆盖新状态、跨账号缓存污染和重复音频进程。

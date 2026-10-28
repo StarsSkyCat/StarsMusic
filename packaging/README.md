@@ -1,10 +1,28 @@
 # 安装包与分发
 
-当前提供 Arch Linux x86_64 本地原生验证包，使用固定 Electron 45 运行时与 pnpm 生产依赖，依赖系统 mpv。AppImage、DEB、RPM、Flatpak 和 ARM64 仍待实现与验证。
+当前提供 Arch Linux x86_64 原生验证包和 Windows x64 NSIS EXE 本地验证安装包。均使用固定 Electron 45 与 pnpm 生产依赖；Arch 依赖系统 mpv，Windows 内置 mpv。其他发行格式与架构仍待实现或验证。
 
 原生包需声明并验证 mpv 依赖；便携包需记录 mpv/FFmpeg 构建、运行库与许可。安装后必须验证音频、MPRIS 和退出清理，不能仅凭构建通过宣称兼容。
 
 实施顺序见 [开发路线图](../docs/roadmap.md)。
+
+## Windows x64 EXE
+
+在 Windows x64 准备 Node.js 24、pnpm 10.34.9、固定 Electron 运行时，以及 `windows/mpv-runtime.json` 指定的 mpv.exe 与 vulkan-1.dll。默认从忽略的 `.local/mpv` 读取，也可用 `STARSMUSIC_MPV_DIR` 指定目录；逐文件 SHA-256 不匹配时拒绝构建。官方 CI 归档可能过期，升级需重新核验清单。
+
+```powershell
+pnpm package:win
+pnpm test:package:win
+pnpm test:installer:win
+```
+
+- 构建执行类型检查、生产部署、原创 SVG 转 ICO 和 NSIS 打包；产物位于 `release/windows-版本/`，`release/latest-windows.json` 指向本次 EXE、独立运行目录和 SHA-256。版本含源码提交，未提交构建带 `.local`。
+- 当前用户安装，无管理员提升，可选择路径，支持中文/英文，创建桌面/开始菜单快捷方式和卸载入口；安装后不自动运行，卸载不主动删除用户数据，不注册媒体关联或修改系统 PATH。
+- 安装版固定使用自身 `resources/mpv/mpv.exe`，不从 PATH 回退。SQLite/Provider worker 保持独立文件，未启用 ASAR；白名单与路径审计排除登录数据、数据库、私钥、日志和测试截图。
+- `test:package:win` 移除 mpv PATH，以独立临时配置检查真实包的沙箱、后台、SQLite、WASAPI、进程归属/退出、单实例和重启暂停恢复；可附已安装 StarsMusic.exe 路径。
+- `test:installer:win` 会实际静默安装到项目临时中文/空格路径，测试安装版后卸载并核对注册项；发现既有 StarsMusic 安装会拒绝替换，不读取真实账号或 userData。
+
+此包未签名，仅用于本地开发验证。第三方声明与现有许可文本随包保留；项目整体许可、静态音频库完整对应源码/许可组合与公开分发审计仍待完成，见 [运行时说明](windows/THIRD_PARTY.md) 和 [EXE 验证](../docs/validation/2026-10-28-windows-installer.md)。
 
 ## Arch Linux 本地包
 

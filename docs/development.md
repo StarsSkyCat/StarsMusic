@@ -141,6 +141,12 @@ main、preload、renderer、公共契约、会话守卫、网易云 Provider、�
 
 开发检查不要求联网、真实平台账号或读取用户主目录的凭据文件。
 
-## 本机 Arch 原生包
+## 本机安装包
+
+### Windows EXE
+
+Windows 本地 EXE 使用 `pnpm package:win`；`pnpm test:package:win` 检查独立运行目录，`pnpm test:installer:win` 会实际安装/测试/卸载到项目临时目录且拒绝替换既有安装。固定输入、输出与许可边界见 [打包说明](../packaging/README.md)。安装版内置 mpv，不依赖系统 PATH；这些 Windows 命令不替代 Linux 的 test:package。
+
+### Arch 原生包
 
 `pnpm package:arch` 进行类型检查、构建、白名单生产部署和 makepkg 打包，生成忽略的 release/ 安装包与 SHA-256。`pnpm test:package` 使用该独立运行目录测试可用的 Wayland/X11、系统输出与 MPRIS；`pnpm test:package /opt/starsmusic/starsmusic` 检查实际安装路径。仅作用于临时测试配置，不自动登录或读取真实账号。工具要求、安装/卸载与实际边界见 [打包说明](../packaging/README.md) 和 [Arch 记录](validation/2026-10-27-arch-package.md)。
