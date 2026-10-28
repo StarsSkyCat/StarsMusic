@@ -72,10 +72,12 @@ async function checkMarkdown(file, content) {
 }
 
 const required = [
-  'README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'package.json',
+  'README.md', 'AGENTS.md', 'CONTRIBUTING.md', 'LICENSE', 'SECURITY.md',
+  'THIRD_PARTY_NOTICES.md', 'package.json',
   'pnpm-workspace.yaml', 'pnpm-lock.yaml', '.gitignore', '.editorconfig',
   'docs/README.md', 'docs/development.md', 'docs/testing.md',
-  'docs/roadmap.md', 'docs/security.md', 'docs/adr/README.md',
+  'docs/roadmap.md', 'docs/security.md', 'docs/architecture.md',
+  'docs/platforms.md', 'docs/providers.md', 'docs/dependencies.md',
 ];
 for (const name of required) {
   try {
@@ -99,6 +101,12 @@ for (const file of await walk(root)) {
 
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 if (!manifest.private) fail(path.join(root, 'package.json'), '仓库根包必须为 private');
+if (manifest.license !== 'MIT') fail(path.join(root, 'package.json'), '项目许可证必须声明为 MIT');
+for (const notice of ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/licenses/']) {
+  if (!manifest.files?.includes(notice)) {
+    fail(path.join(root, 'package.json'), `生产部署白名单缺少许可文件：${notice}`);
+  }
+}
 if (!/^pnpm@\d+\.\d+\.\d+$/.test(manifest.packageManager ?? '')) {
   fail(path.join(root, 'package.json'), 'packageManager 需要固定 pnpm 精确版本');
 }

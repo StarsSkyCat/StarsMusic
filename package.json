@@ -3,6 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "description": "Linux-first cross-platform music player",
+  "license": "MIT",
+  "homepage": "https://github.com/StarsSkyCat/StarsMusic#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StarsSkyCat/StarsMusic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/StarsSkyCat/StarsMusic/issues"
+  },
   "type": "module",
   "main": "out/main/index.js",
   "packageManager": "pnpm@10.34.9",
@@ -53,6 +62,7 @@
   "desktopName": "org.starsmusic.StarsMusic.desktop",
   "files": [
     "out/",
+    "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "docs/licenses/"
   ]

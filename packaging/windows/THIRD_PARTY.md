@@ -1,6 +1,6 @@
 # Windows 本地验证包的第三方音频运行时
 
-本包为 StarsMusic 本地开发验证安装包，尚未完成项目整体许可和对外发行审计。
+本包为 StarsMusic 本地开发验证安装包，应用自有源码采用 MIT；内置音频运行时保留各自许可证，对外发行审计尚未完成。
 
 - mpv：官方 Windows MSVC x64 CI 构建 `v0.41.0-dev-gad5877eda`，2026-10-27 构建。[源码与构建入口](https://github.com/mpv-player/mpv/tree/ad5877eda)，二进制及归档校验值见同目录 `BUILD-SOURCE.json`。
 - 该 mpv 的构建参数包含 `-Dgpl=true` 与 `-Dffmpeg:gpl=enabled`，按 GPL 构建处理；不将它描述成纯 LGPL。原始 Copyright、GPL v2 和 LGPL v2.1 文本位于 licenses/。

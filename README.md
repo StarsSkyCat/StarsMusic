@@ -1,73 +1,82 @@
 # StarsMusic
 
-Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、酷狗音乐与本地音乐。
+基于 Electron、Vue 3、TypeScript、mpv 和 SQLite 的桌面音乐播放器，支持本地音乐、网易云音乐与酷狗音乐。Linux 优先，Windows 已有开发适配，macOS 尚未适配。
 
-当前处于 P0 接入阶段：支持本地音频、网易云扫码登录、分类公开歌单、歌曲/歌单搜索与播放，并已实现酷狗标准版 App 扫码、账号验证、歌单分页、曲目列表、流解析和单曲播放。网易云真实闭环已由用户确认出声；酷狗真实登录、私人歌单、曲目列表和部分歌曲出声已确认，取链已改为只按主 hash 解析以修复名称/声音错配，部分曲目仍因平台权限/资源限制不可用。已实现二维码区域按平台选择的 SQLite 加密“记住登录”（退出即删），使用应用管理的本地随机密钥，不依赖系统密钥服务；真实账号跨重启仍待用户验收。目录扫描与持久音乐库尚未实现；已提供本机 Arch 原生验证包，其他发行格式仍待实现。具体范围见 [网易云说明](docs/netease.md)、[酷狗说明](docs/kugou.md)、[凭据持久化](docs/credentials.md) 与 [验证记录](docs/validation/2026-10-26-netease.md)。
+项目处于早期开发阶段。源码采用 [MIT 许可证](LICENSE)，当前安装包用于本地验证，尚未完成公开发行验收。
 
-- [产品设计与技术选型](docs/design-and-architecture.md)
-- [开发文档索引](docs/README.md)
-- [开发指南与环境](docs/development.md)
-- [Linux 桌面集成与能力状态](docs/linux-desktop.md)
-- [Windows 开发适配与启动](docs/windows.md)
-- [开发路线图](docs/roadmap.md)
-- [协作规则](AGENTS.md) · [贡献流程](CONTRIBUTING.md)
-- 技术路线：Electron + Vue 3 + TypeScript + mpv + SQLite。
-- 第一阶段：验证两个平台的登录、歌单、播放闭环，以及 Linux 打包与桌面集成。
+## 功能
 
-Linux 已通过平台适配层接入 MPRIS、通知、托盘和快捷键；设置页按实际 D-Bus/宿主/portal 响应显示能力，Wayland 全局键需确认绑定，缺失服务时保留窗口和退出路径。范围见 [桌面集成](docs/linux-desktop.md)。
+- **本地播放**：选择音频文件，播放、暂停、定位、音量与静音控制。
+- **在线音乐**：网易云与酷狗独立扫码登录，浏览歌单、搜索歌曲与歌单、读取私人歌单；公开内容支持匿名浏览。
+- **统一队列**：整单播放、多选加入下一首、列表循环、随机播放与单曲循环；重启后暂停恢复队列和进度。
+- **播放页面**：在线歌曲封面与行级歌词、浅色 / 暗色 / 跟随系统主题。
+- **登录保存**：可按平台选择加密记住登录，默认使用临时会话。
+- **桌面集成**：Linux MPRIS、通知、托盘和快捷键；Windows 托盘、窗口控制与全局快捷键。
 
-Windows 已接入本地播放、托盘、可选关闭到托盘和全局快捷键，并提供内置 mpv 的 x64 EXE 本地验证安装包，见 [打包说明](packaging/README.md) 与 [EXE 验证](docs/validation/2026-10-28-windows-installer.md)。Windows 通知、系统媒体面板、签名和公开发行仍待完成；macOS 尚未适配。
+网易云喜欢、收藏与自建歌单单曲编辑已有实现，真实账号写入仍待验收；酷狗歌单目前只读，部分歌曲受平台权限或资源限制。登录成功不代表所有歌曲或音质可播放，应用按平台实际响应区分完整播放、试听与不可用，不提供音源解锁。
 
-主窗口右上角提供最小化、最大化/还原和关闭按钮；顶部空白区域可拖动，滚动页面时控制保持可见。窗口控制经独立白名单桥接，Linux/Windows 共用控制且已验证本机窗口按钮，macOS 配置保留原生红黄绿按钮、仍待实机验证。关闭遵循现有托盘设置，见 [窗口控制验证](docs/validation/2026-10-28-window-controls.md) 与 [Windows 复验](docs/validation/2026-10-28-windows.md)。
+本地目录扫描、标签索引、独立播放历史、无缝播放、逐字与桌面歌词尚未实现。更多限制见 [平台接入](docs/providers.md) 与 [路线图](docs/roadmap.md)。
 
-底栏通过一个按钮依次切换列表循环 / 随机播放 / 单曲循环，图标和提示显示当前模式；模式随队列保存，并与 Linux MPRIS 的 Shuffle、LoopStatus 双向同步。范围与实测见 [播放模式验证](docs/validation/2026-10-27-playback-modes.md)。
+## 平台支持
 
-酷狗空间支持发现歌单、歌曲/歌单搜索、公开详情分页、我的歌单及真实封面，公开内容可匿名浏览；连接标准版 App 账号后可尝试单曲/整单播放和多选下一首。匿名接口及桌面已实测，已补充歌曲 VIP / VIP 音质标记及登录会员套餐同步；真实账号搜索播放/整单与会员权限矩阵、收藏和歌单编辑仍待验证或实现，见 [酷狗搜索接入](docs/validation/2026-10-27-kugou-discovery.md)。
+| 平台 | 当前状态 |
+| --- | --- |
+| Linux x86_64 | 首要目标；Arch Linux 有本机安装、PipeWire、MPRIS 和 Wayland / XWayland 验证记录，其他发行版与桌面仍待验证 |
+| Windows x64 | 已验证本地播放、托盘、窗口控制及 EXE 安装 / 运行 / 卸载；未签名，系统媒体控制与兼容性矩阵待完成 |
+| macOS | 尚未适配和实机验证 |
 
-界面采用重新设计的浅色 / 暗色双主题：中性内容底色、红色主操作、悬浮玻璃侧栏与播放条。音乐库使用已有原创山景和紧凑来源入口，双平台页面使用统一分段导航、搜索、真实封面网格与曲目表；账号设置使用分组实底表面，队列和菜单使用高遮蔽度玻璃浮层。独立播放页保持封面、居中歌词与下一首布局；所有页面共享字号、圆角、焦点与禁用状态，并支持减少动态效果及减少透明度偏好。外观选择仍在本机保存并可跟随系统；这是 Electron/CSS 的材质实现，未调用 Apple 原生 Liquid Glass。最新范围和检查见 [全界面重设计验证](docs/validation/2026-10-28-interface-redesign.md)。
+现有验证的环境、范围和限制见 [测试说明](docs/testing.md)。
 
-歌单支持筛选、多选和下一首；往返独立播放页保留列表上下文。队列、顺序、当前曲目、进度、音量和静音自动保存在本机；重启后暂停恢复，在线曲目需要连接原账号。网易云支持喜欢、自建歌单添加/移除和公开歌单收藏，整单播放读取完整歌单后建立队列；真实账号写入和完整会员权限矩阵仍待验收。公开内容可匿名浏览，平台封面由后台按需读取，收费/音质和完整播放/试听以实际响应为准。详见 [网易云说明](docs/netease.md)、[酷狗说明](docs/kugou.md) 和 [歌词接入范围](docs/validation/2026-10-26-presentation.md)。
+## 从源码运行
 
-两边搜索栏共用组件，焦点仅高亮外层，支持一键清空；平台页右上角显示当前昵称。酷狗权益区在音乐空间与账号设置中展示已确认套餐/到期日、同步失败与重试，见 [搜索与权益验证](docs/validation/2026-10-27-platform-search-rights.md)。
-
-音乐库顶部支持网易云 / 酷狗在线歌曲和歌单搜索，并匹配已加载本地音频与已同步私人歌单；来源独立分页、失败和重试。首页已移除重复的当前播放队列列表，队列保留在抽屉；酷狗“我喜欢”统一按官方最新收藏在前的顺序分页和整单播放。见 [音乐库搜索与顺序验证](docs/validation/2026-10-27-library-search-order.md)。
-
-## 启动与检查
-
-需要 Node.js 24.x、pnpm 10.34.9；本地播放需要 Linux 的系统 mpv 或 Windows 的 mpv.exe，并加入当前终端 PATH（Linux 验证 0.41.0；Windows 见 [环境说明](docs/windows.md)）：
+准备 Git、Node.js **24.x**、pnpm **10.34.9**，以及可在当前终端 PATH 中运行的 **mpv**（Windows 为 mpv.exe）。播放需要可用的图形与音频会话。
 
 ```bash
+git clone https://github.com/StarsSkyCat/StarsMusic.git
+cd StarsMusic
 pnpm install --frozen-lockfile
 pnpm setup:electron
 pnpm dev
 ```
 
-本机 Arch 打包与安装验证见 [打包说明](packaging/README.md)、[首次安装记录](docs/validation/2026-10-27-arch-package.md) 和 [界面更新后的安装记录](docs/validation/2026-10-28-local-install.md)。
+首次安装依赖和 Electron 运行时需要联网。仅检查文档、类型、单元测试或构建应用代码时不需要 mpv。Windows 的 PATH 设置、桌面差异见 [平台说明](docs/platforms.md)。
 
-验证与运行构建产物：
+## 开发与构建
 
 ```bash
 pnpm check
 pnpm typecheck
 pnpm test
-pnpm test:playback
-pnpm test:desktop
 pnpm build
 pnpm start
-pnpm test:e2e
 ```
 
-setup:electron 首次下载固定版本的 Electron 运行时，需要网络；dev/start/test:e2e 需要可用的图形会话。build 生成 out/ 下的应用代码，尚不生成安装包；类型检查单独执行。仅有 Node 时可直接运行 `node scripts/check.mjs` 检查文档和配置。若环境提供 Corepack，可用 `corepack pnpm` 替代 `pnpm`。依赖、缓存与验证细节见 [开发指南](docs/development.md)。
+`build` 生成 out/ 下的应用代码；`start` 运行已有构建。音频集成测试、桌面测试和本机打包要求见 [开发指南](docs/development.md)、[测试说明](docs/testing.md) 与 [打包说明](packaging/README.md)。
 
-## 目录
+## 项目结构
 
-- src/：桌面主进程、preload 和界面入口边界。
-- packages/：公共契约、平台适配、播放、存储和系统集成。
-- packaging/：Linux 桌面入口、图标与 Arch 原生包配置。
-- scripts/：仓库工具。
-- docs/：设计、开发、验证与决策记录。
+```text
+src/          Electron 主进程、preload 与 Vue 界面
+packages/     公共契约、平台接入、播放、存储和系统适配
+tests/        单元测试、mpv / D-Bus 集成测试与 Electron E2E
+packaging/    Linux / Windows 打包配置、图标与运行时声明
+scripts/      检查、匿名探测、打包和安装验证工具
+patches/      依赖补丁
+docs/         长期维护的开发与使用说明、第三方许可文本
+```
 
-项目许可证尚未确定，发布前补充 LICENSE 与完整的第三方许可清单；当前直接依赖见 [依赖记录](docs/dependencies.md)。
-网易云协议基线的来源与许可见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+完整模块边界见 [架构说明](docs/architecture.md)。
 
-本地播放的边界与实际验证范围见 [播放说明](docs/playback.md) 和 [P0 记录](docs/validation/2026-10-26-local-playback.md)。
+## 文档与参与
+
+- [文档索引](docs/README.md) · [开发指南](docs/development.md) · [路线图](docs/roadmap.md)
+- [贡献指南](CONTRIBUTING.md) · [协作规则](AGENTS.md)
+- [安全与本地数据](docs/security.md) · [安全问题报告](SECURITY.md)
+
+扫码授权请在对应官方 App 内完成。选择记住登录后，凭据使用本地随机密钥加密并写入 SQLite；密钥与数据库分文件保存，**同时取得两者即可解密**。真实账号跨重启恢复和完整会员权限矩阵仍待验收。
+
+## 许可证
+
+StarsMusic 自有源码采用 [MIT License](LICENSE)。第三方代码、依赖与运行时保留各自的许可证，来源和声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [依赖清单](docs/dependencies.md)。平台名称、标识及音乐内容的权利归各自权利人所有，项目与相关音乐平台无隶属关系。
+
+Windows 验证包内置的 mpv 按 GPL 构建处理；其静态依赖许可与对应源码材料仍需在公开分发前补齐，见 [运行时声明](packaging/windows/THIRD_PARTY.md)。

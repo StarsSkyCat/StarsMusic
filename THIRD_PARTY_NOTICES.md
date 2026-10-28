@@ -1,5 +1,7 @@
 # 第三方来源与许可
 
+StarsMusic 自有源码采用 [MIT License](LICENSE)。以下来源、依赖和运行时保留各自的版权与许可证；本项目的 MIT 声明不替代这些义务。
+
 ## 网易云协议格式
 
 packages/providers/src/netease/crypto.ts 的 eapi/weapi 格式和公开协议常量参考 NeteaseCloudMusicApiEnhanced/api-enhanced 4.41.1，以 Node.js crypto 重新实现；所需端点字段同样以该版本为基线。没有复制参考播放器代码或视觉资产，也没有加载该 SDK 的服务器、日志、共享令牌文件或音源解锁模块。
@@ -7,7 +9,7 @@ packages/providers/src/netease/crypto.ts 的 eapi/weapi 格式和公开协议常
 - 来源：[api-enhanced 4.41.1](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced/tree/2db6684453297ee86dec0492842f2320b08182d9)
 - 对应文件：util/crypto.js、util/config.json、module/login_qr_key.js、login_qr_check.js、user_account.js、user_playlist.js、playlist_detail.js、song_detail.js、song_url.js、lyric.js、cloudsearch.js、top_playlist.js、toplist.js、vip_info.js、vip_info_v2.js、like.js、likelist.js、playlist_tracks.js、playlist_subscribe.js 与 public/docs/home.md 的收费/权限字段说明。
 - 提交：2db6684453297ee86dec0492842f2320b08182d9。
-- 原许可：[MIT](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced/blob/2db6684453297ee86dec0492842f2320b08182d9/LICENSE)。完整声明如下；项目整体许可仍未确定。
+- 原许可：[MIT](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced/blob/2db6684453297ee86dec0492842f2320b08182d9/LICENSE)。完整声明如下；StarsMusic 自有源码采用 [MIT](LICENSE)，第三方内容保留原许可。
 
 ```text
 The MIT License (MIT)
@@ -38,9 +40,9 @@ THE SOFTWARE.
 packages/providers/src/kugou/crypto.ts 与 transport.ts 的扫码、设备注册、签名和端点字段参考 MakcRe/KuGouMusicApi 1.6.2，以 Node.js crypto/fetch 重新实现；所需端点白名单固定在该 transport。没有复制参考播放器代码或视觉资产，也没有加载该 SDK 的 Express 服务、共享设备配置或任意接口模块。
 
 - 来源：[KuGouMusicApi 1.6.2](https://github.com/MakcRe/KuGouMusicApi/tree/62730f900dc9fdc51396a663b3d33a6c4c704046)
-- 对应文件：util/config.json、util/crypto.js、util/helper.js、util/request.js、util/util.js、module/login_qr_key.js、login_qr_check.js、register_dev.js、user_detail.js、user_playlist.js、playlist_track_all_new.js、song_url.js、privilege_lite.js、search_lyric.js、lyric.js、search.js、top_playlist.js、playlist_track_all.js、user_vip_detail.js 与 youth_union_vip.js。
+- 对应文件：util/config.json、util/crypto.js、util/helper.js、util/request.js、util/util.js、module/login_qr_key.js、login_qr_check.js、register_dev.js、user_detail.js、user_playlist.js、playlist_track_all_new.js、song_url.js、privilege_lite.js、search_lyric.js、lyric.js、search.js、top_playlist.js、playlist_track_all.js、user_vip_detail.js 与 youth_union_vip.js、user_verify.js、song_auth.js 与 song_url_auth.js。
 - 提交：62730f900dc9fdc51396a663b3d33a6c4c704046。
-- 原许可：[MIT](https://github.com/MakcRe/KuGouMusicApi/blob/62730f900dc9fdc51396a663b3d33a6c4c704046/LICENSE)。完整声明如下；项目整体许可仍未确定。
+- 原许可：[MIT](https://github.com/MakcRe/KuGouMusicApi/blob/62730f900dc9fdc51396a663b3d33a6c4c704046/LICENSE)。完整声明如下；StarsMusic 自有源码采用 [MIT](LICENSE)，第三方内容保留原许可。
 
 ```text
 MIT License

@@ -57,9 +57,9 @@ try {
   const deployed = path.join(work, 'deploy');
   // pnpm performs the production dependency closure; project files use package.json's explicit allowlist.
   await run('pnpm', ['--filter', 'starsmusic', '--prod', 'deploy', '--legacy', '--frozen-lockfile', '--prefer-offline', '--store-dir', path.join(release, '.pnpm-store'), '--ignore-scripts', deployed]);
-  const allowed = new Set(['out', 'node_modules', 'package.json', 'README.md', 'THIRD_PARTY_NOTICES.md', 'docs']);
+  const allowed = new Set(['out', 'node_modules', 'package.json', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs']);
   for (const entry of await readdir(deployed)) if (!allowed.has(entry)) throw new Error(`Unexpected deployed project entry: ${entry}`);
-  await writeFile(path.join(deployed, 'package.json'), JSON.stringify({ name: manifest.name, version: manifest.version, private: true, type: 'module', main: manifest.main, description: manifest.description, dependencies: manifest.dependencies }, null, 2) + '\n');
+  await writeFile(path.join(deployed, 'package.json'), JSON.stringify({ name: manifest.name, version: manifest.version, private: true, type: 'module', main: manifest.main, description: manifest.description, license: manifest.license, dependencies: manifest.dependencies }, null, 2) + '\n');
   // pnpm's installation metadata contains build-machine paths and is not needed by the runtime.
   for (const name of ['.modules.yaml', '.pnpm-workspace-state-v1.json', '.bin', '.pnpm/lock.yaml']) await rm(path.join(deployed, 'node_modules', name), { recursive: true, force: true });
   await run('rsvg-convert', ['--width', '256', '--height', '256', '--output', path.join(deployed, 'icon.png'), path.join(root, 'packaging/linux/org.starsmusic.StarsMusic.svg')]);

@@ -22,7 +22,7 @@ pnpm test:installer:win
 - `test:package:win` 移除 mpv PATH，以独立临时配置检查真实包的沙箱、后台、SQLite、WASAPI、进程归属/退出、单实例和重启暂停恢复；可附已安装 StarsMusic.exe 路径。
 - `test:installer:win` 会实际静默安装到项目临时中文/空格路径，测试安装版后卸载并核对注册项；发现既有 StarsMusic 安装会拒绝替换，不读取真实账号或 userData。
 
-此包未签名，仅用于本地开发验证。第三方声明与现有许可文本随包保留；项目整体许可、静态音频库完整对应源码/许可组合与公开分发审计仍待完成，见 [运行时说明](windows/THIRD_PARTY.md) 和 [EXE 验证](../docs/validation/2026-10-28-windows-installer.md)。
+此包未签名，仅用于本地开发验证。应用自有源码采用 [MIT](../LICENSE)，应用 LICENSE、第三方声明与现有许可文本随包保留；静态音频库完整对应源码 / 许可组合与公开分发审计仍待完成，见 [运行时说明](windows/THIRD_PARTY.md) 和 [验证摘要](../docs/testing.md)。
 
 ## Arch Linux 本地包
 
@@ -35,7 +35,7 @@ pnpm test:package
 
 生成的 `.pkg.tar.zst`、SHA-256 和独立运行目录保存在忽略的 release/，latest-arch.json 标记本次产物。版本包含源码提交计数与短 hash，未提交构建另标 local。打包脚本使用 package.json 的 files 白名单，仅纳入 out、必要声明和生产依赖；pnpm 禁用安装脚本并按锁文件部署，缓存定向到 release/，不读取用户登录库。构建时可从 npm 下载锁定依赖，不请求平台账号。
 
-包内额外检查禁止的账号/数据库/导出/测试产物路径，以及依赖链接是否全部指向包内；移除 pnpm 的机器路径元数据。保留 Electron 的 LICENSE / LICENSES.chromium.html、应用第三方声明和各生产依赖自带许可。mpv/FFmpeg 不捆绑，pacman 声明系统 mpv 等运行依赖。本包仅供本机验证，项目整体许可与公开发行审计仍未完成。
+包内额外检查禁止的账号/数据库/导出/测试产物路径，以及依赖链接是否全部指向包内；移除 pnpm 的机器路径元数据。保留 Electron 的 LICENSE / LICENSES.chromium.html、应用 MIT 许可证、第三方声明和各生产依赖自带许可；应用 LICENSE 同时安装到 /usr/share/licenses/starsmusic/。mpv/FFmpeg 不捆绑，pacman 声明系统 mpv 等运行依赖。本包仅供本机验证，完整公开发行审计仍待完成。
 
 系统安装采用 `sudo pacman -U` 或标准 Polkit 授权后的 `pacman -U`，由 pacman 管理 /opt/starsmusic、/usr/bin/starsmusic、桌面入口与图标；卸载使用 `sudo pacman -R starsmusic`。安装/卸载不复制或删除用户的 StarsMusic userData，登录和播放记录继续由应用管理。程序启用 Electron 沙箱，系统包中的 chrome-sandbox 使用 root 所有者及 4755 权限；不添加 --no-sandbox。安装版采用单实例锁，重复打开显示现有窗口。
 
@@ -45,4 +45,4 @@ Linux 桌面入口和原创 SVG/PNG 图标与 DesktopEntry / portal 身份一致
 pnpm test:package /opt/starsmusic/starsmusic
 ```
 
-遵循 [Electron 手动分发](https://www.electronjs.org/docs/latest/tutorial/application-distribution)、[pnpm 10 deploy](https://pnpm.io/10.x/cli/deploy) 与 [Arch PKGBUILD](https://man.archlinux.org/man/PKGBUILD.5.en)；没有新增 npm 打包器依赖。本机证据见 [首次 Arch 验证记录](../docs/validation/2026-10-27-arch-package.md) 与 [界面更新后的本地安装记录](../docs/validation/2026-10-28-local-install.md)。
+构建方式使用 [Electron 手动分发](https://www.electronjs.org/docs/latest/tutorial/application-distribution)、[pnpm 10 deploy](https://pnpm.io/10.x/cli/deploy) 与 [Arch PKGBUILD](https://man.archlinux.org/man/PKGBUILD.5.en)。本机环境和既有安装检查范围见 [测试说明](../docs/testing.md)，历史产物校验值可从 Git 历史追溯。

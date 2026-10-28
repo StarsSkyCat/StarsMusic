@@ -57,8 +57,8 @@ try {
   await pnpm(['build']);
   const deployed = path.join(work, 'app');
   await pnpm(['--filter', 'starsmusic', '--prod', 'deploy', '--legacy', '--frozen-lockfile', '--prefer-offline', '--store-dir', path.join(root, 'release/.pnpm-store'), '--ignore-scripts', deployed]);
-  for (const entry of await readdir(deployed)) if (!['out', 'node_modules', 'package.json', 'README.md', 'THIRD_PARTY_NOTICES.md', 'docs'].includes(entry)) throw new Error(`Unexpected deployed entry: ${entry}`);
-  await writeFile(path.join(deployed, 'package.json'), JSON.stringify({ name: manifest.name, productName: 'StarsMusic', version, private: true, type: 'module', main: manifest.main, description: manifest.description, license: 'UNLICENSED', dependencies: manifest.dependencies }, null, 2) + '\n');
+  for (const entry of await readdir(deployed)) if (!['out', 'node_modules', 'package.json', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs'].includes(entry)) throw new Error(`Unexpected deployed entry: ${entry}`);
+  await writeFile(path.join(deployed, 'package.json'), JSON.stringify({ name: manifest.name, productName: 'StarsMusic', version, private: true, type: 'module', main: manifest.main, description: manifest.description, license: manifest.license, dependencies: manifest.dependencies }, null, 2) + '\n');
   for (const name of ['.modules.yaml', '.pnpm-workspace-state-v1.json', '.bin', '.pnpm/lock.yaml']) {
     const target = path.resolve(deployed, 'node_modules', name);
     if (!target.startsWith(path.resolve(work) + path.sep)) throw new Error('Invalid staging path');
@@ -82,7 +82,7 @@ try {
     appId: 'org.starsmusic.StarsMusic', productName: 'StarsMusic', executableName: 'StarsMusic',
     directories: { app: deployed, output: release, buildResources: assets }, electronDist: electronDirectory, electronVersion: manifest.devDependencies.electron,
     asar: false, npmRebuild: false, nodeGypRebuild: false, compression: 'normal',
-    files: ['out/**/*', 'package.json', 'THIRD_PARTY_NOTICES.md', 'docs/licenses/**/*'],
+    files: ['out/**/*', 'package.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/licenses/**/*'],
     extraResources: [{ from: audio, to: 'mpv' }, { from: path.join(assets, 'starsmusic.png'), to: 'icon.png' }, { from: path.join(work, 'BUILD-METADATA.json'), to: 'BUILD-METADATA.json' }, { from: path.join(work, 'LICENSE.electron.txt'), to: 'LICENSE.electron.txt' }],
     win: { target: 'nsis', icon: path.join(assets, 'starsmusic.ico'), requestedExecutionLevel: 'asInvoker', signAndEditExecutable: true, artifactName: 'StarsMusic-${version}-x64-Setup.${ext}' },
     nsis: { oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true, runAfterFinish: false, deleteAppDataOnUninstall: false,
