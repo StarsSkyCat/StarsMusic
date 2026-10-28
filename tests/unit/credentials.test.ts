@@ -120,6 +120,7 @@ test('密文损坏或解密失败进入锁定状态，清除后恢复可用', as
   const { directory, file, vault } = await temporaryVault();
   try {
     await rememberBoth(vault, true); await vault.save(neteaseBundle);
+    await vault.close();
     const database = new DatabaseSync(file);
     database.prepare('UPDATE credentials SET ciphertext = ? WHERE provider = ?').run(Buffer.from('tampered').toString('base64'), 'netease');
     database.close();

@@ -32,7 +32,7 @@ test('播放保存契约严格白名单，拒绝流地址/凭据/相对路径/�
 });
 
 test('播放模式和随机原序跨 SQLite 实例恢复，旧记录默认列表循环，拒绝损坏原序', async () => {
-  const directory = await mkdtemp('/tmp/starsmusic-mode-db-'); const file = path.join(directory, 'playback.sqlite');
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-mode-db-')); const file = path.join(directory, 'playback.sqlite');
   let store = new SqlitePlaybackSessionStore(file); const first = new MusicPlayer(); const second = new MusicPlayer();
   try {
     first.restoreSession(saved(), neverResolve); assert.equal(first.snapshot().loopMode, 'playlist'); assert.equal(first.snapshot().shuffle, false);

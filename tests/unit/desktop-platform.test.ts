@@ -18,6 +18,7 @@ test('D-Bus 仅接受本地 Unix 地址，禁用命令执行、TCP 和畸形路�
 
 import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { DesktopSettings } from '../../packages/desktop/src/settings.ts';
 import { defaultSystemPreferences, parseSystemPreferences, parseSystemArguments, systemChannels, parseSystemSnapshot } from '../../packages/contracts/src/system.ts';
 import { DesktopController } from '../../packages/desktop/src/controller.ts';
@@ -34,7 +35,7 @@ test('系统 IPC 只允许具体无参操作和四个布尔设置，禁止任意
 });
 
 test('桌面设置只保存白名单布尔值，跨实例恢复；未知版本原样保留，不默默覆盖', async () => {
-  const directory = await mkdtemp('/tmp/starsmusic-desktop-settings-'); const file = path.join(directory, 'desktop.json');
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-desktop-settings-')); const file = path.join(directory, 'desktop.json');
   try {
     const store = new DesktopSettings(file); assert.equal(await store.initialize(), true);
     const next = { ...defaultSystemPreferences(), notifications: true, globalShortcuts: true };
@@ -48,7 +49,7 @@ test('桌面设置只保存白名单布尔值，跨实例恢复；未知版本�
 });
 
 test('X11 按每项实际注册结果报告；保存失败不改变快捷键状态，禁用和退出准确注销，不宣称其他平台可用', async () => {
-  const directory = await mkdtemp('/tmp/starsmusic-desktop-controller-'); const file = path.join(directory, 'desktop.json');
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-desktop-controller-')); const file = path.join(directory, 'desktop.json');
   const player = new MusicPlayer(); const callbacks = new Map<string, () => void>(); const removed: string[] = [];
   const runtime: DesktopRuntime = { show() {}, quit() {}, hide() {}, isVisible: () => true, createTray() { throw new Error('no host'); },
     registerShortcut(accelerator, callback) { if (accelerator.endsWith('Space')) return false; callbacks.set(accelerator, callback); return true; }, unregisterShortcut(accelerator) { removed.push(accelerator); callbacks.delete(accelerator); } };
