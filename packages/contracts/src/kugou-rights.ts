@@ -11,16 +11,16 @@ export function parseKugouTrackRights(value: unknown): KugouTrackRights {
 }
 export interface KugouMembership {
   readonly status: 'idle' | 'loading' | 'ready' | 'error';
-  readonly benefits: readonly { readonly kind: 'standard' | 'svip' | 'tvip' | 'qvip' | 'dvip' | 'other'; readonly expiresAt?: number; readonly startsAt?: number }[];
+  readonly benefits: readonly { readonly kind: 'standard' | 'super' | 'svip' | 'tvip' | 'qvip' | 'dvip' | 'other'; readonly expiresAt?: number; readonly startsAt?: number }[];
   readonly syncedAt?: number;
   readonly error?: AppError;
 }
 export function parseKugouMembership(value: unknown): KugouMembership {
   const raw = record(value, 'kugou.membership');
-  if (!Array.isArray(raw.benefits) || raw.benefits.length > 17) throw new ContractValidationError('kugou.membership.benefits');
+  if (!Array.isArray(raw.benefits) || raw.benefits.length > 18) throw new ContractValidationError('kugou.membership.benefits');
   return Object.freeze({ status: choice(raw.status, ['idle', 'loading', 'ready', 'error'], 'kugou.membership.status'), benefits: Object.freeze(raw.benefits.map(value => {
     const item = record(value, 'kugou.membership.benefit');
-    return Object.freeze({ kind: choice(item.kind, ['standard', 'svip', 'tvip', 'qvip', 'dvip', 'other'], 'kugou.membership.kind'),
+    return Object.freeze({ kind: choice(item.kind, ['standard', 'super', 'svip', 'tvip', 'qvip', 'dvip', 'other'], 'kugou.membership.kind'),
       ...(item.expiresAt === undefined ? {} : { expiresAt: nonNegativeInteger(item.expiresAt, 'kugou.membership.expiresAt') }),
       ...(item.startsAt === undefined ? {} : { startsAt: nonNegativeInteger(item.startsAt, 'kugou.membership.startsAt') }) });
   })), ...(raw.syncedAt === undefined ? {} : { syncedAt: nonNegativeInteger(raw.syncedAt, 'kugou.membership.syncedAt') }), ...(raw.error === undefined ? {} : { error: parseAppError(raw.error) }) });

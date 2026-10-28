@@ -42,20 +42,26 @@ export function standardBenefits(value: unknown, accountId: string, now: number)
   if (vip === 0) return [];
   const expiresAt = instant(data.vip_end_time); const startsAt = instant(data.vip_begin_time);
   if ((expiresAt !== undefined && expiresAt <= now) || (startsAt !== undefined && startsAt > now)) return [];
-  // vip_type > 0 仅声明标准版会员，不凭等级猜测套餐名称或可播音质。
-  return [{ kind: 'standard', ...(expiresAt === undefined ? {} : { expiresAt }), ...(startsAt === undefined ? {} : { startsAt }) }];
+  // The pinned upstream documents vip_type=6 as Super VIP. Product code
+  // "svip" in busi_vip means concept VIP and must not be confused with it.
+  return [{ kind: vip === 6 ? 'super' : 'standard', ...(expiresAt === undefined ? {} : { expiresAt }), ...(startsAt === undefined ? {} : { startsAt }) }];
 }
 export function unionBenefits(value: unknown, accountId: string, now: number): KugouMembership['benefits'] {
   const data = record(success(value).data, 'kugou.membership.union'); owner(data, accountId);
+  // Standard VIP is also reported at the top level. Some valid responses have
+  // no independent products at all; requiring busi_vip used to discard them.
+  const hasStandard = data.vip_type !== undefined && data.vip_type !== null;
+  const standard = hasStandard ? standardBenefits(data, accountId, now) : [];
+  if (data.busi_vip == null && hasStandard) return standard;
   if (!Array.isArray(data.busi_vip) || data.busi_vip.length > 16) throw new DomainError('invalid-response');
-  return data.busi_vip.flatMap(value => {
+  return [...standard, ...data.busi_vip.flatMap(value => {
     const item = record(value, 'kugou.membership.product'); owner(item, accountId);
-    const active = flag(item.is_vip);
+    const active = typeof item.is_vip === 'boolean' ? Number(item.is_vip) : flag(item.is_vip);
     if (active !== 0 && active !== 1) throw new DomainError('invalid-response');
     if (active === 0) return [];
     const expiresAt = instant(item.vip_end_time); const startsAt = instant(item.vip_begin_time);
     if ((expiresAt !== undefined && expiresAt <= now) || (startsAt !== undefined && startsAt > now)) return [];
-    const kind = ['svip', 'tvip', 'qvip', 'dvip'].includes(String(item.product_type)) ? item.product_type as 'svip' | 'tvip' | 'qvip' | 'dvip' : 'other';
+    const kind: KugouMembership['benefits'][number]['kind'] = ['svip', 'tvip', 'qvip', 'dvip'].includes(String(item.product_type)) ? item.product_type as 'svip' | 'tvip' | 'qvip' | 'dvip' : 'other';
     return [{ kind, ...(expiresAt === undefined ? {} : { expiresAt }), ...(startsAt === undefined ? {} : { startsAt }) }];
-  });
+  })];
 }

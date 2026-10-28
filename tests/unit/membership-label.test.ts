@@ -13,4 +13,6 @@ test('紧凑会员标记区分 VIP/SVIP，过滤过期和未开始套餐，不�
   const kugou = { ...initialKugouSnapshot(), status: 'connected' as const, membership: { status: 'error' as const, benefits: [{ kind: 'standard' as const }, { kind: 'svip' as const, expiresAt: 999 }, { kind: 'qvip' as const, startsAt: 2000 }] } };
   assert.deepEqual(membershipLabel('kugou', kugou, 1000), { label: 'VIP', detail: '标准版 VIP' });
   assert.equal(membershipLabel('kugou', { ...kugou, membership: { status: 'error', benefits: [] } }, 1000).label, '');
+  assert.equal(membershipLabel('kugou', { ...kugou, membership: { status: 'ready', benefits: [{ kind: 'super' }] } }, 1000).label, 'SVIP');
+  assert.equal(membershipLabel('kugou', { ...kugou, membership: { status: 'ready', benefits: [{ kind: 'svip' }] } }, 1000).label, 'VIP');
 });

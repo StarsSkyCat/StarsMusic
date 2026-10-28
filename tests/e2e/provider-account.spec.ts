@@ -25,6 +25,9 @@ test('双平台紧凑账号入口：小会员标记、菜单开关、退出与�
         ipcMain.handle(channels.logout, () => { state = { ...initial, revision: state.revision, generation: state.generation + 1 } as typeof state; return publish(); });
         ipcMain.handle(channels.startLogin, () => { state = { ...state, status: 'waiting-scan', expiresAt: Date.now() + 120000, qrImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' } as typeof state; return publish(); });
         ipcMain.handle(channels.cancelLogin, () => { state = { ...initial, revision: state.revision, generation: state.generation, status: 'cancelled' }; return publish(); });
+        if (provider === 'kugou') Reflect.set(globalThis, '__syntheticKugouTier', (kind: 'standard' | 'super') => {
+          state = { ...state, membership: { status: 'ready', benefits: [{ kind }] } } as typeof initial; publish();
+        });
         publish();
       }
     }, { sources: [{ provider: 'netease', channels: neteaseChannels, initial: initialNeteaseSnapshot() }, { provider: 'kugou', channels: kugouChannels, initial: initialKugouSnapshot() }] });
@@ -34,6 +37,12 @@ test('双平台紧凑账号入口：小会员标记、菜单开关、退出与�
       const panel = page.getByRole('dialog', { name: `${name}账号`, exact: true });
       await expect(page.locator('.account-card')).toHaveCount(0);
       await expect(page.locator('.ne-masthead .account-vip')).toHaveText(badge);
+      if (provider === 'kugou') {
+        await desktop.evaluate(() => { (Reflect.get(globalThis, '__syntheticKugouTier') as (kind: string) => void)('super'); });
+        await expect(page.locator('.ne-masthead .account-vip')).toHaveText('SVIP');
+        await desktop.evaluate(() => { (Reflect.get(globalThis, '__syntheticKugouTier') as (kind: string) => void)('standard'); });
+        await expect(page.locator('.ne-masthead .account-vip')).toHaveText('VIP');
+      }
       await expect(panel).toHaveCount(0);
       for (const theme of ['浅色', '暗色']) {
         await page.getByRole('button', { name: '设置', exact: true }).click();

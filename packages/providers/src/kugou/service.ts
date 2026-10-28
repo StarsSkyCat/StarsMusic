@@ -224,6 +224,7 @@ export class KugouService {
   #artworkCache = new Map<string, string | null>();
   #artworkPending = new Map<string, Promise<string | null>>();
   #membershipRequest: Promise<KugouSnapshot> | undefined;
+  #membershipSources: [KugouMembership['benefits'], KugouMembership['benefits']] = [[], []];
 
   constructor(options: ServiceOptions = {}) { this.#options = options; }
   #now(): number { return this.#options.now?.() ?? Date.now(); }
@@ -244,7 +245,7 @@ export class KugouService {
     this.#catalogAbort?.abort(); this.#queueAbort?.abort(); this.#catalogView++;
     this.#artworkAbort.abort(); this.#artworkAbort = new AbortController();
     this.#publicPlaylists.clear(); this.#playlistCovers.clear(); this.#artworkCache.clear(); this.#artworkPending.clear();
-    this.#membershipRequest = undefined;
+    this.#membershipRequest = undefined; this.#membershipSources = [[], []];
   }
   #end(status: 'signed-out' | 'cancelled' | 'expired' | 'failed', error?: KugouSnapshot['error']): KugouSnapshot {
     this.#sessions.invalidate('kugou'); this.#lease = undefined; this.#clear();
@@ -395,7 +396,7 @@ export class KugouService {
   #syncMembership(profile?: Record<string, unknown>): Promise<KugouSnapshot> {
     if (this.#membershipRequest) return this.#membershipRequest;
     const { lease, transport } = this.#connected();
-    this.#update({ membership: { status: 'loading', benefits: [] } });
+    this.#update({ membership: { status: 'loading', benefits: this.#state.membership.benefits } });
     const operation = (async () => {
       const now = this.#now();
       const results = await Promise.allSettled([
@@ -403,8 +404,15 @@ export class KugouService {
         (async () => unionBenefits(await transport.call('membership', {}, lease.signal), lease.context.accountId!, now))(),
       ]);
       if (!this.#sessions.isCurrent(lease)) return this.#state;
-      const benefits: KugouMembership['benefits'][number][] = [];
-      for (const result of results) if (result.status === 'fulfilled') benefits.push(...result.value);
+      for (const [index, result] of results.entries()) {
+        if (result.status === 'fulfilled') this.#membershipSources[index as 0 | 1] = result.value;
+      }
+      // Cache only normalized benefits, per source and current account. A
+      // successful non-member response clears that source; a transient failure
+      // keeps its last confirmed, still-active benefits with an error status.
+      const benefits = [...new Map(this.#membershipSources.flat()
+        .filter(item => (item.expiresAt === undefined || item.expiresAt > now) && (item.startsAt === undefined || item.startsAt <= now))
+        .map(item => [JSON.stringify(item), item])).values()];
       const failure = results.find(result => result.status === 'rejected');
       this.#update({ membership: { status: failure ? 'error' : 'ready', benefits, syncedAt: now,
         ...(failure?.status === 'rejected' ? { error: normalizeError(failure.reason) } : {}) } });

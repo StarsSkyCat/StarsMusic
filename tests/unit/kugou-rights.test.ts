@@ -32,7 +32,7 @@ class Transport implements KugouTransport {
     return { status: 1, hash, url: ['https://fsandroid.kugou.com/synthetic'], priv_status: 0 };
   }
 }
-function fixture() { const transport = new Transport(); const service = new KugouService({ transport: () => transport, now: () => now, autoPoll: false, encodeQr: async () => 'data:image/png;base64,c3ludGhldGlj' }); return { transport, service }; }
+function fixture(clock = () => now) { const transport = new Transport(); const service = new KugouService({ transport: () => transport, now: clock, autoPoll: false, encodeQr: async () => 'data:image/png;base64,c3ludGhldGlj' }); return { transport, service }; }
 async function connect(service: KugouService) { await service.startLogin(); await service.pollOnce(); await service.refreshMembership(); }
 
 test('酷狗播放会员标记不从下载价格或高音质收费推断，列表/搜索权限通过契约白名单', () => {
@@ -64,6 +64,77 @@ test('酷狗独立会员套餐读取所有权益，过滤失效/未开始，不�
   assert.equal(benefits[0]!.expiresAt, Date.parse('2026-10-28T00:00:00+08:00'));
   assert.equal(benefits[2]!.expiresAt, undefined);
   for (const data of [{ userid: '99', busi_vip: [] }, {}, { busi_vip: [product('svip', { vip_end_time: '2026-02-30 00:00:00' })] }, { busi_vip: [product('svip', { is_vip: 'unexpected' })] }]) assert.throws(() => unionBenefits(ok(data), '42', now));
+});
+
+test('酷狗会员顶层普通 VIP/SVIP 不依赖独立套餐数组，过期不显示且不混淆概念版 svip', () => {
+  const standard = unionBenefits(ok({ userid: '42', vip_type: '1', vip_end_time: '2026-10-28 00:00:00' }), '42', now);
+  assert.deepEqual(standard, [{ kind: 'standard', expiresAt: Date.parse('2026-10-28T00:00:00+08:00') }]);
+  assert.equal(unionBenefits(ok({ vip_type: 1, busi_vip: [] }), '42', now)[0]?.kind, 'standard');
+  assert.equal(unionBenefits(ok({ vip_type: 1, busi_vip: null }), '42', now)[0]?.kind, 'standard');
+  assert.equal(unionBenefits(ok({ vip_type: 6 }), '42', now)[0]?.kind, 'super');
+  assert.equal(unionBenefits(ok({ vip_type: 0, busi_vip: [product('svip', { is_vip: true })] }), '42', now)[0]?.kind, 'svip');
+  assert.deepEqual(unionBenefits(ok({ vip_type: 1, vip_end_time: '2026-10-26 00:00:00' }), '42', now), []);
+  assert.deepEqual(unionBenefits(ok({ vip_type: 0 }), '42', now), []);
+  for (const value of [{ userid: '99', vip_type: 1 }, { vip_type: 'unexpected' }, { vip_type: 1, busi_vip: {} }, { unknown: 1 }]) {
+    assert.throws(() => unionBenefits(ok(value), '42', now));
+  }
+});
+
+test('普通 VIP 可从联合会员接口补齐，刷新/部分失败保留已确认权益，成功非会员响应撤销标记', async () => {
+  const { service, transport } = fixture();
+  transport.handlers.set('account', async () => ok({ userid: '42', nickname: '合成普通 VIP', vip_type: 0 }));
+  transport.handlers.set('membership', async () => ok({ userid: '42', vip_type: 1 }));
+  try {
+    await connect(service);
+    assert.deepEqual(service.snapshot().membership.benefits, [{ kind: 'standard' }]);
+    const delayed = deferred<unknown>(); transport.handlers.set('membership', () => delayed.promise);
+    const refresh = service.refreshMembership();
+    assert.equal(service.snapshot().membership.status, 'loading');
+    assert.deepEqual(service.snapshot().membership.benefits, [{ kind: 'standard' }]);
+    delayed.resolve(ok({ userid: '42', vip_type: 1 })); await refresh;
+    transport.handlers.set('membership', async () => { throw new DomainError('network'); });
+    await service.refreshMembership();
+    assert.equal(service.snapshot().membership.status, 'error');
+    assert.deepEqual(service.snapshot().membership.benefits, [{ kind: 'standard' }]);
+    transport.handlers.set('membership', async () => ok({ userid: '42', vip_type: 0 }));
+    await service.refreshMembership();
+    assert.equal(service.snapshot().membership.status, 'ready');
+    assert.deepEqual(service.snapshot().membership.benefits, []);
+    service.logout(); transport.handlers.set('membership', async () => { throw new DomainError('network'); });
+    await connect(service);
+    assert.deepEqual(service.snapshot().membership.benefits, []);
+  } finally { service.dispose(); }
+});
+
+test('账号资料缺少会员字段不丢弃联合接口已确认的普通 VIP，跨账号与迟到响应仍隔离', async () => {
+  const { service, transport } = fixture();
+  transport.handlers.set('account', async () => ok({ userid: '42', nickname: '合成资料无会员字段' }));
+  transport.handlers.set('membership', async () => ok({ userid: '42', vip_type: 1, vip_end_time: now + 60000 }));
+  try {
+    await connect(service);
+    assert.equal(service.snapshot().status, 'connected');
+    assert.equal(service.snapshot().membership.benefits[0]?.kind, 'standard');
+    const delayed = deferred<unknown>(); transport.handlers.set('membership', () => delayed.promise);
+    const pending = service.refreshMembership(); service.logout();
+    delayed.resolve(ok({ userid: '42', vip_type: 6 })); await pending;
+    assert.deepEqual(service.snapshot().membership.benefits, []);
+    transport.handlers.set('membership', async () => ok({ userid: '99', vip_type: 1 }));
+    await connect(service); assert.deepEqual(service.snapshot().membership.benefits, []);
+  } finally { service.dispose(); }
+});
+
+test('保留的会员结果仍按有效期过滤，不因两端点都暂时失败展示已过期 VIP', async () => {
+  let current = now; const { service, transport } = fixture(() => current);
+  transport.handlers.set('account', async () => ok({ userid: '42', nickname: '合成短期 VIP', vip_type: 0 }));
+  transport.handlers.set('membership', async () => ok({ userid: '42', vip_type: 1, vip_end_time: now + 1000 }));
+  try {
+    await connect(service); assert.equal(service.snapshot().membership.benefits[0]?.kind, 'standard');
+    current += 2000;
+    for (const endpoint of ['account', 'membership'] as const) transport.handlers.set(endpoint, async () => { throw new DomainError('network'); });
+    await service.refreshMembership();
+    assert.equal(service.snapshot().membership.status, 'error');
+    assert.deepEqual(service.snapshot().membership.benefits, []);
+  } finally { service.dispose(); }
 });
 
 test('登录自动同步、手动去重，部分失败保留已确认权益，退出丢弃迟到同步', async () => {
