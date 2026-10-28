@@ -1,5 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Duplex } from 'node:stream';
+import { randomUUID } from 'node:crypto';
+import { createConnection, type Socket } from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
 import { DomainError } from '../../contracts/src/errors.ts';
 
 interface PendingRequest {
@@ -27,6 +30,7 @@ export class MpvClient {
   #closed: Promise<void> = Promise.resolve();
   #closing = false;
   #dead = false;
+  #failureReported = false;
   #buffer = '';
   #sequence = 0;
   #requests = new Map<number, PendingRequest>();
@@ -36,15 +40,17 @@ export class MpvClient {
   get pid(): number | undefined { return this.#child?.pid; }
 
   async start(): Promise<string> {
-    if (process.platform !== 'linux') throw new DomainError('unsupported');
+    if (process.platform !== 'linux' && process.platform !== 'win32') throw new DomainError('unsupported');
     if (this.#child || this.#closing) throw new DomainError('unsupported');
     const protocols = this.#options.network === 'loopback' ? 'file,http,tcp' : 'file';
+    // Windows mpv 自建仅当前用户/相同或更高完整性级别可访问的命名管道；不开放 TCP IPC。
+    const pipeName = process.platform === 'win32' ? `\\\\.\\pipe\\starsmusic-${randomUUID()}` : undefined;
     const args = [
       '--no-config', '--load-scripts=no', '--idle=yes', '--terminal=no', '--video=no',
       '--audio-display=no', '--audio-fallback-to-null=no', '--osc=no', '--input-default-bindings=no', '--input-terminal=no',
       '--input-media-keys=no', '--ytdl=no', '--audio-file-auto=no', '--sub-auto=no',
       '--access-references=no', '--autoload-files=no', `--demuxer-lavf-o=protocol_whitelist=%${protocols.length}%${protocols}`,
-      '--input-ipc-client=fd://3',
+      pipeName ? `--input-ipc-server=${pipeName}` : '--input-ipc-client=fd://3',
     ];
     if (this.#options.paused) args.push('--pause=yes');
     if (this.#options.startSeconds !== undefined) {
@@ -56,35 +62,69 @@ export class MpvClient {
       if (!Number.isFinite(this.#options.playbackLength) || this.#options.playbackLength <= 0) throw new DomainError('invalid-input');
       args.push(`--length=${this.#options.playbackLength}`);
     }
-    const child = spawn(this.#options.executable ?? 'mpv', args, {
-      shell: false, stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
+    const child = spawn(this.#options.executable ?? (process.platform === 'win32' ? 'mpv.exe' : 'mpv'), args, {
+      shell: false, windowsHide: true, stdio: pipeName ? ['ignore', 'ignore', 'ignore'] : ['ignore', 'ignore', 'ignore', 'pipe'],
     });
     this.#child = child;
     this.#closed = new Promise((resolve) => child.once('close', () => {
       this.#dead = true;
+      this.#pipe?.destroy();
       this.#rejectRequests();
-      if (!this.#closing) this.#options.onFailure();
+      this.#failure();
       resolve();
     }));
     child.on('error', () => this.#rejectRequests());
-    this.#pipe = child.stdio[3] as Duplex;
-    this.#pipe.setEncoding('utf8');
-    this.#pipe.on('data', (chunk: string) => this.#receive(chunk));
-    this.#pipe.on('error', () => this.#rejectRequests());
-    await new Promise<void>((resolve, reject) => {
-      child.once('spawn', resolve);
-      child.once('error', () => reject(new DomainError('engine-unavailable')));
-    });
-    const version = await this.command(['get_property', 'mpv-version']);
-    if (typeof version !== 'string') throw new DomainError('invalid-response');
-    for (const [index, name] of ['time-pos', 'duration', 'pause', 'volume', 'current-ao'].entries()) {
-      await this.command(['observe_property', index + 1, name]);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', () => reject(new DomainError('engine-unavailable')));
+      });
+      if (this.#closing || this.#dead) throw new DomainError('engine-unavailable');
+      this.#pipe = pipeName ? await this.#connect(pipeName) : child.stdio[3] as Duplex;
+      if (this.#closing || this.#dead) { this.#pipe.destroy(); throw new DomainError('engine-unavailable'); }
+      this.#pipe.setEncoding('utf8');
+      this.#pipe.on('data', (chunk: string) => this.#receive(chunk));
+      this.#pipe.on('error', () => { this.#rejectRequests(); this.#failure(); });
+      this.#pipe.on('close', () => { this.#rejectRequests(); this.#failure(); });
+      const version = await this.command(['get_property', 'mpv-version']);
+      if (typeof version !== 'string') throw new DomainError('invalid-response');
+      for (const [index, name] of ['time-pos', 'duration', 'pause', 'volume', 'current-ao'].entries()) {
+        await this.command(['observe_property', index + 1, name]);
+      }
+      return version;
+    } catch (error) {
+      await this.close();
+      throw error;
     }
-    return version;
+  }
+
+  async #connect(name: string): Promise<Socket> {
+    const deadline = Date.now() + 3000;
+    while (!this.#closing && !this.#dead && Date.now() < deadline) {
+      try {
+        return await new Promise<Socket>((resolve, reject) => {
+          const socket = createConnection(name);
+          const timer = setTimeout(() => socket.destroy(new Error('mpv.connect-timeout')), Math.max(1, deadline - Date.now()));
+          socket.once('error', error => { clearTimeout(timer); socket.destroy(); reject(error); });
+          socket.once('connect', () => { clearTimeout(timer); resolve(socket); });
+        });
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && code !== 'EBUSY') throw new DomainError('engine-unavailable');
+        await delay(20);
+      }
+    }
+    throw new DomainError('engine-unavailable');
+  }
+
+  #failure(): void {
+    if (this.#closing || this.#failureReported) return;
+    this.#failureReported = true;
+    this.#options.onFailure();
   }
 
   command(command: readonly unknown[]): Promise<unknown> {
-    if (!this.#pipe || this.#pipe.destroyed || this.#dead) return Promise.reject(new DomainError('engine-unavailable'));
+    if (!this.#pipe || this.#pipe.destroyed || this.#dead || this.#closing) return Promise.reject(new DomainError('engine-unavailable'));
     const requestId = ++this.#sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -103,7 +143,7 @@ export class MpvClient {
     if (this.#buffer.length > 1024 * 1024) {
       this.#pipe?.destroy();
       this.#rejectRequests();
-      if (!this.#closing) this.#options.onFailure();
+      this.#failure();
       return;
     }
     let newline: number;
@@ -138,7 +178,10 @@ export class MpvClient {
   async close(): Promise<void> {
     if (this.#closing) return this.#closed;
     this.#closing = true;
-    this.#pipe?.destroy(); // mpv 在继承的 IPC 客户端关闭后退出。
+    // 命名管道服务器不会随客户端断开退出；先发送 quit，再沿用有界进程清理。
+    if (process.platform === 'win32' && this.#pipe?.writable && !this.#pipe.destroyed && !this.#dead) {
+      this.#pipe.write(`${JSON.stringify({ command: ['quit'] })}\n`, () => this.#pipe?.destroy());
+    } else this.#pipe?.destroy(); // Linux 在继承的 IPC 客户端关闭后退出。
     this.#rejectRequests();
     const child = this.#child;
     if (!child || this.#dead) return this.#closed;
@@ -151,5 +194,6 @@ export class MpvClient {
     if (!this.#dead) { child.kill('SIGTERM'); await wait(500); }
     if (!this.#dead) child.kill('SIGKILL');
     await this.#closed;
+    this.#pipe?.destroy();
   }
 }

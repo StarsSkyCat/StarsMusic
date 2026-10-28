@@ -1,10 +1,12 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { playbackChannels } from '../../packages/contracts/src/playback';
 
 test('双主题底栏完整显示播放权限和音质，缩放后不挤压音量或队列', async () => {
-  const profile = await mkdtemp('/tmp/starsmusic-player-details-e2e-');
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-player-details-e2e-'));
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
   delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL; env.GSETTINGS_BACKEND = 'memory';

@@ -1027,7 +1027,7 @@ onUnmounted(() => {
             </section>
           </details>
           <p class="settings-footnote">
-            StarsMusic · Linux 开发预览 / 本地目录扫描和更多平台功能仍在规划中。
+            StarsMusic · 桌面开发预览 / 本地目录扫描和更多平台功能仍在规划中。
           </p>
         </template>
       </div>

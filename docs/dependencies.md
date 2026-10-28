@@ -22,6 +22,8 @@ Vue、@lucide/vue、qrcode 和 dbus-next 为应用依赖，其余为开发依赖
 
 ## 系统音频依赖
 
+Windows 开发验证使用 mpv 官方 CI 的 `v0.41.0-dev-gad5877eda` MSVC x86_64 构建，仅下载到忽略目录用于真实测试，不随项目分发。mpv 核心及 FFmpeg/其他链接库的具体组合许可仍需在确定发行构建时完整审查；未新增 npm 播放器绑定，也未运行构建包附带的注册脚本。来源、SHA256 与结果见 [Windows 记录](validation/2026-10-28-windows.md)。
+
 当前验证 /usr/bin/mpv 0.41.0，Arch 包版本 1:0.41.0-6，包元数据许可为 GPL-2.0-or-later AND LGPL-2.1-or-later；其 FFmpeg 运行时为 n9.0.2。开发阶段使用用户系统已安装的 mpv，不复制二进制到仓库、不自动安装系统包。正式分发时仍需追溯实际 mpv/FFmpeg 构建配置、组件许可和源码获取方式；系统包的许可元数据不替代发行审计。
 
 ## 安装行为

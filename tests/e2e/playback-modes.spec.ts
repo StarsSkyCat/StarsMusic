@@ -9,6 +9,8 @@ import { mprisPath, mprisPlayer } from '../../packages/desktop/src/linux/mpris';
 import { isolatedSessionBus } from '../helpers/isolated-bus';
 import { writeSilentWav } from '../helpers/audio';
 
+test.skip(process.platform !== 'linux', 'MPRIS 双向模式同步需要 Linux D-Bus');
+
 test('真实 Electron/mpv：UI 与 MPRIS 双向模式同步、暂停切歌、双主题布局及重启保存', async () => {
   test.setTimeout(45000);
   const profile = await mkdtemp('/tmp/starsmusic-modes-e2e-');

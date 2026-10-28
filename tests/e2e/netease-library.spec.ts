@@ -1,13 +1,15 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { initialNeteaseSnapshot, neteaseChannels, type NeteaseSnapshot } from '../../packages/contracts/src/netease';
 import type { DesktopApi } from '../../packages/contracts/src/desktop';
 import type { NeteaseMutation } from '../../packages/contracts/src/netease-library';
 import type { CatalogRequest } from '../../packages/contracts/src/netease-catalog';
 
 test('合成收藏流程：喜欢切换、自建歌单添加/移除、喜欢列表移除与发现歌单收藏', async () => {
-  const profile = await mkdtemp('/tmp/starsmusic-library-e2e-');
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-library-e2e-'));
   const env: Record<string, string> = {}; for (const [key,value] of Object.entries(process.env)) if (value !== undefined) env[key] = value; env.GSETTINGS_BACKEND = 'memory'; delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL;
   const app = await _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true });
   try {

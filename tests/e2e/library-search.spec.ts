@@ -1,12 +1,14 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { initialNeteaseSnapshot, neteaseChannels } from '../../packages/contracts/src/netease';
 import { initialKugouSnapshot, kugouChannels } from '../../packages/contracts/src/kugou';
 import { playbackChannels } from '../../packages/contracts/src/playback';
 
 test('音乐库全来源搜索：独立失败/分页、旧响应、播放来源、歌单导航及移除队列列表', async () => {
-  const profile = await mkdtemp('/tmp/starsmusic-library-search-e2e-');
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-library-search-e2e-'));
   const env: Record<string, string> = {}; for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
   delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL; env.GSETTINGS_BACKEND = 'memory';
   const app = await _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true });

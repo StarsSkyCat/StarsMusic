@@ -1,10 +1,12 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { playbackChannels, parsePlaybackSnapshot } from '../../packages/contracts/src/playback';
 
 test('音量即时拖动、旧状态不抢滑块、请求合并、键盘和静音', async () => {
-  const profile = await mkdtemp('/tmp/starsmusic-volume-e2e-'); const env: Record<string,string> = {};
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-volume-e2e-')); const env: Record<string,string> = {};
   for (const [key,value] of Object.entries(process.env)) if (value !== undefined) env[key]=value;
   delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL; env.GSETTINGS_BACKEND='memory';
   const app = await _electron.launch({args:['.',`--user-data-dir=${profile}`,'--password-store=basic'],env,chromiumSandbox:true});

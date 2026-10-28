@@ -1,11 +1,13 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { initialKugouSnapshot, kugouChannels, type KugouSnapshot } from '../../packages/contracts/src/kugou';
 import { initialKugouCatalog, type KugouCatalogRequest } from '../../packages/contracts/src/kugou-catalog';
 
 test('合成酷狗发现/双类型搜索/分页/私人歌单封面/整单与多选命令，双主题最小窗口', async () => {
-  const profile = await mkdtemp('/tmp/starsmusic-kugou-catalog-e2e-');
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-kugou-catalog-e2e-'));
   const env: Record<string, string> = {}; for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
   delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL; env.GSETTINGS_BACKEND = 'memory';
   const app = await _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true });

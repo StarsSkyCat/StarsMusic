@@ -8,6 +8,8 @@ import { createBus, sessionAddress, call } from '../../packages/desktop/src/linu
 import type { SystemApi } from '../../packages/contracts/src/system';
 import type { PlaybackApi } from '../../packages/contracts/src/playback';
 
+test.skip(process.platform !== 'linux', 'Linux D-Bus/portal 专属验证');
+
 test('实际 Electron / 独立总线合成宿主：托盘注册、portal 确认、窗口快捷键、关闭恢复、服务丢失和持久设置', async () => {
   test.setTimeout(45000);
   const profile = await mkdtemp('/tmp/starsmusic-system-e2e-'); const isolated = await isolatedSessionBus(profile);

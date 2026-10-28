@@ -1,10 +1,12 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { DesktopApi } from '../../packages/contracts/src/desktop';
 
 test('真实窗口按钮、系统状态同步、双主题最小布局、粘顶和关闭退出', async () => {
-  const profile = await mkdtemp('/tmp/starsmusic-window-e2e-');
+  const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-window-e2e-'));
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
   delete env.ELECTRON_RUN_AS_NODE; delete env.ELECTRON_RENDERER_URL;

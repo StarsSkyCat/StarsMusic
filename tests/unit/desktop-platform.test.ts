@@ -18,6 +18,7 @@ test('D-Bus 仅接受本地 Unix 地址，禁用命令执行、TCP 和畸形路�
 
 import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { DesktopSettings } from '../../packages/desktop/src/settings.ts';
 import { defaultSystemPreferences, parseSystemPreferences, parseSystemArguments, systemChannels, parseSystemSnapshot } from '../../packages/contracts/src/system.ts';
 import { DesktopController } from '../../packages/desktop/src/controller.ts';
@@ -34,7 +35,7 @@ test('系统 IPC 只允许具体无参操作和四个布尔设置，禁止任意
 });
 
 test('桌面设置只保存白名单布尔值，跨实例恢复；未知版本原样保留，不默默覆盖', async () => {
-  const directory = await mkdtemp('/tmp/starsmusic-desktop-settings-'); const file = path.join(directory, 'desktop.json');
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-desktop-settings-')); const file = path.join(directory, 'desktop.json');
   try {
     const store = new DesktopSettings(file); assert.equal(await store.initialize(), true);
     const next = { ...defaultSystemPreferences(), notifications: true, globalShortcuts: true };
@@ -48,7 +49,7 @@ test('桌面设置只保存白名单布尔值，跨实例恢复；未知版本�
 });
 
 test('X11 按每项实际注册结果报告；保存失败不改变快捷键状态，禁用和退出准确注销，不宣称其他平台可用', async () => {
-  const directory = await mkdtemp('/tmp/starsmusic-desktop-controller-'); const file = path.join(directory, 'desktop.json');
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-desktop-controller-')); const file = path.join(directory, 'desktop.json');
   const player = new MusicPlayer(); const callbacks = new Map<string, () => void>(); const removed: string[] = [];
   const runtime: DesktopRuntime = { show() {}, quit() {}, hide() {}, isVisible: () => true, createTray() { throw new Error('no host'); },
     registerShortcut(accelerator, callback) { if (accelerator.endsWith('Space')) return false; callbacks.set(accelerator, callback); return true; }, unregisterShortcut(accelerator) { removed.push(accelerator); callbacks.delete(accelerator); } };
@@ -66,8 +67,35 @@ test('X11 按每项实际注册结果报告；保存失败不改变快捷键状�
     await rm(file); await mkdir(file); await controller.setPreference('globalShortcuts', false);
     assert.equal(controller.snapshot().error?.code, 'desktop-save-failed'); assert.equal(controller.snapshot().preferences.globalShortcuts, true); assert.equal(callbacks.size, 4);
     await rm(file, { recursive: true }); await controller.setPreference('globalShortcuts', false); assert.equal(controller.snapshot().error, undefined); assert.equal(callbacks.size, 0); assert.equal(removed.length, 4);
-    const other = new DesktopController(player, presentation, runtime, new DesktopSettings(path.join(directory, 'unsupported.json')), 'win32');
+    const other = new DesktopController(player, presentation, runtime, new DesktopSettings(path.join(directory, 'unsupported.json')), 'darwin');
     await other.initialize(); await other.setPreference('globalShortcuts', true); assert.equal(other.snapshot().mpris.state, 'unavailable'); assert.equal(other.snapshot().shortcuts.state, 'unavailable'); assert.equal(callbacks.size, 0); await other.dispose();
+  } finally { await controller.dispose(); await player.dispose(); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('Windows 托盘创建后允许关闭到托盘，禁用恢复窗口；全局键按注册结果报告并清理，失败保留退出路径', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'starsmusic-windows-desktop-'));
+  const player = new MusicPlayer(); const callbacks = new Map<string, () => void>();
+  let visible = true; let trayDestroyed = 0; let trayFailed = false; let action: Parameters<DesktopRuntime['createTray']>[0] | undefined;
+  const runtime: DesktopRuntime = {
+    show() { visible = true; }, hide() { visible = false; }, isVisible: () => visible, quit() {},
+    createTray(callback) { if (trayFailed) throw new Error('synthetic tray failure'); action = callback; return { update() {}, destroy() { trayDestroyed++; } }; },
+    registerShortcut(accelerator, callback) { if (accelerator.endsWith('Space')) return false; callbacks.set(accelerator, callback); return true; },
+    unregisterShortcut(accelerator) { callbacks.delete(accelerator); },
+  };
+  const presentation: PresentationPort = { snapshot: () => ({ revision: 0, generation: 0, trackId: null, status: 'idle' }), subscribe: () => () => undefined };
+  const controller = new DesktopController(player, presentation, runtime, new DesktopSettings(path.join(directory, 'desktop.json')), 'win32');
+  try {
+    await controller.initialize(); assert.equal(controller.snapshot().desktop, 'Windows'); assert.equal(controller.snapshot().mpris.state, 'unavailable');
+    assert.equal(controller.snapshot().tray.state, 'available'); assert.equal(controller.shouldHideOnClose(), false);
+    await controller.setPreference('closeToTray', true); assert.equal(controller.shouldHideOnClose(), true);
+    action!('hide'); assert.equal(visible, false); action!('show'); assert.equal(visible, true);
+    await controller.setPreference('globalShortcuts', true); assert.equal(callbacks.size, 4); assert.equal(controller.snapshot().shortcuts.state, 'unknown');
+    callbacks.get('Control+Alt+M')!(); assert.equal(player.snapshot().muted, true);
+    action!('hide'); await controller.setPreference('tray', false);
+    assert.equal(visible, true); assert.equal(trayDestroyed, 1); assert.equal(controller.shouldHideOnClose(), false); assert.equal(controller.snapshot().preferences.closeToTray, false);
+    trayFailed = true; await controller.setPreference('tray', true); assert.equal(controller.snapshot().tray.state, 'unavailable');
+    await controller.setPreference('closeToTray', true); assert.equal(controller.snapshot().error?.code, 'unsupported'); assert.equal(controller.shouldHideOnClose(), false);
+    await controller.dispose(); assert.equal(callbacks.size, 0);
   } finally { await controller.dispose(); await player.dispose(); await rm(directory, { recursive: true, force: true }); }
 });
 
