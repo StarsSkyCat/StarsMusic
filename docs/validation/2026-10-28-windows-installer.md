@@ -20,4 +20,6 @@
 
 ## 限制
 
+最终产物：`StarsMusic-0.0.0-dev.71.3e4cb4ab-x64-Setup.exe`，152535055 字节，来自干净提交 `3e4cb4abbd4f18dc2a9cf213e8a0f51c8147de9b`（localChanges=false）。SHA-256：`69f4f32de6f9141b16297e4b8c6ac243f5e3226d940c65681b27abfd8a527735`。EXE、同名 `.sha256`、独立运行目录与 latest-windows.json 保存在忽略的 release/。最终 EXE 已再次完成独立运行与实际安装/运行/卸载复验，Authenticode 状态为 NotSigned。
+
 未自动操作安装向导页面；未验证跨版本升级、其他 Windows/架构/高 DPI、签名/SmartScreen 信誉、真实账号与设备切换。测试使用静音 PCM WAV 与实际 WASAPI，不代表用户听音验收。项目整体许可、mpv 静态依赖的完整对应源码/许可组合仍需在公开分发前补齐，本次产物为本地验证包。
