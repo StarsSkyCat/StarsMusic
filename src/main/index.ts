@@ -1,6 +1,6 @@
 import { DesktopController } from '../../packages/desktop/src/controller';
 import { DesktopSettings } from '../../packages/desktop/src/settings';
-import { electronDesktopRuntime } from '../../packages/desktop/src/linux/electron-runtime';
+import { electronDesktopRuntime } from '../../packages/desktop/src/electron-runtime';
 import { desktopId } from '../../packages/desktop/src/linux/mpris';
 import { systemChannels, parseSystemArguments } from '../../packages/contracts/src/system';
 import { PlaybackSession } from './playback-session';
@@ -33,6 +33,7 @@ import { AppearanceStore } from './appearance-store';
 
 app.setName('StarsMusic');
 if (process.platform === 'linux') app.setDesktopName(`${desktopId}.desktop`);
+if (process.platform === 'win32') app.setAppUserModelId('org.starsmusic.StarsMusic');
 app.enableSandbox();
 
 const rendererFile = fileURLToPath(new URL('../renderer/index.html', import.meta.url));

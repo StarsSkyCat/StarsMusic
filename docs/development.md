@@ -12,10 +12,10 @@
 
 ## 环境
 
-- Linux x86_64 / glibc 为首要开发目标，其他平台后续验证。
+- Linux x86_64 / glibc 为首要开发目标；Windows x64 已进入开发适配，环境与边界见 [Windows 说明](windows.md)。macOS 尚未验证。
 - Node.js 24.x；.node-version 记录初始化时实际使用的 24.22.1。
 - pnpm 10.34.9，以根 package.json 的 packageManager 为准。
-- Git；音频播放需要 Linux 和系统 mpv，本机实际验证 0.41.0。开发时使用系统包管理器提供的版本，不通过应用自动安装系统软件。文档、类型检查、单元测试及构建不依赖 mpv。
+- Git；音频播放需要 Linux 系统 mpv 或 Windows PATH 中的 mpv.exe。Linux 已验证 0.41.0，Windows 已验证 0.41 开发构建。开发时自行准备 mpv，不通过应用自动安装系统软件。文档、类型检查、单元测试及构建不依赖 mpv。
 
 已安装 pnpm 时，在仓库根目录执行：
 
@@ -46,10 +46,10 @@ pnpm test:e2e
 - probe:netease-discovery 显式匿名联网检查热歌分页、公开歌单/详情及歌曲/歌单搜索，只输出归一化计数，不登录、不写凭据，CI 不运行。
 - probe:kugou 显式联网验证酷狗设备注册与匿名扫码挑战，只报告固定基线和通过状态，不输出设备标识、key、二维码或响应原文；不登录账号。
 - probe:kugou-discovery 显式匿名联网检查酷狗歌曲/歌单搜索、发现歌单、公开详情和封面，不登录，不在 CI 运行；接入进展见 [记录](validation/2026-10-27-kugou-discovery.md)。
-- test:playback 使用实际 mpv 与合成 WAV，显式指定 null 输出，验证本地/本机网关音频、试听上限、切歌、错误与清理；不调用平台、不需要账号。需要 Linux 与 mpv，缺失时失败。
+- test:playback 使用实际 mpv 与合成 WAV，显式指定 null 输出，验证本地/本机网关音频、试听上限、切歌、错误与清理；不调用平台、不需要账号。支持 Linux 与 Windows，mpv 缺失时失败。
 - test:desktop 在 dbus-run-session 隔离总线中验证真实 MPRIS/服务探测与 mpv；需 Linux、dbus-run-session 和 mpv，不请求平台账号、不操作用户真实桌面通知/托盘。
 - build 编译 main、单文件 CommonJS preload 与 renderer 到 out/，不执行类型检查、不生成安装包。
-- start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、两个平台的匿名后台状态、本地选择、默认系统音频输出和退出，需 Linux、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。
+- start 运行上次构建产物；test:e2e 先构建，再启动 Electron 和实际 mpv，检查 IPC、安全边界、两个平台的匿名后台状态、本地选择、默认系统音频输出和退出，需 Linux 或 Windows、图形会话、mpv 和可用音频服务。原生选择器在测试中被替换为合成音频路径，播放本身不模拟。Linux D-Bus/MPRIS 专属测试和 Windows 系统测试在另一平台明确跳过。
 
 Linux 默认关闭窗口退出；已提供托盘菜单、可选关闭到托盘、后台切歌通知、MPRIS 和窗口/全局快捷键。关闭到托盘要求实际宿主和本进程图标注册仍成立；宿主丢失恢复窗口。设置与实测边界见 [Linux 桌面集成](linux-desktop.md)。macOS 保留激活重建窗口的生命周期分支，尚未实机验证。当前界面使用云瓷白 / 曜石黑 Liquid Glass 设计，包含悬浮侧栏、折射唱片主视觉、来源卡、平台扫码步骤、歌单详情、列表筛选、多选下一首、玻璃队列抽屉和独立播放页；底部播放舱持续可用。布局和视觉检查见 [液态玻璃记录](validation/2026-10-27-liquid-glass.md)，导航规则见 [页面记录](validation/2026-10-27-listening-pages.md)。网易云发现页提供真实封面网格与搜索空间，见 [重设计与封面验证](validation/2026-10-27-netease-redesign.md)。当前在线歌曲支持行级歌词与专辑封面，范围见 [歌词与封面记录](validation/2026-10-26-presentation.md)。播放页歌词采用无框悬浮布局，居中显示并按区域大小放大字号/行距，远处歌词淡出；本地音乐归入来源分组第一项，左下队列卡整块可点击，见 [交互调整](validation/2026-10-27-floating-lyrics.md)。歌词区随窗口高度伸展，缩放后自动重定位当前行，布局见 [播放舞台记录](validation/2026-10-27-listening-layout.md)。设置页提供浅色、暗色与跟随系统，默认实时跟随桌面外观，单独保存公开枚举到 userData/appearance.json；见 [双主题记录](validation/2026-10-27-appearance.md)。
 

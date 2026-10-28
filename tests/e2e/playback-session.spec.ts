@@ -1,9 +1,10 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
-import { mkdtemp, readFile, readlink, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { writeSilentWav } from '../helpers/audio';
+import { mpvProcesses } from '../helpers/mpv-processes';
 import type { PlaybackApi } from '../../packages/contracts/src/playback';
 
 test('真实应用重启保留队列顺序/当前项/进度/音量/静音，暂停启动，继续使用系统音频输出', async () => {
@@ -16,11 +17,8 @@ test('真实应用重启保留队列顺序/当前项/进度/音量/静音，暂�
   const launch = () => _electron.launch({ args: ['.', `--user-data-dir=${profile}`, '--password-store=basic'], env, chromiumSandbox: true });
   let desktop: Awaited<ReturnType<typeof launch>> | undefined;
   const mpvChildren = async (): Promise<number[]> => {
-    const pid = desktop!.process().pid!;
-    const ids = (await readFile(`/proc/${pid}/task/${pid}/children`, 'utf8')).trim().split(/\s+/).filter(Boolean);
-    const result: number[] = [];
-    for (const id of ids) { try { if ((await readlink(`/proc/${id}/exe`)).endsWith('/mpv')) result.push(Number(id)); } catch { /* 已退出 */ } }
-    return result;
+    const pid = await desktop!.evaluate(() => process.pid);
+    return (await mpvProcesses(pid)).map(item => item.pid);
   };
   try {
     desktop = await launch(); let page = await desktop.firstWindow();

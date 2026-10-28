@@ -1,6 +1,6 @@
 import { Tray, Menu, nativeImage, globalShortcut } from 'electron';
-import type { DesktopRuntime } from '../runtime.ts';
-import { adjacentIndex, type PlaybackSnapshot } from '../../../contracts/src/playback.ts';
+import type { DesktopRuntime } from './runtime.ts';
+import { adjacentIndex, type PlaybackSnapshot } from '../../contracts/src/playback.ts';
 import { trayIcon } from './tray-icon.ts';
 export function electronDesktopRuntime(window: Pick<DesktopRuntime, 'show' | 'hide' | 'quit' | 'isVisible'>): DesktopRuntime {
   return { ...window,
@@ -11,7 +11,7 @@ export function electronDesktopRuntime(window: Pick<DesktopRuntime, 'show' | 'hi
       const tray = new Tray(image); let key = '';
       tray.setToolTip('StarsMusic'); tray.on('click', () => action('show')); tray.on('double-click', () => action('show'));
       return { destroy: () => { if (!tray.isDestroyed()) tray.destroy(); }, update(state: PlaybackSnapshot) {
-        if (tray.isDestroyed()) return;
+        if (tray.isDestroyed()) throw new Error('desktop.tray-destroyed');
         const track = state.queue[state.currentIndex ?? -1];
         const next = JSON.stringify([track?.title, state.status, state.currentIndex, state.queue.length, state.muted, state.volume === 0, state.loopMode]);
         if (key === next) return; key = next;

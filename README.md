@@ -8,6 +8,7 @@ Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、�
 - [开发文档索引](docs/README.md)
 - [开发指南与环境](docs/development.md)
 - [Linux 桌面集成与能力状态](docs/linux-desktop.md)
+- [Windows 开发适配与启动](docs/windows.md)
 - [开发路线图](docs/roadmap.md)
 - [协作规则](AGENTS.md) · [贡献流程](CONTRIBUTING.md)
 - 技术路线：Electron + Vue 3 + TypeScript + mpv + SQLite。
@@ -15,7 +16,7 @@ Linux 优先的跨平台桌面音乐播放器，计划接入网易云音乐、�
 
 Linux 已通过平台适配层接入 MPRIS、通知、托盘和快捷键；设置页按实际 D-Bus/宿主/portal 响应显示能力，Wayland 全局键需确认绑定，缺失服务时保留窗口和退出路径。范围见 [桌面集成](docs/linux-desktop.md)。
 
-Windows、macOS 保留架构接口，安排在 Linux 版本稳定后实现。
+Windows 已开始开发适配：mpv 命名管道、本地播放、托盘、可选关闭到托盘和全局快捷键已接入；Windows 通知、系统媒体面板和安装包仍待实现。实测边界见 [Windows 验证](docs/validation/2026-10-28-windows.md)。macOS 尚未适配。
 
 底栏通过一个按钮依次切换列表循环 / 随机播放 / 单曲循环，图标和提示显示当前模式；模式随队列保存，并与 Linux MPRIS 的 Shuffle、LoopStatus 双向同步。范围与实测见 [播放模式验证](docs/validation/2026-10-27-playback-modes.md)。
 
@@ -29,7 +30,7 @@ Windows、macOS 保留架构接口，安排在 Linux 版本稳定后实现。
 
 ## 启动与检查
 
-需要 Node.js 24.x、pnpm 10.34.9；本地播放需要 Linux 与 PATH 中可运行的系统 mpv（本机验证 0.41.0）：
+需要 Node.js 24.x、pnpm 10.34.9；本地播放需要 Linux 的系统 mpv 或 Windows 的 mpv.exe，并加入当前终端 PATH（Linux 验证 0.41.0；Windows 见 [环境说明](docs/windows.md)）：
 
 ```bash
 pnpm install --frozen-lockfile

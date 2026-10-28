@@ -17,13 +17,13 @@ typecheck 使用 tsc 与 vue-tsc 检查全部应用及测试源码。test 使用
 
 当前单元/边界测试（数量以执行输出为准）：原有 IPC、领域契约、会话守卫和播放快照，加上网易云数据投影/大整数/扫码与账号验证/旧账号与旧页面响应丢弃/取消与到期/媒体网关，酷狗具体 IPC、扫码与账号一致性、过期、SSA、旧响应丢弃、歌单视图隔离、大页/字符串字段容错、hash-only 取链、试听文件名匹配、流主机和试听边界，以及凭据 bundle 白名单、保险库保存/读取/删除/锁定/权限、两个平台导出与恢复。全部使用明确标识的合成响应，不调用真实登录。
 
-test:playback 有 7 项实际 mpv 场景，使用 null 输出与合成 WAV，检查原有本地行为和经 loopback 网关的真实 HTTP 解码、试听长度限制、旧解析取消、本地切换与网关清理；其中包含合成酷狗资源与跨平台媒体主机隔离。这证明控制和解码链路，不等同于扬声器出声或发行包兼容性。
+test:playback 有 8 项实际 mpv 场景，在 Linux/Windows 使用 null 输出与合成 WAV，检查原有本地行为和经 loopback 网关的真实 HTTP 解码、试听长度限制、旧解析取消、本地切换与网关清理；其中包含合成酷狗资源与跨平台媒体主机隔离。这证明控制和解码链路，不等同于扬声器出声或发行包兼容性。
 
-test:e2e 先构建，再启动实际 Electron，检查桥接/沙箱、弹窗与导航、960×640 布局以及本地选择/播放/暂停/定位。只替代原生选择器交互，使用实际 mpv 和默认系统音频输出，拒绝 null 输出；关闭应用后验证 mpv PID 已退出。需要 Linux、mpv、可用的图形和音频会话。Playwright 显式启用 chromiumSandbox；通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs。临时配置和合成文件会清理，截图留在 Git 忽略的 artifacts/；不需要下载 Playwright 浏览器。
+test:e2e 先构建，再启动实际 Electron，检查桥接/沙箱、弹窗与导航、960×640 布局以及本地选择/播放/暂停/定位。只替代原生选择器交互，使用实际 mpv 和默认系统音频输出，拒绝 null 输出；关闭应用后验证 mpv PID 已退出。需要 Linux 或 Windows、mpv、可用的图形和音频会话。Playwright 显式启用 chromiumSandbox；Linux 通过 /proc 检查 renderer 的 Seccomp 与 NoNewPrivs，Windows 检查 Electron sandboxed 指标。子进程检查从实际 Electron 主进程 PID 查询，Windows 使用 CIM。Linux D-Bus/MPRIS 和 Windows 系统用例在另一平台明确跳过。临时配置和合成文件会清理，截图留在 Git 忽略的 artifacts/；不需要下载 Playwright 浏览器。
 
 桌面 E2E 也实际启动网易云与酷狗 utilityProcess，验证匿名 getState/本地退出及窄桥接，禁止自动生成真实二维码或授权账号；同时验证 preload 的 credentials 白名单、状态投影，以及 basic 密码库环境下本地加密保存仍可用。pnpm probe:netease、pnpm probe:kugou 是显式匿名联网探测，不在 CI 执行。真实听音与权限结果独立记录在 [网易云验证](validation/2026-10-26-netease.md) 与 [酷狗验证](validation/2026-10-26-kugou.md)；凭据结果见 [SQLite 保存验证](validation/2026-10-26-sqlite-credentials.md)。
 
-CI 执行文档、冻结安装、类型、合成契约、mpv null 集成测试和构建；没有真实平台登录、图形、安装包或系统音频验收。远端 CI 结果需实际观察。
+CI 配置在 Linux/Windows 执行冻结安装、类型、合成契约和构建，Linux 另执行文档与 mpv null 集成测试；Windows mpv/E2E 目前在本机执行。CI 没有真实平台登录、图形、安装包或系统音频验收。新增 Windows job 尚未推送，远端结果需实际观察。
 
 ## 实现后的测试分层
 

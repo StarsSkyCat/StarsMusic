@@ -1,9 +1,10 @@
 /// <reference lib="dom" />
 import { _electron, expect, test } from '@playwright/test';
-import { mkdtemp, readFile, readlink, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { writeSilentWav } from '../helpers/audio';
+import { mpvProcesses } from '../helpers/mpv-processes';
 
 test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出', async () => {
   const profile = await mkdtemp(path.join(tmpdir(), 'starsmusic-e2e-'));
@@ -156,11 +157,9 @@ test('桌面窗口、实际 IPC、沙箱隔离、弹窗与导航阻断及退出'
       await page.getByRole('button', { name: '选择本地音频', exact: true }).click();
       await expect(page.getByRole('heading', { name: '本地队列' })).toBeVisible();
       await expect(page.getByRole('button', { name: '暂停', exact: true })).toBeEnabled();
-      const desktopPid = desktop.process().pid!;
-      const children = (await readFile(`/proc/${desktopPid}/task/${desktopPid}/children`, 'utf8')).trim().split(/\s+/);
-      for (const pid of children) {
-        try { if ((await readlink(`/proc/${pid}/exe`)).endsWith('/mpv')) mpvPid = Number(pid); } catch { /* 已退出 */ }
-      }
+      const desktopPid = await desktop.evaluate(() => process.pid);
+      const children = await mpvProcesses(desktopPid);
+      expect(children).toHaveLength(1); mpvPid = children[0]!.pid;
       expect(mpvPid).toBeDefined();
       const output = await page.evaluate(async () => {
         const api = (window as unknown as { starsMusic: { playback: { getState(): Promise<{ audioOutput?: string }> } } }).starsMusic;

@@ -9,6 +9,7 @@ import { DesktopCoverCache } from './cover-cache.ts';
 import { DesktopSettings } from './settings.ts';
 import { shortcuts, windowShortcut, type ShortcutInput } from './shortcuts.ts';
 import type { DesktopRuntime, TrayPort } from './runtime.ts';
+import { windowsDesktop } from './windows/platform.ts';
 
 export interface DesktopServicePort {
   initialize(): Promise<void>; snapshot(): DesktopServices; subscribe(listener: (state: DesktopServices) => void): () => void;
@@ -30,7 +31,7 @@ export class DesktopController {
     this.#platform = platform; this.#player = player; this.#presentation = presentation; this.#runtime = runtime; this.#settings = settings;
     this.#services = platform === 'linux' ? services ?? new LinuxServices(player, runtime) : undefined;
     const unsupported = capability('unavailable', '此平台的系统适配尚未实现');
-    this.#raw = this.#services?.snapshot() ?? { session: 'unknown', desktop: '未适配', bus: unsupported, mpris: unsupported, notifications: unsupported, trayHost: unsupported, portal: unsupported, globalShortcuts: unsupported };
+    this.#raw = this.#services?.snapshot() ?? (platform === 'win32' ? windowsDesktop() : { session: 'unknown', desktop: '未适配', bus: unsupported, mpris: unsupported, notifications: unsupported, trayHost: unsupported, portal: unsupported, globalShortcuts: unsupported });
     this.#bindings = this.#defaultBindings('disabled');
   }
   #defaultBindings(state: ShortcutBinding['state']): ShortcutBinding[] { return shortcuts.map(shortcut => ({ id: shortcut.id, label: shortcut.label, accelerator: shortcut.accelerator, state })); }
@@ -57,14 +58,16 @@ export class DesktopController {
   #surfaces(): void {
     if (this.#disposed) return;
     const preferences = this.#settings.snapshot(); const raw = this.#raw; const wasTrayReady = this.#trayStatus.state === 'available';
-    if (this.#platform === 'linux' && preferences.tray && raw.trayHost.state === 'available') {
+    if (preferences.tray && (this.#platform === 'win32' || (this.#platform === 'linux' && raw.trayHost.state === 'available'))) {
       try {
         this.#tray ??= this.#runtime.createTray(id => {
           if (this.#disposed) return;
           if (id === 'quit') this.#runtime.quit(); else if (id === 'hide') this.#runtime.hide(); else this.#action(id, 'tray');
         });
         this.#tray.update(this.#player.snapshot());
-        this.#trayStatus = raw.trayRegistered ? capability('available', '已确认本进程图标在 StatusNotifier 宿主注册；请确认桌面上是否可见') : capability('unknown', '图标已创建，尚未确认宿主接收；关闭窗口仍会退出');
+        this.#trayStatus = this.#platform === 'win32'
+          ? capability('available', 'Windows 托盘图标已创建；可能位于通知区域的折叠菜单中')
+          : raw.trayRegistered ? capability('available', '已确认本进程图标在 StatusNotifier 宿主注册；请确认桌面上是否可见') : capability('unknown', '图标已创建，尚未确认宿主接收；关闭窗口仍会退出');
       } catch { this.#tray?.destroy(); this.#tray = undefined; this.#trayStatus = capability('unavailable', '托盘图标创建失败；关闭窗口仍可退出'); }
     } else {
       const hadTray = !!this.#tray; this.#tray?.destroy(); this.#tray = undefined;
@@ -88,15 +91,15 @@ export class DesktopController {
     for (const accelerator of this.#registered) this.#runtime.unregisterShortcut(accelerator); this.#registered = [];
     this.#bindings = this.#defaultBindings(enabled ? 'unavailable' : 'disabled');
     if (!enabled) { this.#shortcutsStatus = capability('disabled', '全局快捷键未启用；窗口内快捷键可用'); return; }
-    if (this.#platform !== 'linux') { this.#shortcutsStatus = capability('unavailable', '此平台的全局快捷键适配尚未实现'); return; }
-    if (raw.session === 'x11') {
+    if (this.#platform !== 'linux' && this.#platform !== 'win32') { this.#shortcutsStatus = capability('unavailable', '此平台的全局快捷键适配尚未实现'); return; }
+    if (this.#platform === 'win32' || raw.session === 'x11') {
       this.#bindings = shortcuts.map(shortcut => {
         let registered = false;
         try { registered = this.#runtime.registerShortcut(shortcut.accelerator, () => this.#action(shortcut.id, 'global')); } catch { /* 冲突或系统拒绝。 */ }
         if (registered) this.#registered.push(shortcut.accelerator);
         return { id: shortcut.id, label: shortcut.label, accelerator: shortcut.accelerator, state: registered ? 'available' : 'unavailable' };
       });
-      this.#shortcutsStatus = this.#bindingStatus('X11 已接受快捷键注册；实际按键响应仍由桌面决定'); return;
+      this.#shortcutsStatus = this.#bindingStatus(`${this.#platform === 'win32' ? 'Windows' : 'X11'} 已接受快捷键注册；实际按键响应仍由桌面决定`); return;
     }
     const bus = this.#services?.connection();
     if (raw.session !== 'wayland' || !bus || !raw.portalVersion || raw.globalShortcuts.state === 'unavailable') {
@@ -133,7 +136,7 @@ export class DesktopController {
     void operation.catch(() => undefined);
   }
   handleInput(input: ShortcutInput): boolean { const id = windowShortcut(input); if (!id || this.#disposed) return false; this.#action(id, 'window'); return true; }
-  shouldHideOnClose(): boolean { const preferences = this.#settings.snapshot(); return !this.#disposed && preferences.tray && preferences.closeToTray && !!this.#tray && this.#trayStatus.state === 'available' && this.#raw.trayHost.state === 'available'; }
+  shouldHideOnClose(): boolean { const preferences = this.#settings.snapshot(); return !this.#disposed && preferences.tray && preferences.closeToTray && !!this.#tray && this.#trayStatus.state === 'available' && (this.#platform === 'win32' || this.#raw.trayHost.state === 'available'); }
   async setPreference(key: SystemPreferenceKey, enabled: boolean): Promise<SystemSnapshot> {
     parseSystemArguments(systemChannels.setPreference, [key, enabled]);
     await this.#initializing;

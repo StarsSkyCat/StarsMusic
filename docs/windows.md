@@ -28,6 +28,16 @@ pnpm build
 
 `pnpm test:desktop` 仍为 Linux D-Bus 集成测试，需要在 Linux 环境执行。
 
+`pnpm test:e2e` 在有图形和音频会话时验证实际 Electron 与默认系统输出；Linux D-Bus/MPRIS 专属用例在 Windows 明确跳过，不计为通过。
+
+## 桌面行为
+
+- 与 Linux 共用 Electron 托盘菜单和窗口快捷键，提供显示窗口、播放/暂停、前后曲、静音、隐藏和退出。
+- 默认关闭窗口退出。设置中可选择关闭到托盘，须先确认通知区域或折叠菜单中的图标可见；禁用托盘会取消关闭到托盘并恢复隐藏窗口。
+- 全局快捷键默认关闭。开启后逐项调用 Electron 注册，冲突按实际结果显示，不把所有组合键一律标为可用；关闭和退出注销本进程注册。
+- Windows 设置页隐藏 Linux MPRIS/Portal，通知显示尚未接入；系统媒体面板、专用媒体键与任务栏媒体控件尚未实现。
+- Windows AppUserModelID 固定为 `org.starsmusic.StarsMusic`；尚不涉及安装器快捷方式或签名。
+
 ## 播放与保护边界
 
 - 使用参数数组、shell=false 和 windowsHide，不弹出 mpv 控制台。
